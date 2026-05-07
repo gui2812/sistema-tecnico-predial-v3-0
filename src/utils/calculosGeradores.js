@@ -3,27 +3,18 @@ import { parseBRNumber } from './formatters';
 export function calcularRegistroGerador({
   horimetroInicial,
   horimetroFinal,
-  litros,
-  custo
+  valorDiesel
 }) {
   const ini = parseBRNumber(horimetroInicial);
   const fim = parseBRNumber(horimetroFinal);
+  const valor = parseBRNumber(valorDiesel);
 
-  const horas = Math.max(0, fim - ini);
-  const totalLitros = parseBRNumber(litros);
-  const custoTotal = parseBRNumber(custo);
-
-  const consumoMedio = horas > 0 ? totalLitros / horas : 0;
-  const custoPorHora = horas > 0 ? custoTotal / horas : 0;
-  const custoPorLitro = totalLitros > 0 ? custoTotal / totalLitros : 0;
+  const litros = Math.max(0, fim - ini);
+  const custo = litros * valor;
 
   return {
-    horas,
-    litros: totalLitros,
-    custo: custoTotal,
-    consumoMedio,
-    custoPorHora,
-    custoPorLitro
+    litros,
+    custo
   };
 }
 
