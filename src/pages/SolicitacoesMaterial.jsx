@@ -282,24 +282,6 @@ export default function SolicitacoesMaterial({ user }) {
       );
 
       setItensSelecionados([]);
-
-      await registrarHistorico(
-        "Atualização em lote",
-        `${ids.length} item(ns) atualizado(s) para ${patch.status || "novo status"}.`,
-        null,
-        {
-          itensIds: ids,
-          status: patch.status || "",
-          motivoReprovacao: patch.motivoReprovacao || "",
-          fornecedor: patch.fornecedor || "",
-          numeroNotaFiscal: patch.numeroNotaFiscal || "",
-          recebidoPor: patch.recebidoPor || "",
-          dataRecebimento: patch.dataRecebimento || "",
-          enviadoMalote: patch.enviadoMalote ?? false,
-          dataEnvioMalote: patch.dataEnvioMalote || "",
-        }
-      );
-
       await carregarSolicitacoes();
       alert("Solicitação excluída com sucesso.");
     } catch (err) {
@@ -864,6 +846,93 @@ export default function SolicitacoesMaterial({ user }) {
     });
   }, [solicitacoes, busca, statusFiltro, setorFiltro, user, isAdmin]);
 
+
+  const painelItens = useMemo(() => {
+    const termo = normalizar(busca);
+
+    return listaVisivelBase
+      .flatMap((sol) =>
+        (sol.itens || []).map((it) => ({
+          ...it,
+          solicitacaoId: sol.id,
+          solicitacaoNumero: sol.numero,
+          dataSolicitacao: sol.data,
+          setor: sol.setor || "Sem setor",
+          solicitante: sol.solicitante || "-",
+          prioridade: sol.prioridade || "Normal",
+          observacaoGeral: sol.observacaoGeral || "",
+        }))
+      )
+      .filter((it) => {
+        const statusOk = statusFiltro === "Todos" || it.status === statusFiltro;
+        const setorOk = setorFiltro === "Todos" || it.setor === setorFiltro;
+
+        const texto = normalizar(
+          [
+            it.dataSolicitacao,
+            it.setor,
+            it.solicitante,
+            it.prioridade,
+            it.descricao,
+            it.marca,
+            it.local,
+            it.status,
+            it.fornecedor,
+            it.numeroNotaFiscal,
+            it.recebidoPor,
+            it.enviadoMalote ? "malote enviado" : "malote pendente",
+            it.motivoReprovacao,
+          ].join(" ")
+        );
+
+        return statusOk && setorOk && (!termo || texto.includes(termo));
+      });
+  }, [listaVisivelBase, busca, statusFiltro, setorFiltro]);
+
+  const painelStatusResumo = statusItem.map((status) => ({
+    status,
+    total: painelItens.filter((it) => it.status === status).length,
+  }));
+
+  const painelPorSetor = useMemo(() => {
+    const mapaSetor = new Map();
+
+    painelItens.forEach((it) => {
+      const setor = it.setor || "Sem setor";
+      const status = it.status || "Nova";
+
+      if (!mapaSetor.has(setor)) {
+        mapaSetor.set(setor, {
+          setor,
+          total: 0,
+          statuses: new Map(),
+        });
+      }
+
+      const grupoSetor = mapaSetor.get(setor);
+      grupoSetor.total += 1;
+
+      if (!grupoSetor.statuses.has(status)) {
+        grupoSetor.statuses.set(status, []);
+      }
+
+      grupoSetor.statuses.get(status).push(it);
+    });
+
+    return Array.from(mapaSetor.values())
+      .map((grupo) => ({
+        ...grupo,
+        statuses: statusItem
+          .map((status) => ({
+            status,
+            itens: grupo.statuses.get(status) || [],
+          }))
+          .filter((grupoStatus) => grupoStatus.itens.length > 0),
+      }))
+      .sort((a, b) => a.setor.localeCompare(b.setor, "pt-BR"));
+  }, [painelItens]);
+
+
   const todosItensVisiveis = listaVisivelBase.flatMap((sol) => sol.itens || []);
 
   const totalSolic = listaVisivelBase.length;
@@ -1213,6 +1282,180 @@ export default function SolicitacoesMaterial({ user }) {
             </div>
           </div>
         )}
+
+
+        <div className="mb-6 rounded-3xl border border-slate-100 bg-slate-50/60 p-5">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
+            <div>
+              <h3 className="font-bold text-lg text-slate-900">Painel de Itens</h3>
+              <p className="text-sm text-slate-500">
+                Itens organizados por setor e separados por status, respeitando os filtros acima.
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-white border border-slate-100 px-4 py-3 text-sm">
+              <p className="font-bold text-slate-700">Itens filtrados</p>
+              <p className="text-2xl font-black text-blue-700">{painelItens.length}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-7 gap-3 mb-5">
+            {painelStatusResumo.map((resumo) => (
+              <div key={resumo.status} className="rounded-2xl bg-white border border-slate-100 p-3">
+                <div className="mb-2">
+                  <BadgeStatus status={resumo.status} />
+                </div>
+                <p className="text-2xl font-black text-slate-900">{resumo.total}</p>
+                <p className="text-xs text-slate-500">item(ns)</p>
+              </div>
+            ))}
+          </div>
+
+          {painelPorSetor.length === 0 ? (
+            <div className="rounded-2xl bg-white border border-slate-100 p-5 text-center text-sm text-slate-400">
+              Nenhum item encontrado para os filtros selecionados.
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {painelPorSetor.map((grupoSetor) => (
+                <div key={grupoSetor.setor} className="rounded-3xl bg-white border border-slate-100 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+                    <div>
+                      <h4 className="font-black text-slate-900">{grupoSetor.setor}</h4>
+                      <p className="text-xs text-slate-500">{grupoSetor.total} item(ns) neste setor</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {grupoSetor.statuses.map((grupoStatus) => (
+                      <div key={`${grupoSetor.setor}-${grupoStatus.status}`} className="rounded-2xl border border-slate-100 overflow-hidden">
+                        <div className="bg-slate-50 px-4 py-3 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <BadgeStatus status={grupoStatus.status} />
+                            <span className="text-xs font-bold text-slate-500">
+                              {grupoStatus.itens.length} item(ns)
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="divide-y divide-slate-100">
+                          {grupoStatus.itens.map((it) => {
+                            const sol = solicitacoes.find((s) => s.id === it.solicitacaoId);
+                            const totalItem = Number(it.quantidade || 0) * dinheiroParaNumero(it.valorUnitario);
+
+                            return (
+                              <div key={it.id} className="p-4">
+                                <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+                                  <div className="flex gap-3 flex-1">
+                                    {isAdmin && (
+                                      <button
+                                        onClick={() => alternarItem(it.id)}
+                                        className="mt-1 text-blue-700 hover:text-blue-900"
+                                        title="Selecionar item"
+                                      >
+                                        {itemSelecionado(it.id) ? (
+                                          <CheckSquare size={22} />
+                                        ) : (
+                                          <Square size={22} />
+                                        )}
+                                      </button>
+                                    )}
+
+                                    <div className="flex-1">
+                                      <p className="font-bold text-slate-900">
+                                        {it.quantidade} {it.unidade} • {it.descricao}
+                                      </p>
+
+                                      <p className="text-sm text-slate-500 mt-1">
+                                        Solicitação #{String(it.solicitacaoNumero || it.solicitacaoId).slice(-4).toUpperCase()} •
+                                        {" "}Data: {it.dataSolicitacao || "-"} • Solicitante: {it.solicitante || "-"} • Prioridade: {it.prioridade || "Normal"}
+                                      </p>
+
+                                      <p className="text-sm text-slate-500 mt-1">
+                                        Marca/modelo: {it.marca || "-"} • Local: {it.local || "-"}
+                                      </p>
+
+                                      {isAdmin && (
+                                        <p className="text-sm font-bold text-teal-700 mt-1">
+                                          Valor estimado: {brl(totalItem)}
+                                        </p>
+                                      )}
+
+                                      {it.status === "Reprovada" && it.motivoReprovacao && (
+                                        <div className="mt-3 rounded-2xl bg-rose-50 border border-rose-100 p-3 text-sm text-rose-700">
+                                          <strong>Motivo da reprovação:</strong> {it.motivoReprovacao}
+                                        </div>
+                                      )}
+
+                                      {it.status === "Entregue" && (
+                                        <div className="mt-3 rounded-2xl bg-teal-50 border border-teal-100 p-3 text-sm text-teal-700">
+                                          <p>
+                                            <strong>Recebimento:</strong> {it.recebidoPor || "-"}{" "}
+                                            {it.dataRecebimento ? `em ${it.dataRecebimento}` : ""}
+                                          </p>
+                                          <p className="mt-1">
+                                            <strong>NF:</strong> {it.numeroNotaFiscal || "Não informada"}
+                                            {isAdmin && it.fornecedor && <span> • Fornecedor: {it.fornecedor}</span>}
+                                          </p>
+                                          <p className="mt-1">
+                                            <strong>Malote:</strong>{" "}
+                                            {it.enviadoMalote
+                                              ? `Enviado${it.dataEnvioMalote ? ` em ${it.dataEnvioMalote}` : ""}`
+                                              : "Pendente de envio"}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {isAdmin && sol && (
+                                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                                      <button
+                                        onClick={() => aprovarItem(sol.id, it.id)}
+                                        className="px-3 py-2 rounded-2xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1"
+                                      >
+                                        <CheckCircle2 size={14} />
+                                        Aprovar
+                                      </button>
+
+                                      <button
+                                        onClick={() => reprovarItem(sol.id, it.id, it.motivoReprovacao)}
+                                        className="px-3 py-2 rounded-2xl bg-rose-600 text-white text-xs font-bold flex items-center gap-1"
+                                      >
+                                        <XCircle size={14} />
+                                        Reprovar
+                                      </button>
+
+                                      <button
+                                        onClick={() => marcarCompradoItem(sol.id, it.id, it)}
+                                        className="px-3 py-2 rounded-2xl bg-indigo-600 text-white text-xs font-bold flex items-center gap-1"
+                                      >
+                                        <ShoppingCart size={14} />
+                                        Comprado
+                                      </button>
+
+                                      <button
+                                        onClick={() => marcarEntregueItem(sol.id, it.id, it)}
+                                        className="px-3 py-2 rounded-2xl bg-teal-600 text-white text-xs font-bold flex items-center gap-1"
+                                      >
+                                        <PackageCheck size={14} />
+                                        Entregue
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         <h3 className="font-bold mb-4">Solicitações</h3>
 
