@@ -1,9 +1,9 @@
-import { AlertTriangle, ClipboardCheck, Gauge, Save, Search, TrendingUp, Zap } from 'lucide-react';
+import { AlertTriangle, ClipboardCheck, Gauge, Save, Search, Trash2, TrendingUp, Zap } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import CardResumo from '../components/CardResumo';
 import Tabela from '../components/Tabela';
-import { addItem, getItem } from '../services/storageService';
+import { addItem, deleteItem, getItem } from '../services/storageService';
 import { calcularConsumosLocatarios } from '../utils/calculosLocatarios';
 import { int, today } from '../utils/formatters';
 
@@ -50,6 +50,8 @@ export default function Locatarios(){
   const historicoInicial = getItem('medicoes', []);
   const ultimaMedicao = historicoInicial[0];
 
+  const [historico, setHistorico] = useState(historicoInicial);
+
   const [mes,setMes]=useState(ultimaMedicao?.mes || today());
   const [data,setData]=useState(ultimaMedicao?.dataMedicao || today());
   const [anterior,setAnterior]=useState(ultimaMedicao?.anterior || '');
@@ -69,8 +71,6 @@ export default function Locatarios(){
   const [filtroAlerta,setFiltroAlerta]=useState('Todos');
   const [versao,setVersao]=useState(0);
 
-  const historico = getItem('medicoes', []);
-
   const linhasAnalisadas = useMemo(() => gerarAnalise(resultado.linhas || [], historico), [resultado, historico, versao]);
 
   const filtradas = linhasAnalisadas.filter(l => {
@@ -79,12 +79,6 @@ export default function Locatarios(){
     const texto = normalizar([l.unidade, l.consumo, l.alerta, l.observacao].join(' '));
     return alertaOk && (!termo || texto.includes(termo));
   });
-
-  const topConsumo = linhasAnalisadas
-    .slice()
-    .sort((a,b)=>Number(b.consumo || 0)-Number(a.consumo || 0))
-    .slice(0,5)
-    .map(l=>({ unidade:l.unidade, consumo:Number(l.consumo || 0) }));
 
   const chartConsumo = linhasAnalisadas
     .map(l => ({
@@ -110,7 +104,7 @@ export default function Locatarios(){
     const r=calcularConsumosLocatarios(anterior,atual);
     const analise = gerarAnalise(r.linhas, historico);
 
-    addItem('medicoes',{
+    const novaMedicao = addItem('medicoes',{
       mes,
       dataMedicao:data,
       anterior,
@@ -120,9 +114,43 @@ export default function Locatarios(){
       analise
     });
 
+    setHistorico([novaMedicao, ...historico]);
     setResultado(r);
     setVersao(v=>v+1);
     alert('Medição de energia salva no histórico.');
+  }
+
+  function excluirMedicao(id){
+    if(!confirm('Deseja realmente excluir esta medição?')) return;
+
+    deleteItem('medicoes', id);
+
+    const novoHistorico = historico.filter((m) => m.id !== id);
+    setHistorico(novoHistorico);
+
+    if (novoHistorico.length > 0) {
+      const ultima = novoHistorico[0];
+
+      setMes(ultima?.mes || today());
+      setData(ultima?.dataMedicao || today());
+      setAnterior(ultima?.anterior || '');
+      setAtual(ultima?.atual || '');
+
+      if (ultima?.resumo) {
+        setResultado(ultima.resumo);
+      } else {
+        setResultado(calcularConsumosLocatarios(ultima?.anterior || '', ultima?.atual || ''));
+      }
+    } else {
+      setMes(today());
+      setData(today());
+      setAnterior('');
+      setAtual('');
+      setResultado(calcularConsumosLocatarios('', ''));
+    }
+
+    setVersao(v=>v+1);
+    alert('Medição excluída com sucesso.');
   }
 
   return <div className="space-y-6">
@@ -344,6 +372,29 @@ export default function Locatarios(){
           {key:'alerta',label:'Alerta',render:r=>r.alerta ? <span className="px-3 py-1 rounded-full bg-rose-100 text-rose-700 font-semibold">{r.alerta}</span> : '-'}
         ]}
         rows={filtradas}
+      />
+    </div>
+
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+      <h3 className="font-bold mb-4">Histórico de medições salvas</h3>
+
+      <Tabela
+        columns={[
+          {key:'dataMedicao',label:'Data da medição'},
+          {key:'mes',label:'Data anterior'},
+          {key:'total',label:'Total consumido',render:r=>`${int(r.resumo?.total || 0)} kWh`},
+          {key:'quantidade',label:'Unidades',render:r=>r.resumo?.quantidade || 0},
+          {key:'acao',label:'',render:r=>
+            <button
+              onClick={()=>excluirMedicao(r.id)}
+              className="text-rose-600"
+              title="Excluir medição"
+            >
+              <Trash2 size={16}/>
+            </button>
+          }
+        ]}
+        rows={historico}
       />
     </div>
   </div>
