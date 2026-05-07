@@ -46,11 +46,20 @@ function gerarAnalise(linhas, historico) {
   });
 }
 
+function rotuloMedicao(medicao) {
+  const dataAtual = medicao?.dataMedicao || '-';
+  const dataAnterior = medicao?.mes || '-';
+  const total = medicao?.resumo?.total || 0;
+
+  return `${dataAtual} | Anterior: ${dataAnterior} | Total: ${int(total)} kWh`;
+}
+
 export default function Locatarios(){
   const historicoInicial = getItem('medicoes', []);
   const ultimaMedicao = historicoInicial[0];
 
   const [historico, setHistorico] = useState(historicoInicial);
+  const [medicaoSelecionadaId, setMedicaoSelecionadaId] = useState(ultimaMedicao?.id || '');
 
   const [mes,setMes]=useState(ultimaMedicao?.mes || today());
   const [data,setData]=useState(ultimaMedicao?.dataMedicao || today());
@@ -100,6 +109,26 @@ export default function Locatarios(){
     setResultado(calcularConsumosLocatarios(anterior,atual));
   }
 
+  function carregarMedicaoSalva(id){
+    setMedicaoSelecionadaId(id);
+
+    const medicao = historico.find((m) => String(m.id) === String(id));
+    if (!medicao) return;
+
+    setMes(medicao?.mes || today());
+    setData(medicao?.dataMedicao || today());
+    setAnterior(medicao?.anterior || '');
+    setAtual(medicao?.atual || '');
+
+    if (medicao?.resumo) {
+      setResultado(medicao.resumo);
+    } else {
+      setResultado(calcularConsumosLocatarios(medicao?.anterior || '', medicao?.atual || ''));
+    }
+
+    setVersao(v => v + 1);
+  }
+
   function salvar(){
     const r=calcularConsumosLocatarios(anterior,atual);
     const analise = gerarAnalise(r.linhas, historico);
@@ -115,6 +144,7 @@ export default function Locatarios(){
     });
 
     setHistorico([novaMedicao, ...historico]);
+    setMedicaoSelecionadaId(novaMedicao.id);
     setResultado(r);
     setVersao(v=>v+1);
     alert('Medição de energia salva no histórico.');
@@ -131,6 +161,7 @@ export default function Locatarios(){
     if (novoHistorico.length > 0) {
       const ultima = novoHistorico[0];
 
+      setMedicaoSelecionadaId(ultima.id);
       setMes(ultima?.mes || today());
       setData(ultima?.dataMedicao || today());
       setAnterior(ultima?.anterior || '');
@@ -142,6 +173,7 @@ export default function Locatarios(){
         setResultado(calcularConsumosLocatarios(ultima?.anterior || '', ultima?.atual || ''));
       }
     } else {
+      setMedicaoSelecionadaId('');
       setMes(today());
       setData(today());
       setAnterior('');
@@ -163,6 +195,38 @@ export default function Locatarios(){
       <p className="text-slate-300 mt-2">
         Cole as leituras anterior e atual, calcule o consumo em kWh, identifique medidor virado e acompanhe variações.
       </p>
+    </div>
+
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+        <div className="md:col-span-2">
+          <label className="text-sm font-semibold text-slate-700">
+            Visualizar medição salva
+          </label>
+
+          <select
+            value={medicaoSelecionadaId}
+            onChange={(e)=>carregarMedicaoSalva(e.target.value)}
+            className="mt-2 w-full rounded-2xl border border-slate-200 p-3 text-sm bg-white"
+          >
+            {historico.length === 0 && (
+              <option value="">Nenhuma medição salva</option>
+            )}
+
+            {historico.map((m) => (
+              <option key={m.id} value={m.id}>
+                {rotuloMedicao(m)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="rounded-2xl bg-blue-50 p-4">
+          <p className="text-sm font-bold text-blue-700">Medição exibida</p>
+          <p className="text-sm text-slate-700">Atual: {data || '-'}</p>
+          <p className="text-sm text-slate-700">Anterior: {mes || '-'}</p>
+        </div>
+      </div>
     </div>
 
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
