@@ -1,25 +1,35 @@
 import { Eye, Lock, LogIn, ShieldCheck, User } from 'lucide-react';
 import { useState } from 'react';
 import BuildingLogo from '../components/BuildingLogo';
-import { login } from '../services/storageService';
+import { loginComSupabase } from '../services/authService';
 
 export default function Login({ onLogin }) {
   const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [erro, setErro] = useState('');
+  const [carregando, setCarregando] = useState(false);
 
-  function entrar(e) {
+  async function entrar(e) {
     e.preventDefault();
+    setErro('');
+    setCarregando(true);
 
-    const session = login(usuario.trim(), senha.trim());
+    try {
+      const resultado = await loginComSupabase(usuario.trim(), senha.trim());
 
-    if (!session) {
-      setErro('Usuário ou senha incorretos.');
-      return;
+      if (!resultado?.sucesso) {
+        setErro(resultado?.erro || 'Usuário ou senha incorretos.');
+        return;
+      }
+
+      onLogin(resultado.usuario);
+    } catch (error) {
+      console.error(error);
+      setErro('Erro ao conectar com o banco de dados.');
+    } finally {
+      setCarregando(false);
     }
-
-    onLogin(session);
   }
 
   return (
@@ -50,6 +60,7 @@ export default function Login({ onLogin }) {
               <h1 className="text-3xl md:text-4xl font-black tracking-tight text-slate-950">
                 Sistema Técnico Predial
               </h1>
+
               <p className="text-xl md:text-2xl font-bold text-teal-500 mt-1">
                 Edifício JK 1455
               </p>
@@ -69,9 +80,13 @@ export default function Login({ onLogin }) {
 
             <form onSubmit={entrar} className="space-y-5">
               <div>
-                <label className="text-sm font-bold text-slate-700">Usuário</label>
+                <label className="text-sm font-bold text-slate-700">
+                  Usuário
+                </label>
+
                 <div className="mt-2 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 focus-within:ring-4 focus-within:ring-blue-100 focus-within:border-blue-400 transition">
                   <User size={21} className="text-slate-400" />
+
                   <input
                     value={usuario}
                     onChange={(e) => setUsuario(e.target.value)}
@@ -83,9 +98,13 @@ export default function Login({ onLogin }) {
               </div>
 
               <div>
-                <label className="text-sm font-bold text-slate-700">Senha</label>
+                <label className="text-sm font-bold text-slate-700">
+                  Senha
+                </label>
+
                 <div className="mt-2 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-4 focus-within:ring-4 focus-within:ring-blue-100 focus-within:border-blue-400 transition">
                   <Lock size={21} className="text-slate-400" />
+
                   <input
                     type={mostrarSenha ? 'text' : 'password'}
                     value={senha}
@@ -94,6 +113,7 @@ export default function Login({ onLogin }) {
                     placeholder="Digite sua senha"
                     autoComplete="current-password"
                   />
+
                   <button
                     type="button"
                     onClick={() => setMostrarSenha((v) => !v)}
@@ -111,9 +131,12 @@ export default function Login({ onLogin }) {
                 </div>
               )}
 
-              <button className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-bold text-lg shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 transition">
+              <button
+                disabled={carregando}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-2xl py-4 font-bold text-lg shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 transition"
+              >
                 <LogIn size={20} />
-                Entrar
+                {carregando ? 'Entrando...' : 'Entrar'}
               </button>
             </form>
 
