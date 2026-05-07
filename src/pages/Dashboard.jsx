@@ -244,6 +244,12 @@ export default function Dashboard() {
       energia: Number(m.resumo?.total || 0)
     }));
 
+  const mediaSerieEnergia = mediaNumerica(serieEnergia, 'energia');
+
+  const maiorMesEnergia = serieEnergia.length
+    ? serieEnergia.reduce((a, b) => b.energia > a.energia ? b : a, serieEnergia[0])
+    : null;
+
   const dieselSerieBase = dieselTecnico.length ? dieselTecnico : geradores;
 
   const dieselSerie = dieselSerieBase
@@ -398,16 +404,45 @@ export default function Dashboard() {
 
           <div className="h-80">
             <ResponsiveContainer>
-              <BarChart data={dieselSerie.length ? dieselSerie : [{ mes: 'Sem dados', litros: 0 }]}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis />
-                <Tooltip formatter={(v) => `${num(v)} L`} />
+              <BarChart
+                data={dieselSerie.length ? dieselSerie : [{ mes: 'Sem dados', litros: 0 }]}
+                margin={{ top: 18, right: 24, left: 0, bottom: 8 }}
+              >
+                <CartesianGrid
+                  stroke="#e2e8f0"
+                  strokeDasharray="2 8"
+                  vertical={false}
+                  opacity={0.75}
+                />
+
+                <XAxis
+                  dataKey="mes"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                />
+
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                />
+
+                <Tooltip
+                  formatter={(v) => `${num(v)} L`}
+                  contentStyle={{
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)'
+                  }}
+                />
+
                 {mediaDiesel > 0 && (
                   <ReferenceLine
                     y={mediaDiesel}
                     stroke="#0f766e"
-                    strokeDasharray="6 4"
+                    strokeDasharray="6 6"
+                    strokeWidth={2}
                     label={{
                       value: `Média ${num(mediaDiesel)} L`,
                       position: 'insideTopRight',
@@ -416,7 +451,14 @@ export default function Dashboard() {
                     }}
                   />
                 )}
-                <Bar dataKey="litros" name="Diesel L" fill="#2563eb" radius={[10, 10, 0, 0]} />
+
+                <Bar
+                  dataKey="litros"
+                  name="Diesel L"
+                  fill="#2563eb"
+                  radius={[10, 10, 0, 0]}
+                  maxBarSize={56}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -448,16 +490,45 @@ export default function Dashboard() {
 
           <div className="h-80">
             <ResponsiveContainer>
-              <BarChart data={energiaUnidadesChart.length ? energiaUnidadesChart : [{ unidade: 'Sem dados', consumo: 0 }]}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="unidade" />
-                <YAxis />
-                <Tooltip formatter={(v) => `${int(v)} kWh`} />
+              <BarChart
+                data={energiaUnidadesChart.length ? energiaUnidadesChart : [{ unidade: 'Sem dados', consumo: 0 }]}
+                margin={{ top: 18, right: 24, left: 0, bottom: 8 }}
+              >
+                <CartesianGrid
+                  stroke="#e2e8f0"
+                  strokeDasharray="2 8"
+                  vertical={false}
+                  opacity={0.75}
+                />
+
+                <XAxis
+                  dataKey="unidade"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                />
+
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                />
+
+                <Tooltip
+                  formatter={(v) => `${int(v)} kWh`}
+                  contentStyle={{
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)'
+                  }}
+                />
+
                 {mediaEnergiaUnidade > 0 && (
                   <ReferenceLine
                     y={mediaEnergiaUnidade}
                     stroke="#0f766e"
-                    strokeDasharray="6 4"
+                    strokeDasharray="6 6"
+                    strokeWidth={2}
                     label={{
                       value: `Média ${int(mediaEnergiaUnidade)} kWh`,
                       position: 'insideTopRight',
@@ -466,7 +537,14 @@ export default function Dashboard() {
                     }}
                   />
                 )}
-                <Bar dataKey="consumo" name="Consumo kWh" fill="#14b8a6" radius={[10, 10, 0, 0]} />
+
+                <Bar
+                  dataKey="consumo"
+                  name="Consumo kWh"
+                  fill="#14b8a6"
+                  radius={[10, 10, 0, 0]}
+                  maxBarSize={44}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -493,21 +571,91 @@ export default function Dashboard() {
           <div className="flex items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="font-bold text-slate-900">Evolução da energia</h3>
-              <p className="text-sm text-slate-400">Comparativo dos últimos lançamentos</p>
+              <p className="text-sm text-slate-400">Comparativo dos últimos lançamentos com linha de média</p>
             </div>
             <BarChart3 className="text-blue-500" />
           </div>
 
           <div className="h-72">
             <ResponsiveContainer>
-              <BarChart data={serieEnergia.length ? serieEnergia : [{ mes: 'Sem dados', energia: 0 }]}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis />
-                <Tooltip formatter={(v) => `${int(v)} kWh`} />
-                <Bar dataKey="energia" name="Energia" fill="#2563eb" radius={[10, 10, 0, 0]} />
+              <BarChart
+                data={serieEnergia.length ? serieEnergia : [{ mes: 'Sem dados', energia: 0 }]}
+                margin={{ top: 18, right: 24, left: 0, bottom: 8 }}
+              >
+                <CartesianGrid
+                  stroke="#e2e8f0"
+                  strokeDasharray="2 8"
+                  vertical={false}
+                  opacity={0.75}
+                />
+
+                <XAxis
+                  dataKey="mes"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                />
+
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                />
+
+                <Tooltip
+                  formatter={(v) => `${int(v)} kWh`}
+                  contentStyle={{
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)'
+                  }}
+                />
+
+                {mediaSerieEnergia > 0 && (
+                  <ReferenceLine
+                    y={mediaSerieEnergia}
+                    stroke="#0f766e"
+                    strokeDasharray="6 6"
+                    strokeWidth={2}
+                    label={{
+                      value: `Média ${int(mediaSerieEnergia)} kWh`,
+                      position: 'insideTopRight',
+                      fill: '#0f766e',
+                      fontSize: 12
+                    }}
+                  />
+                )}
+
+                <Bar
+                  dataKey="energia"
+                  name="Energia"
+                  fill="#2563eb"
+                  radius={[10, 10, 0, 0]}
+                  maxBarSize={56}
+                />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-sm">
+            <div className="rounded-2xl bg-blue-50 p-3">
+              <p className="text-blue-700 font-bold">Média do período</p>
+              <p>{mediaSerieEnergia ? `${int(mediaSerieEnergia)} kWh` : '-'}</p>
+            </div>
+
+            <div className="rounded-2xl bg-teal-50 p-3">
+              <p className="text-teal-700 font-bold">Maior mês</p>
+              <p>
+                {maiorMesEnergia
+                  ? `${maiorMesEnergia.mes} • ${int(maiorMesEnergia.energia)} kWh`
+                  : '-'}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-slate-700 font-bold">Meses exibidos</p>
+              <p>{serieEnergia.length}</p>
+            </div>
           </div>
         </section>
 
@@ -572,12 +720,46 @@ export default function Dashboard() {
 
           <div className="h-64">
             <ResponsiveContainer>
-              <BarChart data={solicitacoesPorArea.length ? solicitacoesPorArea : [{ area: 'Sem dados', itens: 0 }]}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="area" />
-                <YAxis />
-                <Tooltip formatter={(v, name) => name === 'valor' ? brl(v) : int(v)} />
-                <Bar dataKey="itens" name="Itens" fill="#14b8a6" radius={[8, 8, 0, 0]} />
+              <BarChart
+                data={solicitacoesPorArea.length ? solicitacoesPorArea : [{ area: 'Sem dados', itens: 0 }]}
+                margin={{ top: 18, right: 24, left: 0, bottom: 8 }}
+              >
+                <CartesianGrid
+                  stroke="#e2e8f0"
+                  strokeDasharray="2 8"
+                  vertical={false}
+                  opacity={0.75}
+                />
+
+                <XAxis
+                  dataKey="area"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                />
+
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 12 }}
+                />
+
+                <Tooltip
+                  formatter={(v, name) => name === 'valor' ? brl(v) : int(v)}
+                  contentStyle={{
+                    borderRadius: '16px',
+                    border: '1px solid #e2e8f0',
+                    boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)'
+                  }}
+                />
+
+                <Bar
+                  dataKey="itens"
+                  name="Itens"
+                  fill="#14b8a6"
+                  radius={[8, 8, 0, 0]}
+                  maxBarSize={56}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
