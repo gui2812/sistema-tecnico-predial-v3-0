@@ -114,6 +114,45 @@ function rotuloMes(valor) {
   return texto;
 }
 
+function mesAtualLongo() {
+  return new Date().toLocaleDateString('pt-BR', {
+    month: 'long',
+    year: 'numeric'
+  });
+}
+
+function estaNoMesAtual(data) {
+  if (!data) return false;
+
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  const mes = String(agora.getMonth() + 1).padStart(2, '0');
+  const ref = `${ano}-${mes}`;
+
+  return String(data).startsWith(ref);
+}
+
+function ChecklistItem({ ok, titulo, descricao }) {
+  return (
+    <div
+      className={`rounded-2xl border p-4 flex gap-3 ${
+        ok
+          ? 'bg-teal-50 border-teal-100 text-teal-800'
+          : 'bg-amber-50 border-amber-100 text-amber-800'
+      }`}
+    >
+      <div className="shrink-0 mt-0.5">
+        {ok ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
+      </div>
+
+      <div className="min-w-0">
+        <p className="font-bold break-words">{titulo}</p>
+        <p className="text-sm mt-1 opacity-80 break-words">{descricao}</p>
+      </div>
+    </div>
+  );
+}
+
 function mediaNumerica(lista, chave) {
   const valores = lista
     .map((item) => Number(item?.[chave] || 0))
@@ -199,6 +238,8 @@ export default function Dashboard() {
   const aprovadas = itens.filter(i => i.status === 'Aprovada').length;
   const reprovadas = itens.filter(i => i.status === 'Reprovada').length;
   const entregues = itens.filter(i => i.status === 'Entregue').length;
+  const pendentesMalote = itens.filter(i => i.status === 'Entregue' && !i.enviadoMalote).length;
+  const compradas = itens.filter(i => i.status === 'Comprada').length;
 
   const porAreaMap = new Map();
 
@@ -280,13 +321,65 @@ export default function Dashboard() {
     ...(!ultimoCalculoTecnico ? ['Cálculos técnicos ainda não lançados.'] : [])
   ].slice(0, 7);
 
-  const statusMes = [
-    { label: 'Medição de energia lançada', ok: !!ultimaEnergia },
-    { label: 'Rateio de água gerado', ok: !!ultimoRateio },
-    { label: 'Diesel atualizado', ok: registrosDiesel > 0 },
-    { label: 'Cálculos técnicos lançados', ok: totalCalculosTecnicos > 0 },
-    { label: 'Solicitações sem pendência', ok: abertas === 0 }
+  const energiaMesLancada = medicoes.some(m => estaNoMesAtual(m.dataMedicao || m.data || m.criadoEm?.slice(0, 10)));
+  const rateioMesLancado = rateios.some(r => estaNoMesAtual(r.data || r.criadoEm?.slice(0, 10)));
+  const dieselMesLancado =
+    geradores.some(g => estaNoMesAtual(g.data || g.criadoEm?.slice(0, 10))) ||
+    dieselTecnico.some(d => estaNoMesAtual(d.data || d.data_calculo || d.criadoEm?.slice(0, 10)));
+
+  const checklistMensal = [
+    {
+      label: 'Energia dos locatários',
+      ok: energiaMesLancada,
+      descricao: energiaMesLancada
+        ? 'Medição encontrada para o mês atual.'
+        : 'Ainda não localizei medição salva no mês atual.'
+    },
+    {
+      label: 'Rateio de água',
+      ok: rateioMesLancado,
+      descricao: rateioMesLancado
+        ? 'Rateio de água encontrado para o mês atual.'
+        : 'Ainda não localizei rateio salvo no mês atual.'
+    },
+    {
+      label: 'Diesel/Geradores',
+      ok: dieselMesLancado,
+      descricao: dieselMesLancado
+        ? 'Há registro de diesel ou gerador no mês atual.'
+        : 'Ainda não localizei registro de diesel/gerador no mês atual.'
+    },
+    {
+      label: 'NF pendente de malote',
+      ok: pendentesMalote === 0,
+      descricao: pendentesMalote === 0
+        ? 'Não há itens entregues com NF pendente de malote.'
+        : `${pendentesMalote} item(ns) entregue(s) ainda estão com NF pendente de malote.`
+    },
+    {
+      label: 'Solicitações em aberto',
+      ok: abertas === 0,
+      descricao: abertas === 0
+        ? 'Não há itens novos ou em análise.'
+        : `${abertas} item(ns) novo(s) ou em análise aguardam tratativa.`
+    },
+    {
+      label: 'Itens comprados aguardando entrega',
+      ok: compradas === 0,
+      descricao: compradas === 0
+        ? 'Não há itens comprados aguardando entrega.'
+        : `${compradas} item(ns) comprado(s) aguardam entrega.`
+    }
   ];
+
+  const checklistOk = checklistMensal.filter(item => item.ok).length;
+  const checklistTotal = checklistMensal.length;
+  const checklistPercentual = checklistTotal ? Math.round((checklistOk / checklistTotal) * 100) : 0;
+
+  const statusMes = checklistMensal.map(item => ({
+    label: item.label,
+    ok: item.ok
+  }));
 
   const atividades = [
     ...geradores.slice(0, 3).map(g => ({
@@ -391,6 +484,40 @@ export default function Dashboard() {
           cor="amber"
         />
       </div>
+
+      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-5">
+          <div>
+            <h3 className="font-black text-slate-900">Checklist mensal</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Fechamento operacional de {mesAtualLongo()}.
+            </p>
+          </div>
+
+          <div className={`rounded-3xl px-5 py-4 border ${
+            checklistPercentual === 100
+              ? 'bg-teal-50 border-teal-100 text-teal-800'
+              : 'bg-amber-50 border-amber-100 text-amber-800'
+          }`}>
+            <p className="text-xs font-bold opacity-75">Conclusão do mês</p>
+            <p className="text-3xl font-black mt-1">{checklistPercentual}%</p>
+            <p className="text-xs font-semibold mt-1">
+              {checklistOk} de {checklistTotal} rotinas em dia
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {checklistMensal.map((item) => (
+            <ChecklistItem
+              key={item.label}
+              ok={item.ok}
+              titulo={item.label}
+              descricao={item.descricao}
+            />
+          ))}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
@@ -566,6 +693,40 @@ export default function Dashboard() {
         </section>
       </div>
 
+      <section className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-5">
+          <div>
+            <h3 className="font-black text-slate-900">Checklist mensal</h3>
+            <p className="text-sm text-slate-400 mt-1">
+              Fechamento operacional de {mesAtualLongo()}.
+            </p>
+          </div>
+
+          <div className={`rounded-3xl px-5 py-4 border ${
+            checklistPercentual === 100
+              ? 'bg-teal-50 border-teal-100 text-teal-800'
+              : 'bg-amber-50 border-amber-100 text-amber-800'
+          }`}>
+            <p className="text-xs font-bold opacity-75">Conclusão do mês</p>
+            <p className="text-3xl font-black mt-1">{checklistPercentual}%</p>
+            <p className="text-xs font-semibold mt-1">
+              {checklistOk} de {checklistTotal} rotinas em dia
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {checklistMensal.map((item) => (
+            <ChecklistItem
+              key={item.label}
+              ok={item.ok}
+              titulo={item.label}
+              descricao={item.descricao}
+            />
+          ))}
+        </div>
+      </section>
+
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <section className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
           <div className="flex items-center justify-between gap-3 mb-4">
@@ -697,7 +858,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         <section className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5 xl:col-span-1">
           <h3 className="font-bold text-slate-900 mb-1">Status do mês</h3>
-          <p className="text-sm text-slate-400 mb-4">Resumo rápido das rotinas principais</p>
+          <p className="text-sm text-slate-400 mb-4">Resumo rápido do checklist mensal</p>
 
           <div className="space-y-3">
             {statusMes.map((s) => (
