@@ -1,19 +1,22 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   Droplets,
+  FileText,
   Fuel,
   PackageCheck,
   PackagePlus,
   RefreshCcw,
+  Save,
   ShoppingCart,
   Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import CardResumo from "../components/CardResumo";
-import { getItem } from "../services/storageService";
+import { addItem, getItem } from "../services/storageService";
 import { listarSolicitacoesSupabase } from "../services/solicitacoesSupabaseService";
-import { brl, today } from "../utils/formatters";
+import { brl, num, today } from "../utils/formatters";
 
 function dinheiroParaNumero(v) {
   return Number(String(v || "0").replace(/\./g, "").replace(",", ".")) || 0;
@@ -48,6 +51,30 @@ function mesAtualTexto() {
 
   const agora = new Date();
   return `${meses[agora.getMonth()]}/${agora.getFullYear()}`;
+}
+
+function mesAtualTitulo() {
+  const meses = [
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
+  ];
+
+  const agora = new Date();
+  return `${meses[agora.getMonth()]}/${agora.getFullYear()}`;
+}
+
+function numeroSeguro(v) {
+  return Number(v || 0) || 0;
 }
 
 function normalizarItem(item) {
@@ -91,7 +118,13 @@ function totalItem(it) {
   return Number(it.quantidade || 0) * dinheiroParaNumero(it.valorUnitario);
 }
 
-function LinhaPendencia({ titulo, descricao, detalhe, cor = "amber", icon: Icon = AlertTriangle }) {
+function LinhaPendencia({
+  titulo,
+  descricao,
+  detalhe,
+  cor = "amber",
+  icon: Icon = AlertTriangle,
+}) {
   const estilos = {
     amber: "bg-amber-50 border-amber-100 text-amber-800",
     rose: "bg-rose-50 border-rose-100 text-rose-800",
@@ -107,7 +140,9 @@ function LinhaPendencia({ titulo, descricao, detalhe, cor = "amber", icon: Icon 
         <div className="min-w-0">
           <p className="font-bold break-words">{titulo}</p>
           {descricao && <p className="text-sm mt-1 break-words">{descricao}</p>}
-          {detalhe && <p className="text-xs mt-2 opacity-80 break-words">{detalhe}</p>}
+          {detalhe && (
+            <p className="text-xs mt-2 opacity-80 break-words">{detalhe}</p>
+          )}
         </div>
       </div>
     </div>
@@ -173,9 +208,13 @@ export default function Pendencias({ user }) {
       ["Nova", "Em análise"].includes(i.status)
     );
 
-    const aprovadosAguardandoCompra = itens.filter((i) => i.status === "Aprovada");
+    const aprovadosAguardandoCompra = itens.filter(
+      (i) => i.status === "Aprovada"
+    );
 
-    const compradosAguardandoEntrega = itens.filter((i) => i.status === "Comprada");
+    const compradosAguardandoEntrega = itens.filter(
+      (i) => i.status === "Comprada"
+    );
 
     const entreguesMalotePendente = itens.filter(
       (i) => i.status === "Entregue" && !i.enviadoMalote
@@ -205,6 +244,34 @@ export default function Pendencias({ user }) {
       geradores.some((g) => dataNoMesAtual(g.data)) ||
       dieselTecnico.some((d) => dataNoMesAtual(d.data || d.data_calculo));
 
+    const geradoresMes = geradores.filter((g) => dataNoMesAtual(g.data));
+
+    const dieselTecnicoMes = dieselTecnico.filter((d) =>
+      dataNoMesAtual(d.data || d.data_calculo)
+    );
+
+    const litrosGeradores = geradoresMes.reduce(
+      (s, g) => s + numeroSeguro(g.litros || g.total || g.consumo),
+      0
+    );
+
+    const custoGeradores = geradoresMes.reduce(
+      (s, g) => s + numeroSeguro(g.custo || g.valorTotal || g.valor),
+      0
+    );
+
+    const litrosDieselTecnico = dieselTecnicoMes.reduce(
+      (s, d) => s + numeroSeguro(d.litros || d.total || d.consumo),
+      0
+    );
+
+    const custoDieselTecnico = dieselTecnicoMes.reduce(
+      (s, d) => s + numeroSeguro(d.custo || d.valorTotal || d.valor),
+      0
+    );
+
+    const ultimoRateio = rateios[0] || null;
+
     return {
       itens,
       aguardandoAnalise,
@@ -212,10 +279,23 @@ export default function Pendencias({ user }) {
       compradosAguardandoEntrega,
       entreguesMalotePendente,
       energiaLancadaMes,
+      ultimaMedicao,
       medidoresVirados,
       consumosZerados,
       rateioLancadoMes,
+      ultimoRateio,
       dieselLancadoMes,
+      litrosDiesel: litrosGeradores + litrosDieselTecnico,
+      custoDiesel: custoGeradores + custoDieselTecnico,
+      totalItens: itens.length,
+      valorSolicitacoes: itens.reduce((s, it) => s + totalItem(it), 0),
+      novas: itens.filter((i) => i.status === "Nova").length,
+      emAnalise: itens.filter((i) => i.status === "Em análise").length,
+      aprovadas: itens.filter((i) => i.status === "Aprovada").length,
+      reprovadas: itens.filter((i) => i.status === "Reprovada").length,
+      compradas: itens.filter((i) => i.status === "Comprada").length,
+      entregues: itens.filter((i) => i.status === "Entregue").length,
+      canceladas: itens.filter((i) => i.status === "Cancelada").length,
     };
   }, [solicitacoes, medicoes, rateios, geradores, dieselTecnico]);
 
@@ -229,6 +309,76 @@ export default function Pendencias({ user }) {
     dados.consumosZerados.length +
     (!dados.rateioLancadoMes ? 1 : 0) +
     (!dados.dieselLancadoMes ? 1 : 0);
+
+  const resumoGestor = useMemo(() => {
+    const med = dados.ultimaMedicao || {};
+    const rateio = dados.ultimoRateio || {};
+
+    const totalEnergia = numeroSeguro(med.total);
+    const mediaEnergia = numeroSeguro(med.media);
+    const qtdUnidades = numeroSeguro(med.quantidade || med.linhas?.length);
+
+    const consumoAgua = numeroSeguro(rateio.consumoTotal);
+    const tarifaAgua = numeroSeguro(rateio.tarifa);
+    const valorAgua = numeroSeguro(rateio.valorTotal);
+
+    const linhas = [
+      `Resumo operacional do mês — ${mesAtualTitulo()}`,
+      "",
+      "Energia dos locatários:",
+      dados.energiaLancadaMes
+        ? `• Medição lançada no mês${totalEnergia ? `, com total de ${num(totalEnergia)} kWh` : ""}.`
+        : "• Medição dos locatários ainda pendente no mês.",
+      qtdUnidades ? `• Quantidade de unidades na última medição: ${qtdUnidades}.` : "",
+      mediaEnergia ? `• Média de consumo por unidade: ${num(mediaEnergia)} kWh.` : "",
+      `• Medidores virados: ${dados.medidoresVirados.length}.`,
+      `• Consumos zerados para conferência: ${dados.consumosZerados.length}.`,
+      "",
+      "Geradores/Diesel:",
+      dados.dieselLancadoMes
+        ? `• Registro de diesel/geradores lançado no mês${dados.litrosDiesel ? `, totalizando ${num(dados.litrosDiesel)} L` : ""}.`
+        : "• Registro de diesel/geradores ainda pendente no mês.",
+      dados.custoDiesel ? `• Custo registrado/estimado: ${brl(dados.custoDiesel)}.` : "",
+      "",
+      "Rateio de água:",
+      dados.rateioLancadoMes
+        ? `• Rateio de água lançado${rateio.mesReferencia ? ` para ${rateio.mesReferencia}` : " no mês"}.`
+        : "• Rateio de água ainda pendente no mês.",
+      consumoAgua ? `• Consumo total informado: ${num(consumoAgua)} m³.` : "",
+      tarifaAgua ? `• Tarifa calculada: ${brl(tarifaAgua)}/m³.` : "",
+      valorAgua ? `• Valor total do rateio: ${brl(valorAgua)}.` : "",
+      "",
+      "Solicitações de material:",
+      `• Total de itens no painel: ${dados.totalItens}.`,
+      `• Novos/em análise: ${dados.aguardandoAnalise.length}.`,
+      `• Aprovados aguardando compra: ${dados.aprovadosAguardandoCompra.length}.`,
+      `• Comprados aguardando entrega: ${dados.compradosAguardandoEntrega.length}.`,
+      `• Entregues com NF pendente de malote: ${dados.entreguesMalotePendente.length}.`,
+      dados.valorSolicitacoes ? `• Valor estimado das solicitações: ${brl(dados.valorSolicitacoes)}.` : "",
+      "",
+      "Pendências principais:",
+      totalPendencias
+        ? `• Existem ${totalPendencias} pendência(s) operacional(is) para acompanhamento.`
+        : "• Não há pendências operacionais relevantes no momento.",
+    ];
+
+    return linhas.filter(Boolean).join("\n");
+  }, [dados, totalPendencias]);
+
+  function copiarResumo() {
+    navigator.clipboard?.writeText(resumoGestor);
+    alert("Resumo copiado.");
+  }
+
+  function salvarResumo() {
+    addItem("resumos_gestor", {
+      mesReferencia: mesAtualTitulo(),
+      texto: resumoGestor,
+      usuario: user?.nome || "",
+    });
+
+    alert("Resumo salvo no histórico local.");
+  }
 
   return (
     <div className="space-y-6">
@@ -303,6 +453,47 @@ export default function Pendencias({ user }) {
         />
       </div>
 
+      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4 mb-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <FileText className="text-blue-600 shrink-0" size={22} />
+              <h3 className="font-black text-slate-900">
+                Resumo para gestor
+              </h3>
+            </div>
+
+            <p className="text-sm text-slate-500 mt-1">
+              Texto automático com o status do mês, pronto para copiar e enviar.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={copiarResumo}
+              className="px-4 py-2 rounded-2xl bg-blue-600 text-white text-sm font-bold flex items-center gap-2"
+            >
+              <Copy size={16} />
+              Copiar resumo
+            </button>
+
+            <button
+              onClick={salvarResumo}
+              className="px-4 py-2 rounded-2xl bg-slate-900 text-white text-sm font-bold flex items-center gap-2"
+            >
+              <Save size={16} />
+              Salvar resumo
+            </button>
+          </div>
+        </div>
+
+        <textarea
+          readOnly
+          value={resumoGestor}
+          className="w-full h-[360px] rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 leading-relaxed whitespace-pre-line outline-none"
+        />
+      </section>
+
       {carregando ? (
         <div className="bg-white rounded-3xl border border-slate-100 p-8 text-center text-slate-400">
           Carregando pendências...
@@ -362,7 +553,7 @@ export default function Pendencias({ user }) {
               <LinhaPendencia
                 key={`malote-${it.id}`}
                 titulo={`${it.quantidade} ${it.unidade} • ${it.descricao}`}
-                descricao={`Entregue, mas NF ainda não foi enviada ao malote.`}
+                descricao="Entregue, mas NF ainda não foi enviada ao malote."
                 detalhe={`NF: ${it.numeroNotaFiscal || "Não informada"} • Recebido por: ${it.recebidoPor || "-"}`}
                 cor="rose"
                 icon={AlertTriangle}
