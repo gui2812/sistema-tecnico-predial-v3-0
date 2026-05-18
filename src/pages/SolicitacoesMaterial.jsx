@@ -397,6 +397,8 @@ function normalizarSolicitacao(sol) {
 }
 
 export default function SolicitacoesMaterial({ user }) {
+  const isAdmin = user?.perfil === "admin" || user?.perfil === "administrador";
+
   const areasPermitidas = useMemo(
     () => obterAreasPermitidasUsuario(user, isAdmin),
     [user, isAdmin]
