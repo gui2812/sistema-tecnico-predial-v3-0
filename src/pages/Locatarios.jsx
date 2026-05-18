@@ -1,11 +1,50 @@
-import { AlertTriangle, ClipboardCheck, Gauge, Save, Search, Trash2, TrendingUp, Zap } from 'lucide-react';
+import {
+  AlertTriangle,
+  ClipboardCheck,
+  Gauge,
+  Save,
+  Search,
+  Trash2,
+  TrendingUp,
+  Upload,
+  Zap
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import CardResumo from '../components/CardResumo';
 import Tabela from '../components/Tabela';
 import { addItem, deleteItem, getItem } from '../services/storageService';
-import { calcularConsumosLocatarios } from '../utils/calculosLocatarios';
+import { calcularConsumosLocatarios, parseMedicoes } from '../utils/calculosLocatarios';
 import { int, today } from '../utils/formatters';
+
+const UNIDADES_PADRAO = [
+  '1601',
+  '1602',
+  '1501',
+  '1502',
+  '1401',
+  '1402',
+  '1201',
+  '1202',
+  '1101',
+  '1102',
+  '1001',
+  '1002',
+  '901',
+  '902',
+  '801',
+  '802',
+  '701',
+  '702',
+  '601',
+  '602',
+  '501',
+  '502',
+  '401',
+  '402',
+  '302',
+  '301'
+];
 
 function normalizar(txt){
   return String(txt || '')
@@ -54,17 +93,129 @@ function rotuloMedicao(medicao) {
   return `${dataAtual} | Anterior: ${dataAnterior} | Total: ${int(total)} kWh`;
 }
 
+function montarTextoMedicoesPorCampo(linhas, campo) {
+  return linhas
+    .filter(l => String(l?.[campo] ?? '').trim() !== '')
+    .map(l => `${l.unidade} - ${String(l[campo]).trim()}`)
+    .join('\n');
+}
+
+function mapearMedicoes(texto) {
+  return new Map(parseMedicoes(texto).map(m => [String(m.unidade), String(m.leitura)]));
+}
+
+function unidadesDoHistorico(historico) {
+  const set = new Set(UNIDADES_PADRAO);
+
+  historico.forEach((m) => {
+    (m.linhas || []).forEach((l) => {
+      if (l.unidade) set.add(String(l.unidade));
+    });
+
+    parseMedicoes(m.anterior || '').forEach((l) => set.add(String(l.unidade)));
+    parseMedicoes(m.atual || '').forEach((l) => set.add(String(l.unidade)));
+  });
+
+  return Array.from(set).sort((a, b) =>
+    String(a).localeCompare(String(b), 'pt-BR', { numeric: true })
+  );
+}
+
+function criarLinhasTabela(unidades, anteriorTexto = '', atualTexto = '') {
+  const anteriores = mapearMedicoes(anteriorTexto);
+  const atuais = mapearMedicoes(atualTexto);
+
+  return unidades.map((unidade) => ({
+    unidade,
+    anterior: anteriores.get(String(unidade)) || '',
+    atual: atuais.get(String(unidade)) || ''
+  }));
+}
+
+function linhasPelaMedicao(medicao, unidades) {
+  if (!medicao) return criarLinhasTabela(unidades);
+
+  if (medicao.linhas?.length) {
+    const mapa = new Map(
+      medicao.linhas.map((l) => [
+        String(l.unidade),
+        {
+          anterior: String(l.anterior ?? ''),
+          atual: String(l.atual ?? '')
+        }
+      ])
+    );
+
+    return unidades.map((unidade) => {
+      const achado = mapa.get(String(unidade));
+
+      return {
+        unidade,
+        anterior: achado?.anterior || '',
+        atual: achado?.atual || ''
+      };
+    });
+  }
+
+  return criarLinhasTabela(unidades, medicao.anterior || '', medicao.atual || '');
+}
+
+function linhasComUltimaComoAnterior(ultimaMedicao, unidades) {
+  if (!ultimaMedicao) return criarLinhasTabela(unidades);
+
+  if (ultimaMedicao.linhas?.length) {
+    const mapaAtual = new Map(
+      ultimaMedicao.linhas.map((l) => [String(l.unidade), String(l.atual ?? '')])
+    );
+
+    return unidades.map((unidade) => ({
+      unidade,
+      anterior: mapaAtual.get(String(unidade)) || '',
+      atual: ''
+    }));
+  }
+
+  const atuais = mapearMedicoes(ultimaMedicao.atual || '');
+
+  return unidades.map((unidade) => ({
+    unidade,
+    anterior: atuais.get(String(unidade)) || '',
+    atual: ''
+  }));
+}
+
+function aplicarTextoNasLinhas(linhas, texto, campo) {
+  const mapa = mapearMedicoes(texto);
+
+  return linhas.map((linha) => ({
+    ...linha,
+    [campo]: mapa.get(String(linha.unidade)) ?? linha[campo]
+  }));
+}
+
 export default function Locatarios(){
   const historicoInicial = getItem('medicoes', []);
   const ultimaMedicao = historicoInicial[0];
+  const unidadesFixas = unidadesDoHistorico(historicoInicial);
 
   const [historico, setHistorico] = useState(historicoInicial);
   const [medicaoSelecionadaId, setMedicaoSelecionadaId] = useState(ultimaMedicao?.id || '');
 
   const [mes,setMes]=useState(ultimaMedicao?.mes || today());
   const [data,setData]=useState(ultimaMedicao?.dataMedicao || today());
-  const [anterior,setAnterior]=useState(ultimaMedicao?.anterior || '');
-  const [atual,setAtual]=useState(ultimaMedicao?.atual || '');
+  const [linhasTabela,setLinhasTabela]=useState(() => linhasPelaMedicao(ultimaMedicao, unidadesFixas));
+  const [importacaoAnterior,setImportacaoAnterior]=useState('');
+  const [importacaoAtual,setImportacaoAtual]=useState('');
+
+  const anterior = useMemo(
+    () => montarTextoMedicoesPorCampo(linhasTabela, 'anterior'),
+    [linhasTabela]
+  );
+
+  const atual = useMemo(
+    () => montarTextoMedicoesPorCampo(linhasTabela, 'atual'),
+    [linhasTabela]
+  );
 
   const [resultado,setResultado]=useState(() => {
     if (ultimaMedicao?.resumo) return ultimaMedicao.resumo;
@@ -105,8 +256,20 @@ export default function Locatarios(){
 
   const alertas = linhasAnalisadas.filter(l => l.alerta);
 
+  function atualizarLinha(unidade, campo, valor) {
+    setLinhasTabela((prev) =>
+      prev.map((linha) =>
+        String(linha.unidade) === String(unidade)
+          ? { ...linha, [campo]: valor.replace(/\D/g, '') }
+          : linha
+      )
+    );
+  }
+
   function calcular(){
-    setResultado(calcularConsumosLocatarios(anterior,atual));
+    const r = calcularConsumosLocatarios(anterior, atual);
+    setResultado(r);
+    setVersao(v => v + 1);
   }
 
   function carregarMedicaoSalva(id){
@@ -115,10 +278,11 @@ export default function Locatarios(){
     const medicao = historico.find((m) => String(m.id) === String(id));
     if (!medicao) return;
 
+    const unidades = unidadesDoHistorico(historico);
+
     setMes(medicao?.mes || today());
     setData(medicao?.dataMedicao || today());
-    setAnterior(medicao?.anterior || '');
-    setAtual(medicao?.atual || '');
+    setLinhasTabela(linhasPelaMedicao(medicao, unidades));
 
     if (medicao?.resumo) {
       setResultado(medicao.resumo);
@@ -129,9 +293,69 @@ export default function Locatarios(){
     setVersao(v => v + 1);
   }
 
+  function carregarUltimaComoAnterior() {
+    if (!historico.length) {
+      alert('Ainda não existe medição salva para usar como mês anterior.');
+      return;
+    }
+
+    const ultima = historico[0];
+    const unidades = unidadesDoHistorico(historico);
+
+    setMes(ultima?.dataMedicao || today());
+    setData(today());
+    setLinhasTabela(linhasComUltimaComoAnterior(ultima, unidades));
+    setMedicaoSelecionadaId('');
+
+    const textoAnterior = montarTextoMedicoesPorCampo(
+      linhasComUltimaComoAnterior(ultima, unidades),
+      'anterior'
+    );
+
+    setResultado(calcularConsumosLocatarios(textoAnterior, ''));
+    setVersao(v => v + 1);
+
+    alert('Última medição carregada como mês anterior. Agora preencha somente a leitura atual.');
+  }
+
+  function limparAtuais() {
+    if (!confirm('Deseja limpar todas as leituras atuais?')) return;
+
+    setLinhasTabela(prev => prev.map(l => ({ ...l, atual: '' })));
+    setResultado(calcularConsumosLocatarios(anterior, ''));
+    setVersao(v => v + 1);
+  }
+
+  function importarAnterior() {
+    if (!importacaoAnterior.trim()) {
+      alert('Cole as leituras anteriores antes de importar.');
+      return;
+    }
+
+    setLinhasTabela(prev => aplicarTextoNasLinhas(prev, importacaoAnterior, 'anterior'));
+    setImportacaoAnterior('');
+    alert('Leituras anteriores importadas para a tabela.');
+  }
+
+  function importarAtual() {
+    if (!importacaoAtual.trim()) {
+      alert('Cole as leituras atuais antes de importar.');
+      return;
+    }
+
+    setLinhasTabela(prev => aplicarTextoNasLinhas(prev, importacaoAtual, 'atual'));
+    setImportacaoAtual('');
+    alert('Leituras atuais importadas para a tabela.');
+  }
+
   function salvar(){
-    const r=calcularConsumosLocatarios(anterior,atual);
+    const r = calcularConsumosLocatarios(anterior,atual);
     const analise = gerarAnalise(r.linhas, historico);
+
+    if (!r.linhas?.length) {
+      alert('Preencha as leituras atuais antes de salvar.');
+      return;
+    }
 
     const novaMedicao = addItem('medicoes',{
       mes,
@@ -160,12 +384,12 @@ export default function Locatarios(){
 
     if (novoHistorico.length > 0) {
       const ultima = novoHistorico[0];
+      const unidades = unidadesDoHistorico(novoHistorico);
 
       setMedicaoSelecionadaId(ultima.id);
       setMes(ultima?.mes || today());
       setData(ultima?.dataMedicao || today());
-      setAnterior(ultima?.anterior || '');
-      setAtual(ultima?.atual || '');
+      setLinhasTabela(linhasPelaMedicao(ultima, unidades));
 
       if (ultima?.resumo) {
         setResultado(ultima.resumo);
@@ -176,8 +400,7 @@ export default function Locatarios(){
       setMedicaoSelecionadaId('');
       setMes(today());
       setData(today());
-      setAnterior('');
-      setAtual('');
+      setLinhasTabela(criarLinhasTabela(UNIDADES_PADRAO));
       setResultado(calcularConsumosLocatarios('', ''));
     }
 
@@ -193,7 +416,7 @@ export default function Locatarios(){
       </div>
       <h1 className="text-2xl md:text-3xl font-black">Energia dos Locatários</h1>
       <p className="text-slate-300 mt-2">
-        Cole as leituras anterior e atual, calcule o consumo em kWh, identifique medidor virado e acompanhe variações.
+        Preencha as leituras em uma tabela fixa por unidade. A última medição salva pode virar automaticamente o mês anterior.
       </p>
     </div>
 
@@ -326,7 +549,32 @@ export default function Locatarios(){
     </section>}
 
     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-5">
+        <div>
+          <h3 className="font-bold text-lg">Planilha fixa de leituras</h3>
+          <p className="text-sm text-slate-500 mt-1">
+            As unidades ficam fixas. Preencha somente as leituras atuais do mês.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={carregarUltimaComoAnterior}
+            className="px-4 py-3 rounded-2xl bg-slate-900 text-white font-semibold text-sm"
+          >
+            Usar última medição como anterior
+          </button>
+
+          <button
+            onClick={limparAtuais}
+            className="px-4 py-3 rounded-2xl bg-rose-50 text-rose-700 border border-rose-100 font-semibold text-sm"
+          >
+            Limpar leituras atuais
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
         <div>
           <label className="text-sm font-semibold">Data da medição anterior</label>
           <input
@@ -348,26 +596,56 @@ export default function Locatarios(){
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div>
-          <label className="text-sm font-semibold">Medições do mês anterior</label>
-          <textarea
-            value={anterior}
-            onChange={e=>setAnterior(e.target.value)}
-            placeholder="Exemplo:&#10;1601 - 16050&#10;1602 - 05599"
-            className="mt-2 w-full h-72 rounded-2xl border p-4 font-mono text-sm"
-          />
-        </div>
+      <div className="overflow-x-auto rounded-3xl border border-slate-100">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              <th className="text-left px-4 py-3">Unidade</th>
+              <th className="text-left px-4 py-3">Leitura anterior</th>
+              <th className="text-left px-4 py-3">Leitura atual</th>
+              <th className="text-left px-4 py-3">Consumo prévio</th>
+            </tr>
+          </thead>
 
-        <div>
-          <label className="text-sm font-semibold">Medições do mês atual</label>
-          <textarea
-            value={atual}
-            onChange={e=>setAtual(e.target.value)}
-            placeholder="Exemplo:&#10;1601 - 24546&#10;1602 - 08143"
-            className="mt-2 w-full h-72 rounded-2xl border p-4 font-mono text-sm"
-          />
-        </div>
+          <tbody className="divide-y divide-slate-100">
+            {linhasTabela.map((linha) => {
+              const consumoPrevio = calcularConsumosLocatarios(
+                linha.anterior ? `${linha.unidade} - ${linha.anterior}` : '',
+                linha.atual ? `${linha.unidade} - ${linha.atual}` : ''
+              ).linhas?.[0]?.consumo || 0;
+
+              return (
+                <tr key={linha.unidade} className="bg-white">
+                  <td className="px-4 py-3 font-bold text-slate-900">
+                    {linha.unidade}
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <input
+                      value={linha.anterior}
+                      onChange={e=>atualizarLinha(linha.unidade, 'anterior', e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 p-2 font-mono"
+                      placeholder="Anterior"
+                    />
+                  </td>
+
+                  <td className="px-4 py-3">
+                    <input
+                      value={linha.atual}
+                      onChange={e=>atualizarLinha(linha.unidade, 'atual', e.target.value)}
+                      className="w-full rounded-2xl border border-slate-200 p-2 font-mono"
+                      placeholder="Atual"
+                    />
+                  </td>
+
+                  <td className="px-4 py-3 font-semibold text-slate-700">
+                    {linha.anterior && linha.atual ? `${int(consumoPrevio)} kWh` : '-'}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       <div className="flex flex-wrap gap-3 mt-5">
@@ -384,6 +662,49 @@ export default function Locatarios(){
         >
           <Save size={18}/>Salvar medição
         </button>
+      </div>
+    </div>
+
+    <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
+      <h3 className="font-bold text-lg mb-1">Importar leituras por texto</h3>
+      <p className="text-sm text-slate-500 mb-5">
+        Use esta área quando quiser colar uma lista pronta. O sistema preenche a tabela acima automaticamente.
+      </p>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-semibold">Importar medições anteriores</label>
+          <textarea
+            value={importacaoAnterior}
+            onChange={e=>setImportacaoAnterior(e.target.value)}
+            placeholder="Exemplo:&#10;1601 - 16050&#10;1602 - 05599"
+            className="mt-2 w-full h-48 rounded-2xl border p-4 font-mono text-sm"
+          />
+
+          <button
+            onClick={importarAnterior}
+            className="mt-3 px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-semibold flex gap-2"
+          >
+            <Upload size={18}/>Importar anteriores
+          </button>
+        </div>
+
+        <div>
+          <label className="text-sm font-semibold">Importar medições atuais</label>
+          <textarea
+            value={importacaoAtual}
+            onChange={e=>setImportacaoAtual(e.target.value)}
+            placeholder="Exemplo:&#10;1601 - 24546&#10;1602 - 08143"
+            className="mt-2 w-full h-48 rounded-2xl border p-4 font-mono text-sm"
+          />
+
+          <button
+            onClick={importarAtual}
+            className="mt-3 px-4 py-3 rounded-2xl bg-slate-100 text-slate-700 font-semibold flex gap-2"
+          >
+            <Upload size={18}/>Importar atuais
+          </button>
+        </div>
       </div>
     </div>
 
