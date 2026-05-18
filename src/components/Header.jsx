@@ -6,15 +6,15 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { logout } from '../services/storageService';
 import {
-  clearNotifications,
-  deleteNotification,
-  getNotifications,
-  logout,
-  markAllNotificationsRead,
-  markNotificationRead,
-} from '../services/storageService';
+  excluirNotificacaoSupabase,
+  limparNotificacoesSupabase,
+  listarNotificacoesSupabase,
+  marcarNotificacaoLidaSupabase,
+  marcarTodasNotificacoesLidasSupabase,
+} from '../services/notificacoesSupabaseService';
 
 const titles = {
   dashboard: 'Dashboard',
@@ -53,6 +53,7 @@ function obterTipoNotificacao(n) {
   if (texto.includes('reprov')) return 'Reprovado';
   if (texto.includes('aprov')) return 'Aprovado';
   if (texto.includes('entreg')) return 'Entregue';
+  if (texto.includes('compr')) return 'Comprado';
   if (texto.includes('malote')) return 'Malote';
 
   if (
@@ -75,6 +76,10 @@ function obterTipoNotificacao(n) {
     return 'Gerador';
   }
 
+  if (texto.includes('solicitacao') || texto.includes('solicitação') || texto.includes('material')) {
+    return 'Material';
+  }
+
   return 'Sistema';
 }
 
@@ -83,23 +88,59 @@ function corTipo(tipo) {
     Aprovado: 'bg-emerald-50 text-emerald-700 border-emerald-100',
     Reprovado: 'bg-rose-50 text-rose-700 border-rose-100',
     Entregue: 'bg-teal-50 text-teal-700 border-teal-100',
+    Comprado: 'bg-indigo-50 text-indigo-700 border-indigo-100',
     Malote: 'bg-amber-50 text-amber-700 border-amber-100',
     Energia: 'bg-blue-50 text-blue-700 border-blue-100',
     Água: 'bg-purple-50 text-purple-700 border-purple-100',
     Gerador: 'bg-indigo-50 text-indigo-700 border-indigo-100',
+    Material: 'bg-blue-50 text-blue-700 border-blue-100',
     Sistema: 'bg-slate-50 text-slate-600 border-slate-100',
   };
 
   return cores[tipo] || cores.Sistema;
 }
 
+function normalizarNotificacao(n) {
+  return {
+    id: n.id,
+    tipo: n.tipo || 'sistema',
+    titulo: n.titulo || 'Notificação do sistema',
+    mensagem: n.mensagem || '',
+    lida: !!n.lida,
+    criadoEm: n.criado_em || n.criadoEm,
+    criadaPor: n.criada_por || n.criadaPor || '',
+    referenciaId: n.referencia_id || n.referenciaId || '',
+  };
+}
+
 export default function Header({ page, user }) {
   const [aberto, setAberto] = useState(false);
-  const [refresh, setRefresh] = useState(0);
+  const [notificacoes, setNotificacoes] = useState([]);
+  const [carregandoNotificacoes, setCarregandoNotificacoes] = useState(false);
 
-  const notificacoes = useMemo(() => {
-    return getNotifications(user).slice(0, 30);
-  }, [user, refresh, page, aberto]);
+  async function carregarNotificacoes() {
+    if (!user) return;
+
+    setCarregandoNotificacoes(true);
+
+    try {
+      const lista = await listarNotificacoesSupabase(user);
+      setNotificacoes((lista || []).map(normalizarNotificacao).slice(0, 50));
+    } catch (err) {
+      console.error('Erro ao carregar notificações:', err);
+      setNotificacoes([]);
+    } finally {
+      setCarregandoNotificacoes(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarNotificacoes();
+  }, [user, page]);
+
+  useEffect(() => {
+    if (aberto) carregarNotificacoes();
+  }, [aberto]);
 
   const naoLidas = notificacoes.filter((n) => !n.lida).length;
 
@@ -108,26 +149,26 @@ export default function Header({ page, user }) {
     window.location.reload();
   }
 
-  function marcarLidas() {
-    markAllNotificationsRead(user);
-    setRefresh((v) => v + 1);
+  async function marcarLidas() {
+    await marcarTodasNotificacoesLidasSupabase(user);
+    await carregarNotificacoes();
   }
 
-  function limparNotificacoes() {
+  async function limparNotificacoes() {
     if (!confirm('Deseja limpar todas as suas notificações?')) return;
 
-    clearNotifications(user);
-    setRefresh((v) => v + 1);
+    await limparNotificacoesSupabase(user);
+    await carregarNotificacoes();
   }
 
-  function marcarUmaComoLida(id) {
-    markNotificationRead(id);
-    setRefresh((v) => v + 1);
+  async function marcarUmaComoLida(id) {
+    await marcarNotificacaoLidaSupabase(id);
+    await carregarNotificacoes();
   }
 
-  function excluirUmaNotificacao(id) {
-    deleteNotification(id);
-    setRefresh((v) => v + 1);
+  async function excluirUmaNotificacao(id) {
+    await excluirNotificacaoSupabase(id);
+    await carregarNotificacoes();
   }
 
   return (
@@ -179,9 +220,11 @@ export default function Header({ page, user }) {
                   </h3>
 
                   <p className="text-xs text-blue-100 mt-1">
-                    {naoLidas > 0
-                      ? `${naoLidas} notificação(ões) não lida(s)`
-                      : 'Tudo lido no momento'}
+                    {carregandoNotificacoes
+                      ? 'Carregando notificações...'
+                      : naoLidas > 0
+                        ? `${naoLidas} notificação(ões) não lida(s)`
+                        : 'Tudo lido no momento'}
                   </p>
                 </div>
 
@@ -203,6 +246,13 @@ export default function Header({ page, user }) {
                   Marcar todas como lidas
                 </button>
 
+                <button
+                  onClick={carregarNotificacoes}
+                  className="px-3 py-2 rounded-2xl bg-white/10 border border-white/10 text-white text-xs font-bold hover:bg-white/20"
+                >
+                  Atualizar
+                </button>
+
                 <span className="px-3 py-2 rounded-2xl bg-white/10 border border-white/10 text-white text-xs font-bold">
                   {notificacoes.length} recentes
                 </span>
@@ -211,7 +261,16 @@ export default function Header({ page, user }) {
 
             <div className="p-4 bg-slate-50">
               <div className="space-y-3 max-h-[420px] overflow-auto pr-1">
-                {notificacoes.length === 0 && (
+                {carregandoNotificacoes && (
+                  <div className="bg-white rounded-3xl border border-slate-100 p-8 text-center">
+                    <Bell className="mx-auto text-slate-300 mb-3" size={30} />
+                    <p className="text-sm text-slate-400">
+                      Carregando notificações...
+                    </p>
+                  </div>
+                )}
+
+                {!carregandoNotificacoes && notificacoes.length === 0 && (
                   <div className="bg-white rounded-3xl border border-slate-100 p-8 text-center">
                     <Bell className="mx-auto text-slate-300 mb-3" size={30} />
                     <p className="text-sm text-slate-400">
@@ -220,7 +279,7 @@ export default function Header({ page, user }) {
                   </div>
                 )}
 
-                {notificacoes.map((n) => {
+                {!carregandoNotificacoes && notificacoes.map((n) => {
                   const tipo = obterTipoNotificacao(n);
 
                   return (
