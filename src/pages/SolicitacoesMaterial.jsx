@@ -704,6 +704,28 @@ export default function SolicitacoesMaterial({ user }) {
     }
   }
 
+  async function salvarDadosAdminItem(it) {
+    try {
+      await atualizarItemSolicitacaoSupabase(it.id, {
+        valorUnitario: it.valorUnitario || "",
+        fornecedor: it.fornecedor || "",
+        numeroNotaFiscal: it.numeroNotaFiscal || "",
+        recebidoPor: it.recebidoPor || "",
+        dataRecebimento: it.dataRecebimento || "",
+        obsRecebimento: it.obsRecebimento || "",
+        enviadoMalote: !!it.enviadoMalote,
+        dataEnvioMalote: it.dataEnvioMalote || null,
+        atualizado_por: user?.nome || "Admin",
+      });
+
+      alert("Dados do item salvos com sucesso.");
+      await carregarSolicitacoes();
+    } catch (err) {
+      console.error(err);
+      alert("Não foi possível salvar os dados do item.");
+    }
+  }
+
   function aprovarItem(solId, itemId) {
     atualizarItem(solId, itemId, {
       status: "Aprovada",
@@ -1747,6 +1769,14 @@ export default function SolicitacoesMaterial({ user }) {
                             </div>
 
                             <div className="flex flex-wrap gap-2">
+                              <button
+                                onClick={() => salvarDadosAdminItem(it)}
+                                className="px-3 py-2 rounded-2xl bg-slate-900 text-white text-xs font-bold flex items-center gap-1"
+                              >
+                                <Save size={14} />
+                                Salvar dados
+                              </button>
+
                               <button
                                 onClick={() => aprovarItem(sol.id, it.id)}
                                 className="px-3 py-2 rounded-2xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1"
