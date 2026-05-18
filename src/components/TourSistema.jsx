@@ -65,10 +65,10 @@ export default function TourSistema({ user }) {
   const [aberto, setAberto] = useState(false);
   const [passoAtual, setPassoAtual] = useState(0);
 
+  const storageKey = useMemo(() => chaveTour(user), [user]);
+
   const passo = passos[passoAtual];
   const Icon = passo.icon;
-
-  const storageKey = useMemo(() => chaveTour(user), [user]);
 
   useEffect(() => {
     const jaViu = localStorage.getItem(storageKey);
@@ -81,6 +81,19 @@ export default function TourSistema({ user }) {
       return () => clearTimeout(timer);
     }
   }, [storageKey]);
+
+  useEffect(() => {
+    function abrirTourNovamente() {
+      setPassoAtual(0);
+      setAberto(true);
+    }
+
+    window.addEventListener("stp:abrir-tour", abrirTourNovamente);
+
+    return () => {
+      window.removeEventListener("stp:abrir-tour", abrirTourNovamente);
+    };
+  }, []);
 
   function fecharTour() {
     localStorage.setItem(storageKey, "sim");
