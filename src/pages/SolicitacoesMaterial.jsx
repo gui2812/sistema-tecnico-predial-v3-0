@@ -180,13 +180,64 @@ function TextoQuebra({ children, className = "" }) {
   );
 }
 
+function extrairLinks(texto) {
+  const conteudo = String(texto || "");
+  const regexUrl = /(https?:\/\/[^\s]+)/gi;
+  const links = conteudo.match(regexUrl) || [];
+  const textoSemLinks = conteudo
+    .replace(regexUrl, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { textoSemLinks, links };
+}
+
 function ObservacaoLonga({ texto }) {
+  const [mostrarLinks, setMostrarLinks] = useState(false);
+
   if (!texto) return null;
+
+  const { textoSemLinks, links } = extrairLinks(texto);
+  const temLinks = links.length > 0;
 
   return (
     <div className="text-sm text-slate-500 mt-2 max-w-full overflow-hidden">
-      <span className="font-semibold">Obs.: </span>
-      <span className="break-all whitespace-normal">{texto}</span>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold">Obs.:</span>
+
+        {textoSemLinks ? (
+          <span className="break-words whitespace-normal">{textoSemLinks}</span>
+        ) : temLinks ? (
+          <span className="text-slate-400">Observação com link do produto.</span>
+        ) : null}
+
+        {temLinks && (
+          <button
+            type="button"
+            onClick={() => setMostrarLinks((v) => !v)}
+            className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100 hover:bg-blue-100"
+          >
+            {mostrarLinks ? "Ocultar link(s)" : `Ver link(s) (${links.length})`}
+          </button>
+        )}
+      </div>
+
+      {temLinks && mostrarLinks && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {links.map((link, index) => (
+            <a
+              key={`${link}-${index}`}
+              href={link}
+              target="_blank"
+              rel="noreferrer"
+              className="px-3 py-2 rounded-2xl bg-white border border-slate-200 text-blue-600 text-xs font-bold hover:bg-blue-50"
+              title={link}
+            >
+              Abrir link {index + 1}
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1730,12 +1781,6 @@ export default function SolicitacoesMaterial({ user }) {
                                   placeholder="Valor unitário"
                                 />
 
-                                <button
-                                  onClick={() => extrairValorAutomatico(sol.id, it)}
-                                  className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1"
-                                >
-                                  Extrair valor
-                                </button>
                               </div>
 
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
