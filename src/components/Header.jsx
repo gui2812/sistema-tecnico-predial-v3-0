@@ -8,9 +8,12 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import {
+  clearNotifications,
+  deleteNotification,
   getNotifications,
   logout,
   markAllNotificationsRead,
+  markNotificationRead,
 } from '../services/storageService';
 
 const titles = {
@@ -45,15 +48,32 @@ function formatarData(data) {
 }
 
 function obterTipoNotificacao(n) {
-  const texto = `${n?.titulo || ''} ${n?.mensagem || ''}`.toLowerCase();
+  const texto = `${n?.tipo || ''} ${n?.titulo || ''} ${n?.mensagem || ''}`.toLowerCase();
 
   if (texto.includes('reprov')) return 'Reprovado';
   if (texto.includes('aprov')) return 'Aprovado';
   if (texto.includes('entreg')) return 'Entregue';
   if (texto.includes('malote')) return 'Malote';
-  if (texto.includes('energia') || texto.includes('medição')) return 'Energia';
-  if (texto.includes('água') || texto.includes('agua') || texto.includes('rateio')) return 'Água';
-  if (texto.includes('diesel') || texto.includes('gerador')) return 'Gerador';
+
+  if (
+    texto.includes('energia') ||
+    texto.includes('medição') ||
+    texto.includes('medicao')
+  ) {
+    return 'Energia';
+  }
+
+  if (
+    texto.includes('água') ||
+    texto.includes('agua') ||
+    texto.includes('rateio')
+  ) {
+    return 'Água';
+  }
+
+  if (texto.includes('diesel') || texto.includes('gerador')) {
+    return 'Gerador';
+  }
 
   return 'Sistema';
 }
@@ -90,6 +110,23 @@ export default function Header({ page, user }) {
 
   function marcarLidas() {
     markAllNotificationsRead(user);
+    setRefresh((v) => v + 1);
+  }
+
+  function limparNotificacoes() {
+    if (!confirm('Deseja limpar todas as suas notificações?')) return;
+
+    clearNotifications(user);
+    setRefresh((v) => v + 1);
+  }
+
+  function marcarUmaComoLida(id) {
+    markNotificationRead(id);
+    setRefresh((v) => v + 1);
+  }
+
+  function excluirUmaNotificacao(id) {
+    deleteNotification(id);
     setRefresh((v) => v + 1);
   }
 
@@ -137,7 +174,10 @@ export default function Header({ page, user }) {
             <div className="bg-gradient-to-br from-slate-950 to-blue-950 text-white p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-black text-lg">Central de notificações</h3>
+                  <h3 className="font-black text-lg">
+                    Central de notificações
+                  </h3>
+
                   <p className="text-xs text-blue-100 mt-1">
                     {naoLidas > 0
                       ? `${naoLidas} notificação(ões) não lida(s)`
@@ -219,9 +259,23 @@ export default function Header({ page, user }) {
                           {formatarData(n.criadoEm)}
                         </p>
 
-                        <p className="text-[11px] text-slate-400">
-                          {n.lida ? 'Lida' : 'Não lida'}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          {!n.lida && (
+                            <button
+                              onClick={() => marcarUmaComoLida(n.id)}
+                              className="text-[11px] font-bold text-blue-600 hover:text-blue-800"
+                            >
+                              Marcar lida
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => excluirUmaNotificacao(n.id)}
+                            className="text-[11px] font-bold text-rose-500 hover:text-rose-700"
+                          >
+                            Excluir
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -229,10 +283,13 @@ export default function Header({ page, user }) {
               </div>
 
               {notificacoes.length > 0 && (
-                <div className="mt-3 rounded-2xl bg-white border border-slate-100 p-3 text-xs text-slate-400 flex items-center gap-2">
+                <button
+                  onClick={limparNotificacoes}
+                  className="mt-3 w-full rounded-2xl bg-white border border-rose-100 p-3 text-xs text-rose-600 font-bold flex items-center justify-center gap-2 hover:bg-rose-50"
+                >
                   <Trash2 size={14} />
-                  Para limpar notificações antigas, podemos adicionar um botão de limpeza no próximo ajuste.
-                </div>
+                  Limpar notificações
+                </button>
               )}
             </div>
           </div>
