@@ -3,11 +3,14 @@ import {
   CalendarDays,
   CheckCheck,
   LogOut,
+  Moon,
+  Sun,
   Trash2,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { logout } from '../services/storageService';
+import { atualizarTemaUsuarioSupabase } from '../services/usuariosSupabaseService';
 import {
   excluirNotificacaoSupabase,
   limparNotificacoesSupabase,
@@ -76,7 +79,11 @@ function obterTipoNotificacao(n) {
     return 'Gerador';
   }
 
-  if (texto.includes('solicitacao') || texto.includes('solicitação') || texto.includes('material')) {
+  if (
+    texto.includes('solicitacao') ||
+    texto.includes('solicitação') ||
+    texto.includes('material')
+  ) {
     return 'Material';
   }
 
@@ -113,10 +120,60 @@ function normalizarNotificacao(n) {
   };
 }
 
+function inserirCssTemaEscuro() {
+  if (document.getElementById('stp-dark-theme')) return;
+
+  const style = document.createElement('style');
+  style.id = 'stp-dark-theme';
+  style.innerHTML = `
+    html.dark body { background:#020617 !important; color:#e2e8f0 !important; }
+    html.dark .bg-slate-100 { background-color:#020617 !important; }
+    html.dark .bg-white { background-color:#0f172a !important; }
+    html.dark .bg-slate-50 { background-color:#111827 !important; }
+    html.dark .border-slate-100,
+    html.dark .border-slate-200 { border-color:#1e293b !important; }
+    html.dark .text-slate-900,
+    html.dark .text-slate-800,
+    html.dark .text-slate-700 { color:#e2e8f0 !important; }
+    html.dark .text-slate-600,
+    html.dark .text-slate-500,
+    html.dark .text-slate-400 { color:#94a3b8 !important; }
+    html.dark input,
+    html.dark textarea,
+    html.dark select { background-color:#0b1220 !important; color:#e2e8f0 !important; border-color:#334155 !important; }
+    html.dark input::placeholder,
+    html.dark textarea::placeholder { color:#64748b !important; }
+    html.dark .shadow-sm,
+    html.dark .shadow-xl,
+    html.dark .shadow-2xl { box-shadow:0 18px 45px rgba(0,0,0,.35) !important; }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function aplicarTema(tema) {
+  inserirCssTemaEscuro();
+
+  const temaFinal =
+    tema === 'sistema'
+      ? window.matchMedia('(prefers-color-scheme: dark)').matches
+        ? 'escuro'
+        : 'claro'
+      : tema;
+
+  document.documentElement.classList.toggle('dark', temaFinal === 'escuro');
+  localStorage.setItem('stp_tema_atual', tema || 'claro');
+}
+
+function proximoTema(temaAtual) {
+  return temaAtual === 'escuro' ? 'claro' : 'escuro';
+}
+
 export default function Header({ page, user }) {
   const [aberto, setAberto] = useState(false);
   const [notificacoes, setNotificacoes] = useState([]);
   const [carregandoNotificacoes, setCarregandoNotificacoes] = useState(false);
+  const [tema, setTema] = useState(user?.tema || localStorage.getItem('stp_tema_atual') || 'claro');
 
   async function carregarNotificacoes() {
     if (!user) return;
@@ -142,11 +199,60 @@ export default function Header({ page, user }) {
     if (aberto) carregarNotificacoes();
   }, [aberto]);
 
+  useEffect(() => {
+    const temaInicial = user?.tema || localStorage.getItem('stp_tema_atual') || 'claro';
+    setTema(temaInicial);
+    aplicarTema(temaInicial);
+  }, [user]);
+
+  useEffect(() => {
+    function atualizarTemaSistema() {
+      const temaAtual = localStorage.getItem('stp_tema_atual') || 'claro';
+
+      if (temaAtual === 'sistema') {
+        aplicarTema('sistema');
+      }
+    }
+
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    media.addEventListener?.('change', atualizarTemaSistema);
+
+    return () => {
+      media.removeEventListener?.('change', atualizarTemaSistema);
+    };
+  }, []);
+
   const naoLidas = notificacoes.filter((n) => !n.lida).length;
 
   function sair() {
     logout();
     window.location.reload();
+  }
+
+  async function alterarTema() {
+    const novoTema = proximoTema(tema);
+
+    setTema(novoTema);
+    aplicarTema(novoTema);
+
+    try {
+      if (user?.id) {
+        const usuarioAtualizado = await atualizarTemaUsuarioSupabase(user.id, novoTema);
+
+        const sessionAtual = JSON.parse(localStorage.getItem('stp_v2_session') || '{}');
+
+        localStorage.setItem(
+          'stp_v2_session',
+          JSON.stringify({
+            ...sessionAtual,
+            ...usuarioAtualizado,
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Erro ao salvar tema:', err);
+      alert('Tema aplicado neste navegador, mas não consegui salvar no Supabase.');
+    }
   }
 
   async function marcarLidas() {
@@ -171,6 +277,8 @@ export default function Header({ page, user }) {
     await carregarNotificacoes();
   }
 
+  const temaEscuro = tema === 'escuro';
+
   return (
     <header className="bg-white border-b border-slate-100 px-4 md:px-8 py-4 flex items-center justify-between sticky top-0 z-20">
       <div className="min-w-0">
@@ -191,6 +299,14 @@ export default function Header({ page, user }) {
             year: 'numeric',
           })}
         </div>
+
+        <button
+          onClick={alterarTema}
+          className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center hover:bg-slate-200 transition"
+          title={temaEscuro ? 'Mudar para modo claro' : 'Mudar para modo escuro'}
+        >
+          {temaEscuro ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
 
         <button
           onClick={() => setAberto(!aberto)}
