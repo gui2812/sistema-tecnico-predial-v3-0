@@ -9,6 +9,7 @@ import {
   HelpCircle,
   Mail,
   PackagePlus,
+  RotateCcw,
   Search,
   ShieldCheck,
   X,
@@ -205,6 +206,11 @@ export default function AssistenteTecnico() {
     }
   }
 
+  function abrirTourNovamente() {
+    window.dispatchEvent(new CustomEvent("stp:abrir-tour"));
+    setAberto(false);
+  }
+
   return (
     <>
       <button
@@ -336,6 +342,14 @@ export default function AssistenteTecnico() {
           </div>
 
           <div className="p-4 bg-white border-t border-slate-100">
+            <button
+              onClick={abrirTourNovamente}
+              className="mb-3 w-full px-4 py-3 rounded-2xl bg-blue-600 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-blue-700"
+            >
+              <RotateCcw size={16} />
+              Ver tour do sistema novamente
+            </button>
+
             <p className="text-xs text-slate-400">
               Versão inicial com respostas prontas. Pesquise por palavras como:
               energia, malote, material, PDF, rateio ou usuário.
