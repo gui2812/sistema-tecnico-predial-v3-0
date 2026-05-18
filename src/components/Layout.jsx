@@ -1,6 +1,7 @@
 import Sidebar from './Sidebar';
 import Header from './Header';
 import AssistenteTecnico from './AssistenteTecnico';
+import TourSistema from './TourSistema';
 
 export default function Layout({ children, page, setPage, user }) {
   return (
@@ -16,6 +17,7 @@ export default function Layout({ children, page, setPage, user }) {
       </main>
 
       <AssistenteTecnico />
+      <TourSistema user={user} />
     </div>
   );
 }
