@@ -13,6 +13,12 @@ const vazio = {
   observacao:''
 };
 
+function removerAtenciosamente(corpo) {
+  return String(corpo || '')
+    .replace(/\n?\s*Atenciosamente,?\s*$/i, '')
+    .trimEnd();
+}
+
 export default function Malote(){
   const [destinatario,setDestinatario]=useState('Amanda');
   const [emailDestinatario,setEmailDestinatario]=useState('');
@@ -38,10 +44,20 @@ export default function Malote(){
   const percentualRestante =
     valorTotalParcial > 0 ? 100 - percentualPago : 0;
 
-  const email=useMemo(()=>gerarMalote({destinatario,itens}),[destinatario,itens]);
+  const emailGerado = useMemo(
+    ()=>gerarMalote({destinatario,itens}),
+    [destinatario,itens]
+  );
+
+  const email = useMemo(() => ({
+    ...emailGerado,
+    corpo: removerAtenciosamente(emailGerado.corpo)
+  }), [emailGerado]);
 
   function add(){
-    if(!form.fornecedor || !form.nf) return alert('Preencha fornecedor e NF.');
+    if(!form.fornecedor || !form.nf) {
+      return alert('Preencha fornecedor e NF.');
+    }
 
     setItens([
       ...itens,
@@ -103,7 +119,7 @@ export default function Malote(){
 
     if (valorTotalParcial > 0 && valorPagoParcial > 0) {
       partes.push(
-        `Pagamento parcial referente a ${percentualPago.toFixed(2).replace('.', ',')}% do valor total de ${brl(valorTotalParcial)}. Valor pago neste malote: ${brl(valorPagoParcial)}. Saldo restante: ${brl(saldoRestante)} (${percentualRestante.toFixed(2).replace('.', ',')}%).`
+        `Pagamento parcial referente a ${percentualPago.toFixed(2).replace('.', ',')}% do valor total.`
       );
     }
 
