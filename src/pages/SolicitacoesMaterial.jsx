@@ -13,6 +13,7 @@ import {
   ShoppingCart,
   Square,
   Trash2,
+  Upload,
   XCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -30,6 +31,11 @@ import {
 import { brl, today } from "../utils/formatters";
 import { registrarHistoricoSupabase } from "../services/historicoSupabaseService";
 import { criarNotificacaoSupabase } from "../services/notificacoesSupabaseService";
+import {
+  excluirAnexoSolicitacaoSupabase,
+  listarAnexosItemSupabase,
+  uploadAnexoSolicitacaoSupabase,
+} from "../services/anexosSupabaseService";
 
 const itemVazio = {
   quantidade: "",
@@ -281,72 +287,280 @@ function ObservacaoLonga({ texto }) {
   );
 }
 
-function AnexosLinksPainel({ texto, onChange, onSave }) {
+function formatarTamanho(bytes) {
+  const n = Number(bytes || 0);
+
+  if (!n) return "-";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function AnexosLinksPainel({
+  solicitacaoId,
+  itemId,
+  user,
+  texto,
+  onChange,
+  onSave,
+}) {
   const { textoSemLinks, links } = extrairLinks(texto);
+  const [anexos, setAnexos] = useState([]);
+  const [arquivo, setArquivo] = useState(null);
+  const [categoria, setCategoria] = useState("Orçamento");
+  const [observacaoAnexo, setObservacaoAnexo] = useState("");
+  const [carregando, setCarregando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+
+  async function carregarAnexos() {
+    if (!itemId) return;
+
+    setCarregando(true);
+
+    try {
+      const lista = await listarAnexosItemSupabase(itemId);
+      setAnexos(lista);
+    } catch (err) {
+      console.error(err);
+      setAnexos([]);
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarAnexos();
+  }, [itemId]);
+
+  async function enviarArquivo() {
+    if (!arquivo) {
+      alert("Selecione um arquivo antes de enviar.");
+      return;
+    }
+
+    setEnviando(true);
+
+    try {
+      await uploadAnexoSolicitacaoSupabase({
+        solicitacaoId,
+        itemId,
+        arquivo,
+        categoria,
+        observacao: observacaoAnexo,
+        enviadoPor: user?.nome || user?.usuario || "Sistema",
+      });
+
+      setArquivo(null);
+      setObservacaoAnexo("");
+
+      const input = document.getElementById(`arquivo-${itemId}`);
+      if (input) input.value = "";
+
+      await carregarAnexos();
+      alert("Anexo enviado com sucesso.");
+    } catch (err) {
+      console.error(err);
+      alert("Não foi possível enviar o anexo. " + (err?.message || ""));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function excluirAnexo(anexo) {
+    if (!confirm(`Deseja excluir o anexo "${anexo.nome_arquivo}"?`)) return;
+
+    try {
+      await excluirAnexoSolicitacaoSupabase(anexo);
+      await carregarAnexos();
+    } catch (err) {
+      console.error(err);
+      alert("Não foi possível excluir o anexo.");
+    }
+  }
 
   return (
-    <div className="rounded-2xl bg-blue-50 border border-blue-100 p-3 space-y-3">
+    <div className="rounded-2xl bg-blue-50 border border-blue-100 p-3 space-y-4">
       <div className="flex items-start gap-2">
         <Paperclip size={17} className="text-blue-700 mt-0.5 shrink-0" />
         <div>
           <p className="text-xs font-black text-blue-900">Anexos / Links do item</p>
           <p className="text-xs text-blue-700 mt-1">
-            Cole aqui links de produto, orçamento, NF, proposta ou comprovante. 
-            Upload de arquivo real pode ser integrado depois via Supabase Storage.
+            Cole links ou envie arquivos reais, como orçamento, foto, NF,
+            proposta ou comprovante.
           </p>
         </div>
       </div>
 
-      <textarea
-        value={texto || ""}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-blue-100 bg-white p-3 text-sm min-h-28 outline-none"
-        placeholder="Cole os links aqui. Exemplo: https://fornecedor.com.br/produto..."
-      />
+      <div className="rounded-2xl bg-white border border-blue-100 p-3 space-y-3">
+        <p className="text-xs font-black text-slate-700">Links do item</p>
 
-      {textoSemLinks && (
-        <div className="rounded-2xl bg-white border border-blue-100 p-3 text-xs text-slate-600">
-          <p className="font-bold text-slate-700 mb-1">Observação sem links</p>
-          <p className="break-words">{textoSemLinks}</p>
+        <textarea
+          value={texto || ""}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full rounded-2xl border border-blue-100 bg-white p-3 text-sm min-h-28 outline-none"
+          placeholder="Cole os links aqui. Exemplo: https://fornecedor.com.br/produto..."
+        />
+
+        {textoSemLinks && (
+          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 text-xs text-slate-600">
+            <p className="font-bold text-slate-700 mb-1">Observação sem links</p>
+            <p className="break-words">{textoSemLinks}</p>
+          </div>
+        )}
+
+        {links.length > 0 ? (
+          <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3">
+            <p className="text-xs font-bold text-slate-700 mb-2">
+              Links encontrados ({links.length})
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              {links.map((link, index) => (
+                <a
+                  key={`${link}-${index}`}
+                  href={link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 flex items-center gap-1"
+                  title={link}
+                >
+                  <ExternalLink size={13} />
+                  Abrir link {index + 1}
+                </a>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-blue-700">
+            Nenhum link detectado ainda. O sistema reconhece links começando com http:// ou https://.
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={onSave}
+          className="px-4 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold flex items-center gap-2"
+        >
+          <Save size={14} />
+          Salvar links
+        </button>
+      </div>
+
+      <div className="rounded-2xl bg-white border border-blue-100 p-3 space-y-3">
+        <p className="text-xs font-black text-slate-700">Enviar arquivo</p>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <select
+            value={categoria}
+            onChange={(e) => setCategoria(e.target.value)}
+            className="rounded-2xl border border-slate-200 bg-white p-2 text-sm"
+          >
+            <option>Orçamento</option>
+            <option>Produto</option>
+            <option>Nota Fiscal</option>
+            <option>Comprovante</option>
+            <option>Foto</option>
+            <option>Outros</option>
+          </select>
+
+          <input
+            id={`arquivo-${itemId}`}
+            type="file"
+            onChange={(e) => setArquivo(e.target.files?.[0] || null)}
+            className="rounded-2xl border border-slate-200 bg-white p-2 text-sm"
+          />
         </div>
-      )}
 
-      {links.length > 0 ? (
-        <div className="rounded-2xl bg-white border border-blue-100 p-3">
-          <p className="text-xs font-bold text-slate-700 mb-2">
-            Links encontrados ({links.length})
+        <input
+          value={observacaoAnexo}
+          onChange={(e) => setObservacaoAnexo(e.target.value)}
+          className="w-full rounded-2xl border border-slate-200 bg-white p-2 text-sm"
+          placeholder="Observação do anexo, se necessário"
+        />
+
+        <button
+          type="button"
+          onClick={enviarArquivo}
+          disabled={enviando}
+          className="px-4 py-2 rounded-2xl bg-slate-900 text-white text-xs font-bold flex items-center gap-2 disabled:opacity-60"
+        >
+          <Upload size={14} />
+          {enviando ? "Enviando..." : "Enviar arquivo"}
+        </button>
+      </div>
+
+      <div className="rounded-2xl bg-white border border-blue-100 p-3">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <p className="text-xs font-black text-slate-700">
+            Arquivos anexados
           </p>
 
-          <div className="flex flex-wrap gap-2">
-            {links.map((link, index) => (
-              <a
-                key={`${link}-${index}`}
-                href={link}
-                target="_blank"
-                rel="noreferrer"
-                className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 flex items-center gap-1"
-                title={link}
+          <button
+            type="button"
+            onClick={carregarAnexos}
+            className="text-xs font-bold text-blue-600 hover:text-blue-800"
+          >
+            Atualizar
+          </button>
+        </div>
+
+        {carregando ? (
+          <p className="text-xs text-slate-400">Carregando anexos...</p>
+        ) : anexos.length === 0 ? (
+          <p className="text-xs text-slate-400">Nenhum arquivo anexado ainda.</p>
+        ) : (
+          <div className="space-y-2">
+            {anexos.map((anexo) => (
+              <div
+                key={anexo.id}
+                className="rounded-2xl border border-slate-100 bg-slate-50 p-3 text-xs"
               >
-                <ExternalLink size={13} />
-                Abrir link {index + 1}
-              </a>
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-black text-slate-800 break-words">
+                      {anexo.nome_arquivo}
+                    </p>
+
+                    <p className="text-slate-500 mt-1">
+                      {anexo.categoria || "Anexo"} • {formatarTamanho(anexo.tamanho)}
+                      {anexo.enviado_por ? ` • Por ${anexo.enviado_por}` : ""}
+                    </p>
+
+                    {anexo.observacao && (
+                      <p className="text-slate-500 mt-1 break-words">
+                        Obs.: {anexo.observacao}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    {anexo.url_publica && (
+                      <a
+                        href={anexo.url_publica}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold flex items-center gap-1"
+                      >
+                        <ExternalLink size={13} />
+                        Abrir
+                      </a>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => excluirAnexo(anexo)}
+                      className="px-3 py-2 rounded-2xl bg-white border border-rose-200 text-rose-600 text-xs font-bold"
+                    >
+                      Excluir
+                    </button>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
-        </div>
-      ) : (
-        <p className="text-xs text-blue-700">
-          Nenhum link detectado ainda. O sistema reconhece links começando com http:// ou https://.
-        </p>
-      )}
-
-      <button
-        type="button"
-        onClick={onSave}
-        className="px-4 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold flex items-center gap-2"
-      >
-        <Save size={14} />
-        Salvar anexos/links
-      </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -2163,6 +2377,9 @@ export default function SolicitacoesMaterial({ user }) {
 
                               {anexoAberto(sol.id, it.id) && (
                                 <AnexosLinksPainel
+                                  solicitacaoId={sol.id}
+                                  itemId={it.id}
+                                  user={user}
                                   texto={it.observacao || ""}
                                   onChange={(valor) =>
                                     atualizarItemLocal(sol.id, it.id, {
