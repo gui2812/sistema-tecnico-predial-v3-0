@@ -1,4 +1,4 @@
-import { Copy, Mail, Plus, Trash2, Calculator } from 'lucide-react';
+import { Copy, Mail, Plus, Trash2, Calculator, Send } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import Tabela from '../components/Tabela';
 import { gerarMalote } from '../utils/malote';
@@ -15,6 +15,8 @@ const vazio = {
 
 export default function Malote(){
   const [destinatario,setDestinatario]=useState('Amanda');
+  const [emailDestinatario,setEmailDestinatario]=useState('');
+  const [emailCopia,setEmailCopia]=useState('');
   const [form,setForm]=useState(vazio);
   const [itens,setItens]=useState([]);
 
@@ -60,12 +62,36 @@ export default function Malote(){
   function salvar(){
     addItem('malotes',{
       destinatario,
+      emailDestinatario,
+      emailCopia,
       itens,
       assunto:email.assunto,
       corpo:email.corpo
     });
 
     alert('Malote salvo no histórico.');
+  }
+
+  function abrirEmailParaEnvio(){
+    if(!emailDestinatario.trim()){
+      alert('Informe o e-mail do destinatário.');
+      return;
+    }
+
+    if(!itens.length){
+      alert('Adicione pelo menos um item ao malote antes de abrir o e-mail.');
+      return;
+    }
+
+    const para = emailDestinatario.trim().replaceAll(',', ';');
+    const cc = emailCopia.trim().replaceAll(',', ';');
+
+    const assunto = encodeURIComponent(email.assunto);
+    const corpo = encodeURIComponent(email.corpo);
+
+    const ccParam = cc ? `&cc=${encodeURIComponent(cc)}` : '';
+
+    window.location.href = `mailto:${para}?subject=${assunto}&body=${corpo}${ccParam}`;
   }
 
   function gerarObservacaoAutomatica(){
@@ -101,12 +127,40 @@ export default function Malote(){
       <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
         <h3 className="font-bold text-lg mb-4">Novo malote</h3>
 
-        <label className="text-sm font-semibold">Destinatário</label>
-        <input
-          value={destinatario}
-          onChange={e=>setDestinatario(e.target.value)}
-          className="mt-1 mb-4 w-full rounded-2xl border p-3"
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="text-sm font-semibold">Destinatário do texto</label>
+            <input
+              value={destinatario}
+              onChange={e=>setDestinatario(e.target.value)}
+              className="mt-1 w-full rounded-2xl border p-3"
+              placeholder="Ex: Amanda"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm font-semibold">E-mail para envio</label>
+            <input
+              value={emailDestinatario}
+              onChange={e=>setEmailDestinatario(e.target.value)}
+              className="mt-1 w-full rounded-2xl border p-3"
+              placeholder="amanda@empresa.com; financeiro@empresa.com"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="text-sm font-semibold">E-mails em cópia / CC</label>
+            <input
+              value={emailCopia}
+              onChange={e=>setEmailCopia(e.target.value)}
+              className="mt-1 w-full rounded-2xl border p-3"
+              placeholder="gestor@empresa.com; controladoria@empresa.com"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              Para mais de um e-mail, separe por ponto e vírgula.
+            </p>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <input
@@ -290,6 +344,14 @@ export default function Malote(){
           className="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 text-sm"
         >
           Salvar no histórico
+        </button>
+
+        <button
+          onClick={abrirEmailParaEnvio}
+          className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-sm flex gap-2"
+        >
+          <Send size={15}/>
+          Abrir e-mail para envio
         </button>
       </div>
     </div>
