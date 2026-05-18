@@ -254,8 +254,26 @@ export default function SolicitacoesMaterial({ user }) {
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
+  const [detalhesAbertos, setDetalhesAbertos] = useState({});
 
   const isAdmin = user?.perfil === "admin" || user?.perfil === "administrador";
+
+  function chaveDetalhe(solId, itemId) {
+    return `${solId}-${itemId}`;
+  }
+
+  function detalheAberto(solId, itemId) {
+    return !!detalhesAbertos[chaveDetalhe(solId, itemId)];
+  }
+
+  function alternarDetalhesItem(solId, itemId) {
+    const chave = chaveDetalhe(solId, itemId);
+
+    setDetalhesAbertos((prev) => ({
+      ...prev,
+      [chave]: !prev[chave],
+    }));
+  }
 
   async function registrarHistorico(acao, descricao, referenciaId = null, dados = {}) {
     try {
@@ -1694,145 +1712,217 @@ export default function SolicitacoesMaterial({ user }) {
 
                         {isAdmin && (
                           <div className="w-full 2xl:w-[430px] 2xl:shrink-0 space-y-3 overflow-hidden">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <input
-                                value={it.valorUnitario || ""}
-                                onChange={(e) =>
-                                  atualizarItemLocal(sol.id, it.id, {
-                                    valorUnitario: e.target.value,
-                                  })
-                                }
-                                onBlur={(e) =>
-                                  salvarItemAdmin(it.id, {
-                                    valorUnitario: e.target.value,
-                                  })
-                                }
-                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
-                                placeholder="Valor unitário"
-                              />
-
-                              <input
-                                value={it.fornecedor || ""}
-                                onChange={(e) =>
-                                  atualizarItemLocal(sol.id, it.id, {
-                                    fornecedor: e.target.value,
-                                  })
-                                }
-                                onBlur={(e) =>
-                                  salvarItemAdmin(it.id, {
-                                    fornecedor: e.target.value,
-                                  })
-                                }
-                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
-                                placeholder="Fornecedor"
-                              />
-
-                              <input
-                                value={it.numeroNotaFiscal || ""}
-                                onChange={(e) =>
-                                  atualizarItemLocal(sol.id, it.id, {
-                                    numeroNotaFiscal: e.target.value,
-                                  })
-                                }
-                                onBlur={(e) =>
-                                  salvarItemAdmin(it.id, {
-                                    numeroNotaFiscal: e.target.value,
-                                  })
-                                }
-                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
-                                placeholder="Nº da nota fiscal *"
-                              />
-
-                              <label className="rounded-2xl border bg-white p-2 text-sm flex items-center gap-2 min-w-0">
+                            <div className="rounded-2xl bg-white border border-slate-100 p-3 space-y-3">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <input
-                                  type="checkbox"
-                                  checked={!!it.enviadoMalote}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked;
+                                  value={it.valorUnitario || ""}
+                                  onChange={(e) =>
                                     atualizarItemLocal(sol.id, it.id, {
-                                      enviadoMalote: checked,
-                                      dataEnvioMalote: checked
-                                        ? it.dataEnvioMalote || today()
-                                        : null,
-                                    });
+                                      valorUnitario: e.target.value,
+                                    })
+                                  }
+                                  onBlur={(e) =>
                                     salvarItemAdmin(it.id, {
-                                      enviadoMalote: checked,
-                                      dataEnvioMalote: checked
-                                        ? it.dataEnvioMalote || today()
-                                        : null,
-                                    });
-                                  }}
-                                  className="w-4 h-4 shrink-0"
+                                      valorUnitario: e.target.value,
+                                    })
+                                  }
+                                  className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                  placeholder="Valor unitário"
                                 />
-                                <span className="font-semibold text-slate-600 break-words">
-                                  NF enviada ao malote
-                                </span>
-                              </label>
 
-                              <input
-                                value={it.recebidoPor || ""}
-                                onChange={(e) =>
-                                  atualizarItemLocal(sol.id, it.id, {
-                                    recebidoPor: e.target.value,
-                                  })
-                                }
-                                onBlur={(e) =>
-                                  salvarItemAdmin(it.id, {
-                                    recebidoPor: e.target.value,
-                                  })
-                                }
-                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
-                                placeholder="Recebido por"
-                              />
+                                <button
+                                  onClick={() => extrairValorAutomatico(sol.id, it)}
+                                  className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1"
+                                >
+                                  Extrair valor
+                                </button>
+                              </div>
 
-                              <input
-                                type="date"
-                                value={it.dataRecebimento || ""}
-                                onChange={(e) =>
-                                  atualizarItemLocal(sol.id, it.id, {
-                                    dataRecebimento: e.target.value,
-                                  })
-                                }
-                                onBlur={(e) =>
-                                  salvarItemAdmin(it.id, {
-                                    dataRecebimento: e.target.value,
-                                  })
-                                }
-                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
-                              />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3">
+                                  <p className="font-bold text-slate-500">Total do item</p>
+                                  <p className="text-sm font-black text-slate-900">
+                                    {brl(
+                                      Number(it.quantidade || 0) *
+                                        dinheiroParaNumero(it.valorUnitario)
+                                    )}
+                                  </p>
+                                </div>
 
-                              <input
-                                value={it.obsRecebimento || ""}
-                                onChange={(e) =>
-                                  atualizarItemLocal(sol.id, it.id, {
-                                    obsRecebimento: e.target.value,
-                                  })
-                                }
-                                onBlur={(e) =>
-                                  salvarItemAdmin(it.id, {
-                                    obsRecebimento: e.target.value,
-                                  })
-                                }
-                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
-                                placeholder="Obs. recebimento"
-                              />
+                                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3">
+                                  <p className="font-bold text-slate-500">Dados administrativos</p>
+                                  <p className="text-sm font-black text-slate-900">
+                                    {it.fornecedor || it.numeroNotaFiscal || it.recebidoPor
+                                      ? "Preenchidos"
+                                      : "Não preenchidos"}
+                                  </p>
+                                </div>
+                              </div>
 
-                              <input
-                                type="date"
-                                value={it.dataEnvioMalote || ""}
-                                onChange={(e) =>
-                                  atualizarItemLocal(sol.id, it.id, {
-                                    dataEnvioMalote: e.target.value,
-                                  })
-                                }
-                                onBlur={(e) =>
-                                  salvarItemAdmin(it.id, {
-                                    dataEnvioMalote: e.target.value,
-                                  })
-                                }
-                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
-                                title="Data de envio ao malote"
-                              />
+                              {(it.fornecedor || it.numeroNotaFiscal || it.recebidoPor || it.enviadoMalote) && (
+                                <div className="rounded-2xl bg-teal-50 border border-teal-100 p-3 text-xs text-teal-700 space-y-1 overflow-hidden">
+                                  {it.fornecedor && (
+                                    <p className="break-words">
+                                      <strong>Fornecedor:</strong> {it.fornecedor}
+                                    </p>
+                                  )}
+
+                                  {it.numeroNotaFiscal && (
+                                    <p className="break-words">
+                                      <strong>NF:</strong> {it.numeroNotaFiscal}
+                                    </p>
+                                  )}
+
+                                  {it.recebidoPor && (
+                                    <p className="break-words">
+                                      <strong>Recebido por:</strong> {it.recebidoPor}
+                                      {it.dataRecebimento ? ` em ${it.dataRecebimento}` : ""}
+                                    </p>
+                                  )}
+
+                                  <p className="break-words">
+                                    <strong>Malote:</strong>{" "}
+                                    {it.enviadoMalote
+                                      ? `Enviado${it.dataEnvioMalote ? ` em ${it.dataEnvioMalote}` : ""}`
+                                      : "Pendente"}
+                                  </p>
+                                </div>
+                              )}
+
+                              {detalheAberto(sol.id, it.id) && (
+                                <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 space-y-3">
+                                  <div>
+                                    <p className="text-xs font-black text-slate-700 mb-2">
+                                      Dados administrativos
+                                    </p>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                      <input
+                                        value={it.fornecedor || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            fornecedor: e.target.value,
+                                          })
+                                        }
+                                        onBlur={(e) =>
+                                          salvarItemAdmin(it.id, {
+                                            fornecedor: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Fornecedor"
+                                      />
+
+                                      <input
+                                        value={it.numeroNotaFiscal || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            numeroNotaFiscal: e.target.value,
+                                          })
+                                        }
+                                        onBlur={(e) =>
+                                          salvarItemAdmin(it.id, {
+                                            numeroNotaFiscal: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Nº da nota fiscal *"
+                                      />
+
+                                      <label className="rounded-2xl border bg-white p-2 text-sm flex items-center gap-2 min-w-0">
+                                        <input
+                                          type="checkbox"
+                                          checked={!!it.enviadoMalote}
+                                          onChange={(e) => {
+                                            const checked = e.target.checked;
+                                            atualizarItemLocal(sol.id, it.id, {
+                                              enviadoMalote: checked,
+                                              dataEnvioMalote: checked
+                                                ? it.dataEnvioMalote || today()
+                                                : null,
+                                            });
+                                            salvarItemAdmin(it.id, {
+                                              enviadoMalote: checked,
+                                              dataEnvioMalote: checked
+                                                ? it.dataEnvioMalote || today()
+                                                : null,
+                                            });
+                                          }}
+                                          className="w-4 h-4 shrink-0"
+                                        />
+                                        <span className="font-semibold text-slate-600 break-words">
+                                          NF enviada ao malote
+                                        </span>
+                                      </label>
+
+                                      <input
+                                        value={it.recebidoPor || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            recebidoPor: e.target.value,
+                                          })
+                                        }
+                                        onBlur={(e) =>
+                                          salvarItemAdmin(it.id, {
+                                            recebidoPor: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Recebido por"
+                                      />
+
+                                      <input
+                                        type="date"
+                                        value={it.dataRecebimento || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            dataRecebimento: e.target.value,
+                                          })
+                                        }
+                                        onBlur={(e) =>
+                                          salvarItemAdmin(it.id, {
+                                            dataRecebimento: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                      />
+
+                                      <input
+                                        value={it.obsRecebimento || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            obsRecebimento: e.target.value,
+                                          })
+                                        }
+                                        onBlur={(e) =>
+                                          salvarItemAdmin(it.id, {
+                                            obsRecebimento: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Obs. recebimento"
+                                      />
+
+                                      <input
+                                        type="date"
+                                        value={it.dataEnvioMalote || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            dataEnvioMalote: e.target.value,
+                                          })
+                                        }
+                                        onBlur={(e) =>
+                                          salvarItemAdmin(it.id, {
+                                            dataEnvioMalote: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        title="Data de envio ao malote"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
 
                             <div className="flex flex-wrap gap-2">
@@ -1842,13 +1932,6 @@ export default function SolicitacoesMaterial({ user }) {
                               >
                                 <Save size={14} />
                                 Salvar dados
-                              </button>
-
-                              <button
-                                onClick={() => extrairValorAutomatico(sol.id, it)}
-                                className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold flex items-center gap-1"
-                              >
-                                Extrair valor
                               </button>
 
                               <button
@@ -1886,6 +1969,13 @@ export default function SolicitacoesMaterial({ user }) {
                               </button>
 
                               <button
+                                onClick={() => alternarDetalhesItem(sol.id, it.id)}
+                                className="px-3 py-2 rounded-2xl bg-white border border-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1 hover:bg-slate-50"
+                              >
+                                {detalheAberto(sol.id, it.id) ? "Fechar dados" : "Editar dados"}
+                              </button>
+
+                              <button
                                 onClick={() => excluirItem(sol, it)}
                                 className="px-3 py-2 rounded-2xl bg-white border border-rose-200 text-rose-600 text-xs font-bold flex items-center gap-1 hover:bg-rose-50"
                               >
@@ -1907,16 +1997,7 @@ export default function SolicitacoesMaterial({ user }) {
                                 ))}
                               </select>
                             </div>
-
-                            <p className="text-xs font-semibold text-slate-500">
-                              Total do item:{" "}
-                              {brl(
-                                Number(it.quantidade || 0) *
-                                  dinheiroParaNumero(it.valorUnitario)
-                              )}
-                            </p>
-                          </div>
-                        )}
+                          </div>                        )}
                       </div>
                     </div>
                   ))}
