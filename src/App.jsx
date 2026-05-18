@@ -8,6 +8,7 @@ import Historico from "./pages/Historico";
 import Locatarios from "./pages/Locatarios";
 import Login from "./pages/Login";
 import Malote from "./pages/Malote";
+import Pendencias from "./pages/Pendencias";
 import RelatoriosPDF from "./pages/RelatoriosPDF";
 import RateioAgua from "./pages/RateioAgua";
 import SolicitacoesMaterial from "./pages/SolicitacoesMaterial";
@@ -15,11 +16,26 @@ import Tecnicos from "./pages/Tecnicos";
 import Usuarios from "./pages/Usuarios";
 import { getSession, hasPermission } from "./services/storageService";
 
+function temAcessoPagina(user, page) {
+  if (!user) return false;
+
+  if (page === "pendencias") {
+    return (
+      hasPermission(user, "dashboard") ||
+      user?.perfil === "admin" ||
+      user?.perfil === "administrador"
+    );
+  }
+
+  return hasPermission(user, page);
+}
+
 function primeiraPaginaPermitida(user) {
   if (!user) return "dashboard";
 
   const ordem = [
     "dashboard",
+    "pendencias",
     "solicitacoes",
     "calculadora",
     "tecnicos",
@@ -32,7 +48,7 @@ function primeiraPaginaPermitida(user) {
     "usuarios",
   ];
 
-  return ordem.find((p) => hasPermission(user, p)) || "solicitacoes";
+  return ordem.find((p) => temAcessoPagina(user, p)) || "solicitacoes";
 }
 
 export default function App() {
@@ -44,7 +60,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (user && !hasPermission(user, page)) {
+    if (user && !temAcessoPagina(user, page)) {
       setPage(primeiraPaginaPermitida(user));
     }
   }, [user, page]);
@@ -61,11 +77,13 @@ export default function App() {
   }
 
   const renderPage = () => {
-    if (!hasPermission(user, page)) return null;
+    if (!temAcessoPagina(user, page)) return null;
 
     switch (page) {
       case "dashboard":
         return <Dashboard />;
+      case "pendencias":
+        return <Pendencias user={user} />;
       case "calculadora":
         return <CalculadoraEletrica />;
       case "tecnicos":
