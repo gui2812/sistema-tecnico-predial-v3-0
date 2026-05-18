@@ -18,7 +18,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import CardResumo from "../components/CardResumo";
 import Tabela from "../components/Tabela";
-import { addNotification } from "../services/storageService";
 import {
   atualizarItemSolicitacaoSupabase,
   atualizarItensEmLoteSupabase,
@@ -30,6 +29,7 @@ import {
 } from "../services/solicitacoesSupabaseService";
 import { brl, today } from "../utils/formatters";
 import { registrarHistoricoSupabase } from "../services/historicoSupabaseService";
+import { criarNotificacaoSupabase } from "../services/notificacoesSupabaseService";
 
 const itemVazio = {
   quantidade: "",
@@ -610,17 +610,46 @@ export default function SolicitacoesMaterial({ user }) {
     return msg;
   }
 
-  function notificarAlteracaoStatus(sol, it, novoStatus, motivo = "") {
+  async function notificarAlteracaoStatus(sol, it, novoStatus, motivo = "") {
     if (!novoStatus || !it?.descricao) return;
 
-    addNotification({
+    await criarNotificacaoSupabase({
       tipo: "solicitacao_material",
-      solicitacaoId: sol.id,
-      destinatario: sol.solicitante,
-      destinatarioSetor: sol.setor,
-      destinatarioUsuario: sol.solicitanteId,
+      modulo: "Solicitação de Material",
       titulo: `Solicitação atualizada: ${novoStatus}`,
       mensagem: mensagemAtualizacao(sol, it, novoStatus, motivo),
+      destinatario_id: sol.solicitanteId || null,
+      destinatario_nome: sol.solicitante || "",
+      destinatario_setor: sol.setor || "",
+      referencia_id: sol.id || null,
+      criada_por: user?.nome || user?.usuario || "Sistema",
+      prioridade: novoStatus === "Reprovada" ? "alta" : "normal",
+    });
+
+    if (novoStatus === "Entregue" && !it.enviadoMalote) {
+      await criarNotificacaoSupabase({
+        tipo: "malote_pendente",
+        modulo: "Solicitação de Material",
+        titulo: "NF pendente de malote",
+        mensagem: `O item "${it.descricao}" foi marcado como entregue, mas a NF ainda está pendente de envio ao malote.\n\nSolicitação #${String(sol.numero || sol.id || "").slice(-4).toUpperCase()}\nSetor: ${sol.setor || "-"}\nAtualizado por: ${user?.nome || "Sistema"}`,
+        somente_admin: true,
+        referencia_id: sol.id || null,
+        criada_por: user?.nome || user?.usuario || "Sistema",
+        prioridade: "alta",
+      });
+    }
+  }
+
+  async function notificarAdminNovaSolicitacao(solicitacaoCriada, quantidadeItens) {
+    await criarNotificacaoSupabase({
+      tipo: "nova_solicitacao",
+      modulo: "Solicitação de Material",
+      titulo: "Nova solicitação de material",
+      mensagem: `Nova solicitação aberta por ${cab.solicitante || user?.nome || "usuário"}.\n\nÁrea: ${cab.setor}\nPrioridade: ${cab.prioridade}\nItens: ${quantidadeItens}`,
+      somente_admin: true,
+      referencia_id: solicitacaoCriada?.id || null,
+      criada_por: user?.nome || user?.usuario || "Sistema",
+      prioridade: cab.prioridade === "Urgente" || cab.prioridade === "Alta" ? "alta" : "normal",
     });
   }
 
@@ -671,14 +700,19 @@ export default function SolicitacoesMaterial({ user }) {
       });
 
       const selecionados = new Set(ids);
+      const notificacoesPendentes = [];
 
       listaVisivel.forEach((sol) => {
         (sol.itens || []).forEach((it) => {
           if (selecionados.has(String(it.id)) && patch.status && patch.status !== it.status) {
-            notificarAlteracaoStatus(sol, it, patch.status, patch.motivoReprovacao || "");
+            notificacoesPendentes.push(
+              notificarAlteracaoStatus(sol, it, patch.status, patch.motivoReprovacao || "")
+            );
           }
         });
       });
+
+      await Promise.all(notificacoesPendentes);
 
       setItensSelecionados([]);
       await carregarSolicitacoes();
@@ -874,10 +908,12 @@ export default function SolicitacoesMaterial({ user }) {
         }
       );
 
+      await notificarAdminNovaSolicitacao(solicitacaoCriada, itens.length);
+
       setItens([]);
       setCab({
         data: today(),
-        setor: areasSolicitantes.includes(user?.setor) ? user?.setor : "Elétrica",
+        setor: areaInicialUsuario(user, isAdmin),
         solicitante: user?.nome || "",
         prioridade: "Normal",
         observacaoGeral: "",
@@ -908,7 +944,7 @@ export default function SolicitacoesMaterial({ user }) {
       });
 
       if (patch.status && itemAnterior && patch.status !== itemAnterior.status) {
-        notificarAlteracaoStatus(
+        await notificarAlteracaoStatus(
           sol,
           itemAnterior,
           patch.status,
