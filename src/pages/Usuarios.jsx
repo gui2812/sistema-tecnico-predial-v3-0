@@ -31,6 +31,55 @@ const PERMISSIONS = [
   { id: "usuarios", label: "Usuários e Permissões" },
 ];
 
+const AREAS_SOLICITACAO_MATERIAL = [
+  "Civil",
+  "Mecânica",
+  "Elétrica",
+  "Hidráulica",
+  "Limpeza",
+  "BMS",
+  "Segurança",
+  "Incêndio",
+  "Jardinagem",
+  "Administrativo",
+  "Outros",
+];
+
+const PREFIXO_AREA_SOLICITACAO = "solicitacoes.area.";
+const PERMISSAO_LOCAL_OBRIGATORIO = "solicitacoes.localObrigatorio";
+
+function permissaoArea(area) {
+  return `${PREFIXO_AREA_SOLICITACAO}${area}`;
+}
+
+function obterAreasSolicitacao(permissoes = []) {
+  return (Array.isArray(permissoes) ? permissoes : [])
+    .filter((p) => String(p).startsWith(PREFIXO_AREA_SOLICITACAO))
+    .map((p) => String(p).replace(PREFIXO_AREA_SOLICITACAO, ""));
+}
+
+function localAplicacaoObrigatorio(permissoes = []) {
+  return (Array.isArray(permissoes) ? permissoes : []).includes(
+    PERMISSAO_LOCAL_OBRIGATORIO
+  );
+}
+
+function permissoesTela(permissoes = []) {
+  return (Array.isArray(permissoes) ? permissoes : []).filter(
+    (p) =>
+      !String(p).startsWith(PREFIXO_AREA_SOLICITACAO) &&
+      p !== PERMISSAO_LOCAL_OBRIGATORIO
+  );
+}
+
+function configuracoesSolicitacao(permissoes = []) {
+  return (Array.isArray(permissoes) ? permissoes : []).filter(
+    (p) =>
+      String(p).startsWith(PREFIXO_AREA_SOLICITACAO) ||
+      p === PERMISSAO_LOCAL_OBRIGATORIO
+  );
+}
+
 const PROFILE_PRESETS = {
   admin: PERMISSIONS.map((p) => p.id),
   administrador: PERMISSIONS.map((p) => p.id),
@@ -46,7 +95,7 @@ const USUARIO_VAZIO = {
   setor: "",
   perfil: "lider",
   ativo: true,
-  permissoes: ["solicitacoes"],
+  permissoes: ["solicitacoes", permissaoArea("Elétrica")],
 };
 
 function normalizarPerfil(perfil) {
@@ -121,11 +170,18 @@ export default function Usuarios({ currentUser, onUserUpdated }) {
   }
 
   function aplicarPerfil(perfil) {
-    setForm((prev) => ({
-      ...prev,
-      perfil,
-      permissoes: PROFILE_PRESETS[perfil] || ["solicitacoes"],
-    }));
+    setForm((prev) => {
+      const configsSolicitacao = configuracoesSolicitacao(prev.permissoes);
+
+      return {
+        ...prev,
+        perfil,
+        permissoes: [
+          ...(PROFILE_PRESETS[perfil] || ["solicitacoes"]),
+          ...configsSolicitacao,
+        ],
+      };
+    });
   }
 
   function alternarPermissao(id) {
@@ -136,6 +192,36 @@ export default function Usuarios({ currentUser, onUserUpdated }) {
       return {
         ...prev,
         permissoes: existe ? atual.filter((p) => p !== id) : [...atual, id],
+      };
+    });
+  }
+
+  function alternarAreaSolicitacao(area) {
+    const chave = permissaoArea(area);
+
+    setForm((prev) => {
+      const atual = Array.isArray(prev.permissoes) ? prev.permissoes : [];
+      const existe = atual.includes(chave);
+
+      return {
+        ...prev,
+        permissoes: existe
+          ? atual.filter((p) => p !== chave)
+          : [...atual, chave],
+      };
+    });
+  }
+
+  function alternarLocalObrigatorio() {
+    setForm((prev) => {
+      const atual = Array.isArray(prev.permissoes) ? prev.permissoes : [];
+      const existe = atual.includes(PERMISSAO_LOCAL_OBRIGATORIO);
+
+      return {
+        ...prev,
+        permissoes: existe
+          ? atual.filter((p) => p !== PERMISSAO_LOCAL_OBRIGATORIO)
+          : [...atual, PERMISSAO_LOCAL_OBRIGATORIO],
       };
     });
   }
@@ -391,6 +477,52 @@ export default function Usuarios({ currentUser, onUserUpdated }) {
             </div>
           </div>
 
+          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+            <p className="text-sm font-black text-blue-900">
+              Configurações de Solicitação de Material
+            </p>
+            <p className="text-xs text-blue-700 mt-1">
+              Controle quais áreas este usuário pode solicitar e se o local de aplicação será obrigatório.
+            </p>
+
+            <div className="mt-4">
+              <p className="text-xs font-bold text-blue-900 mb-2">
+                Áreas liberadas para solicitação
+              </p>
+
+              <div className="grid grid-cols-1 gap-2 max-h-52 overflow-auto pr-1">
+                {AREAS_SOLICITACAO_MATERIAL.map((area) => (
+                  <label
+                    key={area}
+                    className="flex items-center gap-2 bg-white border border-blue-100 rounded-xl px-3 py-2 hover:bg-blue-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={(form.permissoes || []).includes(permissaoArea(area))}
+                      onChange={() => alternarAreaSolicitacao(area)}
+                    />
+                    <span className="text-sm text-slate-700">{area}</span>
+                  </label>
+                ))}
+              </div>
+
+              <p className="text-[11px] text-blue-700 mt-2">
+                Se nenhuma área for marcada, o sistema usará o setor do usuário como padrão.
+              </p>
+            </div>
+
+            <label className="mt-4 flex items-center gap-2 bg-white border border-blue-100 rounded-xl px-3 py-2 hover:bg-blue-50">
+              <input
+                type="checkbox"
+                checked={localAplicacaoObrigatorio(form.permissoes)}
+                onChange={alternarLocalObrigatorio}
+              />
+              <span className="text-sm font-semibold text-slate-700">
+                Local de aplicação obrigatório
+              </span>
+            </label>
+          </div>
+
           <div className="flex gap-2 pt-2">
             <button
               type="submit"
@@ -443,6 +575,7 @@ export default function Usuarios({ currentUser, onUserUpdated }) {
                     <th className="py-3 px-3">Setor</th>
                     <th className="py-3 px-3">Status</th>
                     <th className="py-3 px-3">Permissões</th>
+                    <th className="py-3 px-3">Solicitações</th>
                     <th className="py-3 px-3 text-right">Ações</th>
                   </tr>
                 </thead>
@@ -483,7 +616,22 @@ export default function Usuarios({ currentUser, onUserUpdated }) {
                       </td>
 
                       <td className="py-3 px-3 text-slate-600">
-                        {(usuario.permissoes || []).length} acessos
+                        {permissoesTela(usuario.permissoes || []).length} acessos
+                      </td>
+
+                      <td className="py-3 px-3 text-slate-600 min-w-[220px]">
+                        <div className="text-xs">
+                          <p>
+                            <strong>Áreas:</strong>{" "}
+                            {obterAreasSolicitacao(usuario.permissoes).length
+                              ? obterAreasSolicitacao(usuario.permissoes).join(", ")
+                              : usuario.setor || "Setor do usuário"}
+                          </p>
+                          <p className="mt-1">
+                            <strong>Local obrigatório:</strong>{" "}
+                            {localAplicacaoObrigatorio(usuario.permissoes) ? "Sim" : "Não"}
+                          </p>
+                        </div>
                       </td>
 
                       <td className="py-3 px-3">
@@ -519,7 +667,7 @@ export default function Usuarios({ currentUser, onUserUpdated }) {
                   {usuariosFiltrados.length === 0 && (
                     <tr>
                       <td
-                        colSpan="7"
+                        colSpan="8"
                         className="py-10 text-center text-slate-500"
                       >
                         Nenhum usuário encontrado.
