@@ -92,6 +92,47 @@ function normalizar(txt) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function formatarValorBR(valor) {
+  const numero = Number(valor || 0);
+
+  if (!numero) return "";
+
+  return numero.toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function extrairValorMonetario(texto) {
+  const conteudo = String(texto || "");
+
+  const padroes = [
+    /R\$\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/gi,
+    /R\$\s*([0-9]+,[0-9]{2})/gi,
+    /(?:valor|preço|preco|unitário|unitario|preço unitário|preco unitario)\D{0,30}([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/gi,
+    /(?:valor|preço|preco|unitário|unitario|preço unitário|preco unitario)\D{0,30}([0-9]+,[0-9]{2})/gi,
+  ];
+
+  const encontrados = [];
+
+  padroes.forEach((regex) => {
+    let match;
+
+    while ((match = regex.exec(conteudo)) !== null) {
+      const bruto = match[1];
+      const numero = dinheiroParaNumero(bruto);
+
+      if (numero > 0) {
+        encontrados.push(numero);
+      }
+    }
+  });
+
+  if (!encontrados.length) return null;
+
+  return encontrados[encontrados.length - 1];
+}
+
 function statusGeral(sol) {
   const itens = sol.itens || [];
 
@@ -724,6 +765,32 @@ export default function SolicitacoesMaterial({ user }) {
       console.error(err);
       alert("Não foi possível salvar os dados do item.");
     }
+  }
+
+  function extrairValorAutomatico(solId, it) {
+    const textoBase = [
+      it.descricao,
+      it.marca,
+      it.local,
+      it.observacao,
+      it.motivoReprovacao,
+      it.obsRecebimento,
+    ].join(" ");
+
+    const valorEncontrado = extrairValorMonetario(textoBase);
+
+    if (!valorEncontrado) {
+      alert(
+        "Não encontrei nenhum valor no padrão R$ 0,00 neste item. Cole o preço na observação ou descrição e tente novamente."
+      );
+      return;
+    }
+
+    atualizarItemLocal(solId, it.id, {
+      valorUnitario: formatarValorBR(valorEncontrado),
+    });
+
+    alert(`Valor encontrado: ${formatarValorBR(valorEncontrado)}. Confira e clique em Salvar dados.`);
   }
 
   function aprovarItem(solId, itemId) {
@@ -1775,6 +1842,13 @@ export default function SolicitacoesMaterial({ user }) {
                               >
                                 <Save size={14} />
                                 Salvar dados
+                              </button>
+
+                              <button
+                                onClick={() => extrairValorAutomatico(sol.id, it)}
+                                className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold flex items-center gap-1"
+                              >
+                                Extrair valor
                               </button>
 
                               <button
