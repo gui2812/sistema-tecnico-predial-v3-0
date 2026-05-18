@@ -1,7 +1,10 @@
 import {
   CheckCircle2,
   CheckSquare,
+  ExternalLink,
+  Link,
   PackageCheck,
+  Paperclip,
   PackagePlus,
   Plus,
   RefreshCcw,
@@ -242,6 +245,76 @@ function ObservacaoLonga({ texto }) {
   );
 }
 
+function AnexosLinksPainel({ texto, onChange, onSave }) {
+  const { textoSemLinks, links } = extrairLinks(texto);
+
+  return (
+    <div className="rounded-2xl bg-blue-50 border border-blue-100 p-3 space-y-3">
+      <div className="flex items-start gap-2">
+        <Paperclip size={17} className="text-blue-700 mt-0.5 shrink-0" />
+        <div>
+          <p className="text-xs font-black text-blue-900">Anexos / Links do item</p>
+          <p className="text-xs text-blue-700 mt-1">
+            Cole aqui links de produto, orçamento, NF, proposta ou comprovante. 
+            Upload de arquivo real pode ser integrado depois via Supabase Storage.
+          </p>
+        </div>
+      </div>
+
+      <textarea
+        value={texto || ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-2xl border border-blue-100 bg-white p-3 text-sm min-h-28 outline-none"
+        placeholder="Cole os links aqui. Exemplo: https://fornecedor.com.br/produto..."
+      />
+
+      {textoSemLinks && (
+        <div className="rounded-2xl bg-white border border-blue-100 p-3 text-xs text-slate-600">
+          <p className="font-bold text-slate-700 mb-1">Observação sem links</p>
+          <p className="break-words">{textoSemLinks}</p>
+        </div>
+      )}
+
+      {links.length > 0 ? (
+        <div className="rounded-2xl bg-white border border-blue-100 p-3">
+          <p className="text-xs font-bold text-slate-700 mb-2">
+            Links encontrados ({links.length})
+          </p>
+
+          <div className="flex flex-wrap gap-2">
+            {links.map((link, index) => (
+              <a
+                key={`${link}-${index}`}
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 flex items-center gap-1"
+                title={link}
+              >
+                <ExternalLink size={13} />
+                Abrir link {index + 1}
+              </a>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-blue-700">
+          Nenhum link detectado ainda. O sistema reconhece links começando com http:// ou https://.
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={onSave}
+        className="px-4 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold flex items-center gap-2"
+      >
+        <Save size={14} />
+        Salvar anexos/links
+      </button>
+    </div>
+  );
+}
+
 function normalizarItem(item) {
   return {
     id: item.id,
@@ -306,6 +379,7 @@ export default function SolicitacoesMaterial({ user }) {
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState("");
   const [detalhesAbertos, setDetalhesAbertos] = useState({});
+  const [anexosAbertos, setAnexosAbertos] = useState({});
 
   const isAdmin = user?.perfil === "admin" || user?.perfil === "administrador";
 
@@ -321,6 +395,19 @@ export default function SolicitacoesMaterial({ user }) {
     const chave = chaveDetalhe(solId, itemId);
 
     setDetalhesAbertos((prev) => ({
+      ...prev,
+      [chave]: !prev[chave],
+    }));
+  }
+
+  function anexoAberto(solId, itemId) {
+    return !!anexosAbertos[chaveDetalhe(solId, itemId)];
+  }
+
+  function alternarAnexosItem(solId, itemId) {
+    const chave = chaveDetalhe(solId, itemId);
+
+    setAnexosAbertos((prev) => ({
       ...prev,
       [chave]: !prev[chave],
     }));
@@ -1967,6 +2054,22 @@ export default function SolicitacoesMaterial({ user }) {
                                     </div>
                                   </div>
                                 </div>
+                              )}
+
+                              {anexoAberto(sol.id, it.id) && (
+                                <AnexosLinksPainel
+                                  texto={it.observacao || ""}
+                                  onChange={(valor) =>
+                                    atualizarItemLocal(sol.id, it.id, {
+                                      observacao: valor,
+                                    })
+                                  }
+                                  onSave={() =>
+                                    salvarItemAdmin(it.id, {
+                                      observacao: it.observacao || "",
+                                    })
+                                  }
+                                />
                               )}
                             </div>
 
