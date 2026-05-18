@@ -76,6 +76,42 @@ const areasSolicitantes = [
   "Outros",
 ];
 
+const PREFIXO_AREA_SOLICITACAO = "solicitacoes.area.";
+const PERMISSAO_LOCAL_OBRIGATORIO = "solicitacoes.localObrigatorio";
+
+function permissoesUsuario(user) {
+  return user?.permissoes || user?.permissions || [];
+}
+
+function obterAreasPermitidasUsuario(user, isAdmin) {
+  if (isAdmin) return areasSolicitantes;
+
+  const permissoes = permissoesUsuario(user);
+
+  const areas = permissoes
+    .filter((p) => String(p).startsWith(PREFIXO_AREA_SOLICITACAO))
+    .map((p) => String(p).replace(PREFIXO_AREA_SOLICITACAO, ""))
+    .filter((area) => areasSolicitantes.includes(area));
+
+  if (areas.length) return areas;
+
+  if (areasSolicitantes.includes(user?.setor)) return [user.setor];
+
+  return ["Elétrica"];
+}
+
+function localAplicacaoObrigatorioUsuario(user) {
+  return permissoesUsuario(user).includes(PERMISSAO_LOCAL_OBRIGATORIO);
+}
+
+function areaInicialUsuario(user, isAdmin) {
+  const areas = obterAreasPermitidasUsuario(user, isAdmin);
+
+  if (areas.includes(user?.setor)) return user.setor;
+
+  return areas[0] || "Elétrica";
+}
+
 function dinheiroParaNumero(v) {
   return Number(String(v || "0").replace(/\./g, "").replace(",", ".")) || 0;
 }
@@ -361,10 +397,16 @@ function normalizarSolicitacao(sol) {
 }
 
 export default function SolicitacoesMaterial({ user }) {
+  const areasPermitidas = useMemo(
+    () => obterAreasPermitidasUsuario(user, isAdmin),
+    [user, isAdmin]
+  );
+  const localObrigatorio = localAplicacaoObrigatorioUsuario(user);
+
   const [solicitacoes, setSolicitacoes] = useState([]);
   const [cab, setCab] = useState({
     data: today(),
-    setor: areasSolicitantes.includes(user?.setor) ? user?.setor : "Elétrica",
+    setor: areaInicialUsuario(user, isAdmin),
     solicitante: user?.nome || "",
     prioridade: "Normal",
     observacaoGeral: "",
@@ -381,7 +423,6 @@ export default function SolicitacoesMaterial({ user }) {
   const [detalhesAbertos, setDetalhesAbertos] = useState({});
   const [anexosAbertos, setAnexosAbertos] = useState({});
 
-  const isAdmin = user?.perfil === "admin" || user?.perfil === "administrador";
 
   function chaveDetalhe(solId, itemId) {
     return `${solId}-${itemId}`;
@@ -448,6 +489,15 @@ export default function SolicitacoesMaterial({ user }) {
   useEffect(() => {
     carregarSolicitacoes();
   }, []);
+
+  useEffect(() => {
+    if (!areasPermitidas.includes(cab.setor)) {
+      setCab((prev) => ({
+        ...prev,
+        setor: areasPermitidas[0] || "Elétrica",
+      }));
+    }
+  }, [areasPermitidas, cab.setor]);
 
   async function validarSenhaAdmin() {
     if (!isAdmin) {
@@ -751,6 +801,11 @@ export default function SolicitacoesMaterial({ user }) {
       return;
     }
 
+    if (localObrigatorio && !String(item.local || "").trim()) {
+      alert("Informe o local de aplicação. Este campo está obrigatório para este usuário.");
+      return;
+    }
+
     setItens([
       ...itens,
       {
@@ -765,6 +820,19 @@ export default function SolicitacoesMaterial({ user }) {
   async function enviar() {
     if (!itens.length) {
       alert("Adicione pelo menos um item.");
+      return;
+    }
+
+    if (!areasPermitidas.includes(cab.setor)) {
+      alert("Você não tem permissão para solicitar material nesta área.");
+      return;
+    }
+
+    if (
+      localObrigatorio &&
+      itens.some((it) => !String(it.local || "").trim())
+    ) {
+      alert("Existe item sem local de aplicação. Preencha o local antes de enviar.");
       return;
     }
 
@@ -1297,8 +1365,7 @@ export default function SolicitacoesMaterial({ user }) {
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 overflow-hidden">
         <h3 className="font-bold text-lg mb-1">Nova solicitação de material</h3>
         <p className="text-sm text-slate-500 mb-5">
-          Líderes preenchem a área solicitante e os materiais. Valores, aprovação,
-          compra e recebimento ficam no acesso master.
+          Líderes/prestadores preenchem a área liberada e os materiais. Use o campo de link para produto, orçamento ou referência.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
@@ -1315,7 +1382,7 @@ export default function SolicitacoesMaterial({ user }) {
             className="rounded-2xl border p-3"
             title="Área solicitante"
           >
-            {areasSolicitantes.map((area) => (
+            {areasPermitidas.map((area) => (
               <option key={area}>{area}</option>
             ))}
           </select>
@@ -1376,14 +1443,14 @@ export default function SolicitacoesMaterial({ user }) {
           />
 
           <input
-            placeholder="Local de aplicação"
+            placeholder={localObrigatorio ? "Local de aplicação *" : "Local de aplicação"}
             value={item.local}
             onChange={(e) => setItem({ ...item, local: e.target.value })}
             className="rounded-2xl border p-3"
           />
 
           <textarea
-            placeholder="Observação do item"
+            placeholder="Link do item / orçamento"
             value={item.observacao}
             onChange={(e) => setItem({ ...item, observacao: e.target.value })}
             className="md:col-span-6 rounded-2xl border p-3 h-20"
