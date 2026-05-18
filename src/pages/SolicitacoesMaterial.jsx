@@ -131,6 +131,25 @@ function BadgeStatus({ status }) {
   );
 }
 
+function TextoQuebra({ children, className = "" }) {
+  return (
+    <span className={`break-words whitespace-normal ${className}`}>
+      {children}
+    </span>
+  );
+}
+
+function ObservacaoLonga({ texto }) {
+  if (!texto) return null;
+
+  return (
+    <div className="text-sm text-slate-500 mt-2 max-w-full overflow-hidden">
+      <span className="font-semibold">Obs.: </span>
+      <span className="break-all whitespace-normal">{texto}</span>
+    </div>
+  );
+}
+
 function normalizarItem(item) {
   return {
     id: item.id,
@@ -846,7 +865,6 @@ export default function SolicitacoesMaterial({ user }) {
     });
   }, [solicitacoes, busca, statusFiltro, setorFiltro, user, isAdmin]);
 
-
   const painelItens = useMemo(() => {
     const termo = normalizar(busca);
 
@@ -932,7 +950,6 @@ export default function SolicitacoesMaterial({ user }) {
       .sort((a, b) => a.setor.localeCompare(b.setor, "pt-BR"));
   }, [painelItens]);
 
-
   const todosItensVisiveis = listaVisivelBase.flatMap((sol) => sol.itens || []);
 
   const totalSolic = listaVisivelBase.length;
@@ -964,7 +981,7 @@ export default function SolicitacoesMaterial({ user }) {
   ).sort((a, b) => b.valor - a.valor);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-hidden">
       {erro && (
         <div className="bg-red-50 border border-red-100 text-red-700 rounded-2xl p-4 text-sm">
           {erro}
@@ -1001,7 +1018,7 @@ export default function SolicitacoesMaterial({ user }) {
       )}
 
       {isAdmin && resumoPorArea.length > 0 && (
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5 overflow-hidden">
           <h3 className="font-bold mb-4">Resumo por área solicitante</h3>
 
           <div className="overflow-x-auto">
@@ -1032,7 +1049,7 @@ export default function SolicitacoesMaterial({ user }) {
         </div>
       )}
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-6 overflow-hidden">
         <h3 className="font-bold text-lg mb-1">Nova solicitação de material</h3>
         <p className="text-sm text-slate-500 mb-5">
           Líderes preenchem a área solicitante e os materiais. Valores, aprovação,
@@ -1148,7 +1165,7 @@ export default function SolicitacoesMaterial({ user }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5 overflow-hidden">
         <h3 className="font-bold mb-4">Itens desta solicitação</h3>
 
         <Tabela
@@ -1175,21 +1192,21 @@ export default function SolicitacoesMaterial({ user }) {
         />
       </div>
 
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5 overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-end gap-3 mb-5">
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <label className="text-xs font-bold text-slate-500">
               Pesquisar solicitação ou item
             </label>
 
             <div className="mt-1 flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2">
-              <Search size={18} className="text-slate-400" />
+              <Search size={18} className="text-slate-400 shrink-0" />
 
               <input
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 placeholder="Buscar por item, setor, status, fornecedor, recebido por..."
-                className="w-full outline-none text-sm"
+                className="w-full outline-none text-sm min-w-0"
               />
             </div>
           </div>
@@ -1217,9 +1234,9 @@ export default function SolicitacoesMaterial({ user }) {
         </div>
 
         {isAdmin && (
-          <div className="mb-5 rounded-3xl border border-blue-100 bg-blue-50 p-4">
+          <div className="mb-5 rounded-3xl border border-blue-100 bg-blue-50 p-4 overflow-hidden">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="font-bold text-slate-900">Ações em lote por item</p>
                 <p className="text-sm text-slate-600">
                   Selecione as caixinhas dos itens e escolha a ação que deseja aplicar.
@@ -1283,10 +1300,9 @@ export default function SolicitacoesMaterial({ user }) {
           </div>
         )}
 
-
-        <div className="mb-6 rounded-3xl border border-slate-100 bg-slate-50/60 p-5">
+        <div className="mb-6 rounded-3xl border border-slate-100 bg-slate-50/60 p-5 overflow-hidden">
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3 mb-5">
-            <div>
+            <div className="min-w-0">
               <h3 className="font-bold text-lg text-slate-900">Painel de Itens</h3>
               <p className="text-sm text-slate-500">
                 Itens organizados por setor e separados por status, respeitando os filtros acima.
@@ -1318,9 +1334,9 @@ export default function SolicitacoesMaterial({ user }) {
           ) : (
             <div className="space-y-5">
               {painelPorSetor.map((grupoSetor) => (
-                <div key={grupoSetor.setor} className="rounded-3xl bg-white border border-slate-100 p-4">
+                <div key={grupoSetor.setor} className="rounded-3xl bg-white border border-slate-100 p-4 overflow-hidden">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-                    <div>
+                    <div className="min-w-0">
                       <h4 className="font-black text-slate-900">{grupoSetor.setor}</h4>
                       <p className="text-xs text-slate-500">{grupoSetor.total} item(ns) neste setor</p>
                     </div>
@@ -1344,13 +1360,13 @@ export default function SolicitacoesMaterial({ user }) {
                             const totalItem = Number(it.quantidade || 0) * dinheiroParaNumero(it.valorUnitario);
 
                             return (
-                              <div key={it.id} className="p-4">
-                                <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
-                                  <div className="flex gap-3 flex-1">
+                              <div key={it.id} className="p-4 overflow-hidden">
+                                <div className="flex flex-col 2xl:flex-row 2xl:items-start 2xl:justify-between gap-4">
+                                  <div className="flex gap-3 flex-1 min-w-0">
                                     {isAdmin && (
                                       <button
                                         onClick={() => alternarItem(it.id)}
-                                        className="mt-1 text-blue-700 hover:text-blue-900"
+                                        className="mt-1 text-blue-700 hover:text-blue-900 shrink-0"
                                         title="Selecionar item"
                                       >
                                         {itemSelecionado(it.id) ? (
@@ -1361,19 +1377,21 @@ export default function SolicitacoesMaterial({ user }) {
                                       </button>
                                     )}
 
-                                    <div className="flex-1">
-                                      <p className="font-bold text-slate-900">
+                                    <div className="flex-1 min-w-0 overflow-hidden">
+                                      <p className="font-bold text-slate-900 break-words">
                                         {it.quantidade} {it.unidade} • {it.descricao}
                                       </p>
 
-                                      <p className="text-sm text-slate-500 mt-1">
+                                      <p className="text-sm text-slate-500 mt-1 break-words">
                                         Solicitação #{String(it.solicitacaoNumero || it.solicitacaoId).slice(-4).toUpperCase()} •
                                         {" "}Data: {it.dataSolicitacao || "-"} • Solicitante: {it.solicitante || "-"} • Prioridade: {it.prioridade || "Normal"}
                                       </p>
 
-                                      <p className="text-sm text-slate-500 mt-1">
+                                      <p className="text-sm text-slate-500 mt-1 break-words">
                                         Marca/modelo: {it.marca || "-"} • Local: {it.local || "-"}
                                       </p>
+
+                                      <ObservacaoLonga texto={it.observacao} />
 
                                       {isAdmin && (
                                         <p className="text-sm font-bold text-teal-700 mt-1">
@@ -1382,22 +1400,23 @@ export default function SolicitacoesMaterial({ user }) {
                                       )}
 
                                       {it.status === "Reprovada" && it.motivoReprovacao && (
-                                        <div className="mt-3 rounded-2xl bg-rose-50 border border-rose-100 p-3 text-sm text-rose-700">
-                                          <strong>Motivo da reprovação:</strong> {it.motivoReprovacao}
+                                        <div className="mt-3 rounded-2xl bg-rose-50 border border-rose-100 p-3 text-sm text-rose-700 overflow-hidden">
+                                          <strong>Motivo da reprovação:</strong>{" "}
+                                          <span className="break-words">{it.motivoReprovacao}</span>
                                         </div>
                                       )}
 
                                       {it.status === "Entregue" && (
-                                        <div className="mt-3 rounded-2xl bg-teal-50 border border-teal-100 p-3 text-sm text-teal-700">
-                                          <p>
+                                        <div className="mt-3 rounded-2xl bg-teal-50 border border-teal-100 p-3 text-sm text-teal-700 overflow-hidden">
+                                          <p className="break-words">
                                             <strong>Recebimento:</strong> {it.recebidoPor || "-"}{" "}
                                             {it.dataRecebimento ? `em ${it.dataRecebimento}` : ""}
                                           </p>
-                                          <p className="mt-1">
+                                          <p className="mt-1 break-words">
                                             <strong>NF:</strong> {it.numeroNotaFiscal || "Não informada"}
                                             {isAdmin && it.fornecedor && <span> • Fornecedor: {it.fornecedor}</span>}
                                           </p>
-                                          <p className="mt-1">
+                                          <p className="mt-1 break-words">
                                             <strong>Malote:</strong>{" "}
                                             {it.enviadoMalote
                                               ? `Enviado${it.dataEnvioMalote ? ` em ${it.dataEnvioMalote}` : ""}`
@@ -1409,7 +1428,7 @@ export default function SolicitacoesMaterial({ user }) {
                                   </div>
 
                                   {isAdmin && sol && (
-                                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                                    <div className="flex flex-wrap gap-2 2xl:justify-end 2xl:w-[430px] 2xl:shrink-0">
                                       <button
                                         onClick={() => aprovarItem(sol.id, it.id)}
                                         className="px-3 py-2 rounded-2xl bg-emerald-600 text-white text-xs font-bold flex items-center gap-1"
@@ -1472,32 +1491,35 @@ export default function SolicitacoesMaterial({ user }) {
             )}
 
             {listaVisivel.map((sol) => (
-              <div key={sol.id} className="rounded-3xl border border-slate-100 p-5">
+              <div key={sol.id} className="rounded-3xl border border-slate-100 p-5 overflow-hidden">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-bold text-slate-900">
+                      <h4 className="font-bold text-slate-900 break-words">
                         {sol.setor || "Área não informada"} • {sol.solicitante}
                       </h4>
                       <BadgeStatus status={statusGeral(sol)} />
                     </div>
 
-                    <p className="text-sm text-slate-500">
+                    <p className="text-sm text-slate-500 break-words">
                       Solicitação #{String(sol.numero || sol.id).slice(-4).toUpperCase()} • Data:{" "}
                       {sol.data} • Prioridade: {sol.prioridade}
                     </p>
 
                     {sol.observacaoGeral && (
-                      <p className="text-sm text-slate-500 mt-1">
-                        Obs.: {sol.observacaoGeral}
-                      </p>
+                      <div className="text-sm text-slate-500 mt-1 max-w-full overflow-hidden">
+                        <span className="font-semibold">Obs.: </span>
+                        <span className="break-all whitespace-normal">
+                          {sol.observacaoGeral}
+                        </span>
+                      </div>
                     )}
                   </div>
 
                   {isAdmin && (
                     <button
                       onClick={() => excluirSolicitacao(sol)}
-                      className="px-3 py-2 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold flex items-center gap-1"
+                      className="px-3 py-2 rounded-2xl border border-rose-200 text-rose-600 hover:bg-rose-50 text-xs font-bold flex items-center gap-1 shrink-0"
                     >
                       <Trash2 size={14} />
                       Excluir solicitação
@@ -1509,14 +1531,14 @@ export default function SolicitacoesMaterial({ user }) {
                   {(sol.itens || []).map((it, idx) => (
                     <div
                       key={it.id || idx}
-                      className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4"
+                      className="rounded-2xl border border-slate-100 bg-slate-50/60 p-4 overflow-hidden"
                     >
-                      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-                        <div className="flex gap-3 flex-1">
+                      <div className="flex flex-col 2xl:flex-row 2xl:items-start 2xl:justify-between gap-4">
+                        <div className="flex gap-3 flex-1 min-w-0">
                           {isAdmin && (
                             <button
                               onClick={() => alternarItem(it.id)}
-                              className="mt-1 text-blue-700 hover:text-blue-900"
+                              className="mt-1 text-blue-700 hover:text-blue-900 shrink-0"
                               title="Selecionar item"
                             >
                               {itemSelecionado(it.id) ? (
@@ -1527,7 +1549,7 @@ export default function SolicitacoesMaterial({ user }) {
                             </button>
                           )}
 
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0 overflow-hidden">
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                               <BadgeStatus status={it.status || "Nova"} />
                               <span className="text-xs text-slate-400">
@@ -1535,42 +1557,38 @@ export default function SolicitacoesMaterial({ user }) {
                               </span>
                             </div>
 
-                            <p className="font-bold text-slate-900">
+                            <p className="font-bold text-slate-900 break-words">
                               {it.quantidade} {it.unidade} • {it.descricao}
                             </p>
 
-                            <p className="text-sm text-slate-500">
+                            <p className="text-sm text-slate-500 break-words">
                               Marca/modelo: {it.marca || "-"} • Local: {it.local || "-"}
                             </p>
 
-                            {it.observacao && (
-                              <p className="text-sm text-slate-500 mt-1">
-                                Obs.: {it.observacao}
-                              </p>
-                            )}
+                            <ObservacaoLonga texto={it.observacao} />
 
                             {it.status === "Reprovada" && it.motivoReprovacao && (
-                              <div className="mt-3 rounded-2xl bg-rose-50 border border-rose-100 p-3 text-sm text-rose-700">
+                              <div className="mt-3 rounded-2xl bg-rose-50 border border-rose-100 p-3 text-sm text-rose-700 overflow-hidden">
                                 <strong>Motivo da reprovação:</strong>{" "}
-                                {it.motivoReprovacao}
+                                <span className="break-words">{it.motivoReprovacao}</span>
                               </div>
                             )}
 
                             {it.status === "Entregue" && (
-                              <div className="mt-3 rounded-2xl bg-teal-50 border border-teal-100 p-3 text-sm text-teal-700">
-                                <p>
+                              <div className="mt-3 rounded-2xl bg-teal-50 border border-teal-100 p-3 text-sm text-teal-700 overflow-hidden">
+                                <p className="break-words">
                                   <strong>Recebimento:</strong> {it.recebidoPor || "-"}{" "}
                                   {it.dataRecebimento ? `em ${it.dataRecebimento}` : ""}
                                 </p>
 
-                                <p className="mt-1">
+                                <p className="mt-1 break-words">
                                   <strong>NF:</strong> {it.numeroNotaFiscal || "Não informada"}
                                   {isAdmin && it.fornecedor && (
                                     <span> • Fornecedor: {it.fornecedor}</span>
                                   )}
                                 </p>
 
-                                <p className="mt-1">
+                                <p className="mt-1 break-words">
                                   <strong>Malote:</strong>{" "}
                                   {it.enviadoMalote
                                     ? `Enviado${it.dataEnvioMalote ? ` em ${it.dataEnvioMalote}` : ""}`
@@ -1578,7 +1596,7 @@ export default function SolicitacoesMaterial({ user }) {
                                 </p>
 
                                 {it.obsRecebimento && (
-                                  <p className="mt-1">Obs.: {it.obsRecebimento}</p>
+                                  <p className="mt-1 break-all">Obs.: {it.obsRecebimento}</p>
                                 )}
                               </div>
                             )}
@@ -1586,8 +1604,8 @@ export default function SolicitacoesMaterial({ user }) {
                         </div>
 
                         {isAdmin && (
-                          <div className="w-full lg:w-[480px] space-y-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                          <div className="w-full 2xl:w-[430px] 2xl:shrink-0 space-y-3 overflow-hidden">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                               <input
                                 value={it.valorUnitario || ""}
                                 onChange={(e) =>
@@ -1600,7 +1618,7 @@ export default function SolicitacoesMaterial({ user }) {
                                     valorUnitario: e.target.value,
                                   })
                                 }
-                                className="rounded-2xl border bg-white p-2 text-sm"
+                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
                                 placeholder="Valor unitário"
                               />
 
@@ -1616,7 +1634,7 @@ export default function SolicitacoesMaterial({ user }) {
                                     fornecedor: e.target.value,
                                   })
                                 }
-                                className="rounded-2xl border bg-white p-2 text-sm sm:col-span-3"
+                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
                                 placeholder="Fornecedor"
                               />
 
@@ -1632,11 +1650,11 @@ export default function SolicitacoesMaterial({ user }) {
                                     numeroNotaFiscal: e.target.value,
                                   })
                                 }
-                                className="rounded-2xl border bg-white p-2 text-sm sm:col-span-2"
+                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
                                 placeholder="Nº da nota fiscal *"
                               />
 
-                              <label className="rounded-2xl border bg-white p-2 text-sm flex items-center gap-2 sm:col-span-2">
+                              <label className="rounded-2xl border bg-white p-2 text-sm flex items-center gap-2 min-w-0">
                                 <input
                                   type="checkbox"
                                   checked={!!it.enviadoMalote}
@@ -1655,9 +1673,9 @@ export default function SolicitacoesMaterial({ user }) {
                                         : null,
                                     });
                                   }}
-                                  className="w-4 h-4"
+                                  className="w-4 h-4 shrink-0"
                                 />
-                                <span className="font-semibold text-slate-600">
+                                <span className="font-semibold text-slate-600 break-words">
                                   NF enviada ao malote
                                 </span>
                               </label>
@@ -1674,7 +1692,7 @@ export default function SolicitacoesMaterial({ user }) {
                                     recebidoPor: e.target.value,
                                   })
                                 }
-                                className="rounded-2xl border bg-white p-2 text-sm"
+                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
                                 placeholder="Recebido por"
                               />
 
@@ -1691,7 +1709,7 @@ export default function SolicitacoesMaterial({ user }) {
                                     dataRecebimento: e.target.value,
                                   })
                                 }
-                                className="rounded-2xl border bg-white p-2 text-sm"
+                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
                               />
 
                               <input
@@ -1706,7 +1724,7 @@ export default function SolicitacoesMaterial({ user }) {
                                     obsRecebimento: e.target.value,
                                   })
                                 }
-                                className="rounded-2xl border bg-white p-2 text-sm sm:col-span-2"
+                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
                                 placeholder="Obs. recebimento"
                               />
 
@@ -1723,7 +1741,7 @@ export default function SolicitacoesMaterial({ user }) {
                                     dataEnvioMalote: e.target.value,
                                   })
                                 }
-                                className="rounded-2xl border bg-white p-2 text-sm sm:col-span-2"
+                                className="rounded-2xl border bg-white p-2 text-sm min-w-0"
                                 title="Data de envio ao malote"
                               />
                             </div>
