@@ -23,6 +23,8 @@ export async function criarUsuarioSupabase(usuario) {
     perfil: usuario.perfil,
     ativo: usuario.ativo ?? true,
     permissoes: usuario.permissoes || [],
+    tema: usuario.tema || "claro",
+    preferencias: usuario.preferencias || {},
   };
 
   const { data, error } = await supabase
@@ -48,6 +50,8 @@ export async function atualizarUsuarioSupabase(id, patch) {
     perfil: patch.perfil,
     ativo: patch.ativo,
     permissoes: patch.permissoes,
+    tema: patch.tema,
+    preferencias: patch.preferencias,
     atualizado_em: new Date().toISOString(),
   };
 
@@ -64,6 +68,44 @@ export async function atualizarUsuarioSupabase(id, patch) {
 
   if (error) {
     console.error("Erro ao atualizar usuário:", error);
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+export async function atualizarTemaUsuarioSupabase(id, tema) {
+  const { data, error } = await supabase
+    .from("usuarios_app")
+    .update({
+      tema,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Erro ao atualizar tema do usuário:", error);
+    throw new Error(error.message);
+  }
+
+  return data;
+}
+
+export async function atualizarPreferenciasUsuarioSupabase(id, preferencias = {}) {
+  const { data, error } = await supabase
+    .from("usuarios_app")
+    .update({
+      preferencias,
+      atualizado_em: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Erro ao atualizar preferências do usuário:", error);
     throw new Error(error.message);
   }
 
