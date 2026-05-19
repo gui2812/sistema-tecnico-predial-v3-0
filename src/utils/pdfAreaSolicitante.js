@@ -29,13 +29,21 @@ function totalItem(item) {
   return Number(item.quantidade || 0) * dinheiroParaNumero(item.valorUnitario);
 }
 
+function numeroSolicitacao(item) {
+  const numero = String(item?.solicitacaoNumero || item?.solicitacaoId || "").trim();
+
+  if (!numero) return "-";
+
+  return `#${numero.slice(-4).toUpperCase()}`;
+}
+
 function corStatus(status) {
   const cores = {
     Nova: [255, 247, 237],
     "Em análise": [254, 243, 199],
     Aprovada: [220, 252, 231],
     Reprovada: [255, 228, 230],
-    Comprada: [224, 231, 255],
+    Comprada: [219, 234, 254],
     Entregue: [204, 251, 241],
     Cancelada: [241, 245, 249],
   };
@@ -43,9 +51,28 @@ function corStatus(status) {
   return cores[status] || [241, 245, 249];
 }
 
+function corTextoStatus(status) {
+  const cores = {
+    Nova: [146, 64, 14],
+    "Em análise": [146, 64, 14],
+    Aprovada: [4, 120, 87],
+    Reprovada: [190, 18, 60],
+    Comprada: [30, 64, 175],
+    Entregue: [15, 118, 110],
+    Cancelada: [71, 85, 105],
+  };
+
+  return cores[status] || [71, 85, 105];
+}
+
 async function carregarImagemBase64(url) {
   try {
     const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error(`Imagem não encontrada: ${url}`);
+    }
+
     const blob = await response.blob();
 
     return await new Promise((resolve, reject) => {
@@ -61,6 +88,15 @@ async function carregarImagemBase64(url) {
   }
 }
 
+function formatoImagem(base64 = "") {
+  const texto = String(base64 || "").toLowerCase();
+
+  if (texto.startsWith("data:image/png")) return "PNG";
+  if (texto.startsWith("data:image/webp")) return "WEBP";
+
+  return "JPEG";
+}
+
 function montarItens(solicitacoes = []) {
   return solicitacoes.flatMap((sol) =>
     (sol.itens || []).map((item) => ({
@@ -72,6 +108,58 @@ function montarItens(solicitacoes = []) {
       area: sol.setor || sol.areaSolicitante || "-",
     }))
   );
+}
+
+function textoDescricao(item) {
+  const linhas = [
+    textoSeguro(item.descricao),
+    item.marca ? `Marca: ${item.marca}` : "Marca: -",
+    `Solicitação ${numeroSolicitacao(item)} • Solicitante: ${textoSeguro(item.solicitante)}`,
+  ];
+
+  return linhas.join("\n");
+}
+
+function desenharCardResumo(doc, x, y, titulo, valor, largura, iconeTexto) {
+  const teal = [13, 128, 122];
+  const navy = [10, 31, 68];
+  const slate = [71, 85, 105];
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(x, y, largura, 22, 2, 2, "FD");
+
+  doc.setFillColor(204, 251, 241);
+  doc.roundedRect(x + 4, y + 5, 10, 10, 2, 2, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...teal);
+  doc.text(iconeTexto, x + 9, y + 12, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(...slate);
+  doc.text(titulo, x + 21, y + 9);
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(12);
+  doc.setTextColor(...teal);
+  doc.text(String(valor), x + 21, y + 17);
+
+  doc.setDrawColor(...navy);
+}
+
+function desenharRodape(doc, pageWidth, pageHeight, margin) {
+  doc.setDrawColor(203, 213, 225);
+  doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text("Relatório gerado pelo Sistema Técnico Predial", margin + 2, pageHeight - 7);
+  doc.text("Edifício JK 1455", pageWidth / 2, pageHeight - 7, { align: "center" });
+  doc.text("Página 1 de 1", pageWidth - margin, pageHeight - 7, { align: "right" });
 }
 
 export async function gerarPDFAreaSolicitante({
@@ -86,7 +174,7 @@ export async function gerarPDFAreaSolicitante({
   const quantidadeItens = itens.length;
 
   const doc = new jsPDF({
-    orientation: "portrait",
+    orientation: "landscape",
     unit: "mm",
     format: "a4",
   });
@@ -96,12 +184,10 @@ export async function gerarPDFAreaSolicitante({
 
   const navy = [10, 31, 68];
   const teal = [13, 128, 122];
-  const lightTeal = [236, 253, 245];
+  const darkTeal = [0, 105, 92];
   const slate = [71, 85, 105];
-  const lightBorder = [226, 232, 240];
 
-  const margin = 14;
-  let y = 16;
+  const margin = 10;
 
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 0, pageWidth, pageHeight, "F");
@@ -109,101 +195,75 @@ export async function gerarPDFAreaSolicitante({
   const logo = await carregarImagemBase64(logoUrl);
 
   if (logo) {
-    doc.addImage(logo, "JPEG", margin, y, 58, 42);
+    doc.addImage(logo, formatoImagem(logo), margin, 10, 56, 34);
   } else {
     doc.setFillColor(148, 132, 112);
-    doc.roundedRect(margin, y, 58, 42, 2, 2, "F");
+    doc.roundedRect(margin, 10, 56, 34, 2, 2, "F");
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(22);
-    doc.text("JK 1455", margin + 10, y + 25);
+    doc.setFontSize(18);
+    doc.text("JK 1455", margin + 28, 31, { align: "center" });
   }
 
   doc.setTextColor(...navy);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(21);
-  doc.text("Relatório de Solicitações por Área", 88, y + 8);
+  doc.setFontSize(18);
+  doc.text("Relatório de Solicitações por Área", 72, 15);
 
   doc.setDrawColor(...teal);
-  doc.setLineWidth(0.5);
-  doc.line(88, y + 13, pageWidth - margin, y + 13);
+  doc.setLineWidth(0.45);
+  doc.line(72, 20, 176, 20);
 
-  doc.setFontSize(14);
-  doc.text("Edifício JK 1455", 88, y + 23);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10.5);
-  doc.setTextColor(...slate);
-
-  doc.text("Área:", 88, y + 34);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(...teal);
-  doc.text(textoSeguro(area), 102, y + 34);
+  doc.setFontSize(11.5);
+  doc.setTextColor(...darkTeal);
+  doc.text("Edifício JK 1455", 72, 27);
 
   doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
   doc.setTextColor(...slate);
-  doc.text("Emitido em:", 88, y + 42);
+
+  doc.text("Área:", 72, 34);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(...teal);
-  doc.text(formatarData(new Date()), 111, y + 42);
+  doc.setTextColor(...darkTeal);
+  doc.text(textoSeguro(area), 82, 34);
 
   doc.setFont("helvetica", "normal");
   doc.setTextColor(...slate);
-  doc.text("Emitido por:", 88, y + 50);
+  doc.text("Emitido em:", 72, 40);
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(...teal);
-  doc.text(textoSeguro(usuario, "Sistema"), 111, y + 50);
+  doc.setTextColor(...darkTeal);
+  doc.text(formatarData(new Date()), 91, 40);
 
-  y = 76;
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(...slate);
+  doc.text("Emitido por:", 72, 46);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...darkTeal);
+  doc.text(textoSeguro(usuario, "Sistema"), 91, 46);
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setTextColor(...navy);
-  doc.text("Resumo executivo", margin, y);
+  doc.text("Resumo executivo", 206, 13);
 
-  doc.setDrawColor(...teal);
-  doc.line(50, y - 1, pageWidth - margin, y - 1);
-
-  y += 8;
-
-  function card(x, titulo, valor, largura = 55) {
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(...lightBorder);
-    doc.roundedRect(x, y, largura, 24, 3, 3, "FD");
-
-    doc.setFillColor(...lightTeal);
-    doc.circle(x + 10, y + 12, 7, "F");
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...slate);
-    doc.text(titulo, x + 22, y + 10);
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(...teal);
-    doc.text(String(valor), x + 22, y + 18);
-  }
-
-  card(margin, "Itens", quantidadeItens);
-  card(78, "Solicitações", quantidadeSolicitacoes);
-  card(142, "Valor total estimado", brl(totalGeral), 54);
-
-  y += 40;
+  desenharCardResumo(doc, 177, 23, "Itens", quantidadeItens, 36, "▣");
+  desenharCardResumo(doc, 218, 23, "Solicitações", quantidadeSolicitacoes, 36, "▤");
+  desenharCardResumo(doc, 259, 23, "Valor total estimado", brl(totalGeral), 29, "✓");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setTextColor(...navy);
-  doc.text(`Detalhamento de itens – ${textoSeguro(area)}`, margin, y);
+  doc.text(`Detalhamento de itens – ${textoSeguro(area)}`, margin + 8, 58);
 
   doc.setDrawColor(...teal);
-  doc.line(75, y - 1, pageWidth - margin, y - 1);
+  doc.line(margin + 65, 57, pageWidth - margin, 57);
 
   const body = itens.map((item) => [
+    `${numeroSolicitacao(item)}\n${textoSeguro(item.dataSolicitacao)}`,
+    textoSeguro(item.solicitante),
     textoSeguro(item.quantidade),
     textoSeguro(item.unidade),
-    textoSeguro(item.descricao),
-    textoSeguro(item.marca),
+    textoDescricao(item),
     textoSeguro(item.local),
     dinheiroParaNumero(item.valorUnitario)
       ? brl(dinheiroParaNumero(item.valorUnitario))
@@ -213,13 +273,14 @@ export async function gerarPDFAreaSolicitante({
   ]);
 
   autoTable(doc, {
-    startY: y + 7,
+    startY: 62,
     head: [
       [
+        "Solicitação",
+        "Solicitante",
         "Qtd",
         "Un.",
         "Descrição",
-        "Marca / Modelo",
         "Local de aplicação",
         "Valor unitário",
         "Valor total",
@@ -228,113 +289,111 @@ export async function gerarPDFAreaSolicitante({
     ],
     body: body.length
       ? body
-      : [["-", "-", "Nenhum item encontrado", "-", "-", "-", "-", "-"]],
+      : [["-", "-", "-", "-", "Nenhum item encontrado", "-", "-", "-", "-"]],
     theme: "grid",
     styles: {
       font: "helvetica",
-      fontSize: 8,
-      cellPadding: 2.2,
+      fontSize: 7.5,
+      cellPadding: 2.3,
       textColor: [15, 23, 42],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.2,
+      lineColor: [214, 221, 230],
+      lineWidth: 0.22,
       valign: "middle",
+      overflow: "linebreak",
     },
     headStyles: {
       fillColor: navy,
       textColor: [255, 255, 255],
       fontStyle: "bold",
+      fontSize: 7.5,
       halign: "center",
+      valign: "middle",
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
+    bodyStyles: {
+      minCellHeight: 14,
+    },
     columnStyles: {
-      0: { cellWidth: 11, halign: "center" },
-      1: { cellWidth: 11, halign: "center" },
-      2: { cellWidth: 39 },
-      3: { cellWidth: 30 },
-      4: { cellWidth: 32 },
-      5: { cellWidth: 24, halign: "right" },
-      6: { cellWidth: 24, halign: "right" },
-      7: { cellWidth: 20, halign: "center" },
+      0: { cellWidth: 27, halign: "center" },
+      1: { cellWidth: 32, halign: "center" },
+      2: { cellWidth: 15, halign: "center" },
+      3: { cellWidth: 13, halign: "center" },
+      4: { cellWidth: 75 },
+      5: { cellWidth: 38, halign: "center" },
+      6: { cellWidth: 27, halign: "right" },
+      7: { cellWidth: 29, halign: "right" },
+      8: { cellWidth: 25, halign: "center" },
     },
     didParseCell: (data) => {
-      if (data.section === "body" && data.column.index === 7) {
+      if (data.section === "body" && data.column.index === 4) {
+        data.cell.styles.fontStyle = "normal";
+      }
+
+      if (data.section === "body" && data.column.index === 8) {
         const status = String(data.cell.raw || "");
         data.cell.styles.fillColor = corStatus(status);
-        data.cell.styles.textColor = [30, 64, 175];
-
-        if (status === "Aprovada" || status === "Entregue") {
-          data.cell.styles.textColor = [4, 120, 87];
-        }
-
-        if (status === "Reprovada") {
-          data.cell.styles.textColor = [190, 18, 60];
-        }
+        data.cell.styles.textColor = corTextoStatus(status);
+        data.cell.styles.fontStyle = "bold";
       }
     },
     margin: { left: margin, right: margin },
   });
 
-  y = doc.lastAutoTable.finalY + 8;
+  let y = doc.lastAutoTable.finalY + 6;
 
-  const boxWidth = 88;
-  const boxX = pageWidth - margin - boxWidth;
+  if (y > pageHeight - 42) {
+    y = pageHeight - 42;
+  }
+
+  const totalBoxW = 100;
+  const totalBoxX = pageWidth - margin - totalBoxW;
 
   doc.setFillColor(240, 253, 250);
   doc.setDrawColor(...teal);
-  doc.roundedRect(boxX, y, boxWidth, 16, 2, 2, "FD");
+  doc.roundedRect(totalBoxX, y, totalBoxW, 15, 2, 2, "FD");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
-  doc.setTextColor(...navy);
-  doc.text("Total geral da área:", boxX + 5, y + 10);
+  doc.setTextColor(...darkTeal);
+  doc.text("Total geral da área:", totalBoxX + 12, y + 9.5);
 
   doc.setFontSize(16);
-  doc.setTextColor(...teal);
-  doc.text(brl(totalGeral), boxX + boxWidth - 5, y + 10, {
+  doc.setTextColor(...darkTeal);
+  doc.text(brl(totalGeral), totalBoxX + totalBoxW - 7, y + 9.8, {
     align: "right",
   });
 
-  y += 28;
+  const obsY = y + 25;
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setTextColor(...navy);
-  doc.text("Observações", margin, y);
+  doc.text("Observações", margin + 8, obsY);
 
   doc.setDrawColor(...teal);
-  doc.line(44, y - 1, pageWidth - margin, y - 1);
-
-  y += 8;
+  doc.line(margin + 44, obsY - 1, pageWidth - margin, obsY - 1);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(8);
   doc.setTextColor(...slate);
   doc.text(
     [
-      "Os valores apresentados são estimativas e poderão sofrer alterações conforme cotações e condições comerciais.",
-      `Este relatório contempla apenas as solicitações da área ${textoSeguro(area)}.`,
+      "• Os valores apresentados são estimativas e poderão sofrer alterações conforme cotações e condições comerciais.",
+      `• Este relatório contempla apenas as solicitações da área ${textoSeguro(area)}.`,
     ],
-    margin,
-    y
+    margin + 8,
+    obsY + 8
   );
 
-  const footerY = pageHeight - 16;
-
-  doc.setDrawColor(203, 213, 225);
-  doc.line(margin, footerY - 6, pageWidth - margin, footerY - 6);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text("Relatório gerado pelo Sistema Técnico Predial", margin, footerY);
-  doc.text("Edifício JK 1455", pageWidth / 2, footerY, { align: "center" });
-  doc.text("Página 1 de 1", pageWidth - margin, footerY, { align: "right" });
+  desenharRodape(doc, pageWidth, pageHeight, margin);
 
   doc.save(
     `relatorio-solicitacoes-${String(area || "area")
       .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
       .replace(/\s+/g, "-")}.pdf`
   );
 }
