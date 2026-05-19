@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   CheckSquare,
   ExternalLink,
+  FileDown,
   Link,
   PackageCheck,
   Paperclip,
@@ -29,6 +30,7 @@ import {
   verificarSenhaUsuarioSupabase,
 } from "../services/solicitacoesSupabaseService";
 import { brl, today } from "../utils/formatters";
+import { gerarPDFAreaSolicitante } from "../utils/pdfAreaSolicitante";
 import { registrarHistoricoSupabase } from "../services/historicoSupabaseService";
 import { criarNotificacaoSupabase } from "../services/notificacoesSupabaseService";
 import {
@@ -1545,6 +1547,29 @@ export default function SolicitacoesMaterial({ user }) {
       .values()
   ).sort((a, b) => b.valor - a.valor);
 
+  async function emitirPdfArea(area) {
+    const solicitacoesDaArea = listaVisivelBase.filter(
+      (sol) => (sol.setor || "Sem área") === area
+    );
+
+    if (!solicitacoesDaArea.length) {
+      alert("Nenhuma solicitação encontrada para esta área.");
+      return;
+    }
+
+    try {
+      await gerarPDFAreaSolicitante({
+        area,
+        solicitacoes: solicitacoesDaArea,
+        usuario: user?.nome || user?.usuario || "Sistema",
+        logoUrl: "/logo-jk1455.jpg",
+      });
+    } catch (err) {
+      console.error(err);
+      alert("Não foi possível gerar o PDF da área.");
+    }
+  }
+
   return (
     <div className="space-y-6 overflow-hidden">
       {erro && (
@@ -1593,6 +1618,7 @@ export default function SolicitacoesMaterial({ user }) {
                   <th className="py-2 pr-4">Área</th>
                   <th className="py-2 pr-4">Itens</th>
                   <th className="py-2 pr-4">Valor estimado</th>
+                  <th className="py-2 pr-4 text-right">PDF</th>
                 </tr>
               </thead>
 
@@ -1605,6 +1631,15 @@ export default function SolicitacoesMaterial({ user }) {
                     <td className="py-2 pr-4">{r.itens}</td>
                     <td className="py-2 pr-4 font-bold text-teal-700">
                       {brl(r.valor)}
+                    </td>
+                    <td className="py-2 pr-4 text-right">
+                      <button
+                        onClick={() => emitirPdfArea(r.area)}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700"
+                      >
+                        <FileDown size={14} />
+                        Emitir PDF
+                      </button>
                     </td>
                   </tr>
                 ))}
