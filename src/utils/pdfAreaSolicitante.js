@@ -31,10 +31,8 @@ function totalItem(item) {
 
 function numeroSolicitacao(item) {
   const numero = String(item?.solicitacaoNumero || item?.solicitacaoId || "").trim();
-
   if (!numero) return "-";
-
-  return `#${numero.slice(-4).toUpperCase()}`;
+  return `#${numero}`;
 }
 
 function corStatus(status) {
@@ -77,7 +75,6 @@ async function carregarImagemBase64(url) {
 
     return await new Promise((resolve, reject) => {
       const reader = new FileReader();
-
       reader.onloadend = () => resolve(reader.result);
       reader.onerror = reject;
       reader.readAsDataURL(blob);
@@ -120,34 +117,38 @@ function textoDescricao(item) {
   return linhas.join("\n");
 }
 
-function desenharCardResumo(doc, x, y, titulo, valor, largura, iconeTexto) {
+function desenharCardResumo(doc, x, y, titulo, valor, largura, sigla) {
   const teal = [13, 128, 122];
   const navy = [10, 31, 68];
   const slate = [71, 85, 105];
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(203, 213, 225);
-  doc.roundedRect(x, y, largura, 22, 2, 2, "FD");
+  doc.roundedRect(x, y, largura, 24, 2, 2, "FD");
 
   doc.setFillColor(204, 251, 241);
-  doc.roundedRect(x + 4, y + 5, 10, 10, 2, 2, "F");
+  doc.roundedRect(x + 4, y + 6, 10, 10, 2, 2, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(8);
+  doc.setFontSize(7.5);
   doc.setTextColor(...teal);
-  doc.text(iconeTexto, x + 9, y + 12, { align: "center" });
+  doc.text(sigla, x + 9, y + 12.3, { align: "center" });
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
+  doc.setFontSize(7.2);
   doc.setTextColor(...slate);
-  doc.text(titulo, x + 21, y + 9);
+
+  const tituloLinhas = doc.splitTextToSize(String(titulo), largura - 20);
+  doc.text(tituloLinhas, x + 18, y + 8.5);
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(...teal);
-  doc.text(String(valor), x + 21, y + 17);
+  doc.setTextColor(...navy);
 
-  doc.setDrawColor(...navy);
+  const valorTexto = String(valor);
+  const valorFonte = valorTexto.length > 12 ? 10 : 12.5;
+
+  doc.setFontSize(valorFonte);
+  doc.text(valorTexto, x + largura - 4, y + 18, { align: "right" });
 }
 
 function desenharRodape(doc, pageWidth, pageHeight, margin) {
@@ -212,7 +213,7 @@ export async function gerarPDFAreaSolicitante({
 
   doc.setDrawColor(...teal);
   doc.setLineWidth(0.45);
-  doc.line(72, 20, 176, 20);
+  doc.line(72, 20, 175, 20);
 
   doc.setFontSize(11.5);
   doc.setTextColor(...darkTeal);
@@ -244,11 +245,12 @@ export async function gerarPDFAreaSolicitante({
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setTextColor(...navy);
-  doc.text("Resumo executivo", 206, 13);
+  doc.text("Resumo executivo", 204, 13);
 
-  desenharCardResumo(doc, 177, 23, "Itens", quantidadeItens, 36, "▣");
-  desenharCardResumo(doc, 218, 23, "Solicitações", quantidadeSolicitacoes, 36, "▤");
-  desenharCardResumo(doc, 259, 23, "Valor total estimado", brl(totalGeral), 29, "✓");
+  // cards do resumo - corrigidos
+  desenharCardResumo(doc, 176, 23, "Itens", quantidadeItens, 36, "IT");
+  desenharCardResumo(doc, 215, 23, "Solicitações", quantidadeSolicitacoes, 36, "SL");
+  desenharCardResumo(doc, 254, 23, "Valor total estimado", brl(totalGeral), 33, "R$");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
@@ -327,10 +329,6 @@ export async function gerarPDFAreaSolicitante({
       8: { cellWidth: 25, halign: "center" },
     },
     didParseCell: (data) => {
-      if (data.section === "body" && data.column.index === 4) {
-        data.cell.styles.fontStyle = "normal";
-      }
-
       if (data.section === "body" && data.column.index === 8) {
         const status = String(data.cell.raw || "");
         data.cell.styles.fillColor = corStatus(status);
@@ -341,10 +339,13 @@ export async function gerarPDFAreaSolicitante({
     margin: { left: margin, right: margin },
   });
 
-  let y = doc.lastAutoTable.finalY + 6;
+  // AJUSTE DE ESPAÇAMENTO FINAL
+  let y = doc.lastAutoTable.finalY + 5;
 
-  if (y > pageHeight - 42) {
-    y = pageHeight - 42;
+  // reserva espaço melhor para total + observações + rodapé
+  const espacoMinimoFinal = 38;
+  if (y > pageHeight - espacoMinimoFinal) {
+    y = pageHeight - espacoMinimoFinal;
   }
 
   const totalBoxW = 100;
@@ -365,7 +366,7 @@ export async function gerarPDFAreaSolicitante({
     align: "right",
   });
 
-  const obsY = y + 25;
+  const obsY = y + 18;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
@@ -373,7 +374,7 @@ export async function gerarPDFAreaSolicitante({
   doc.text("Observações", margin + 8, obsY);
 
   doc.setDrawColor(...teal);
-  doc.line(margin + 44, obsY - 1, pageWidth - margin, obsY - 1);
+  doc.line(margin + 43, obsY - 1, pageWidth - margin, obsY - 1);
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
@@ -384,7 +385,7 @@ export async function gerarPDFAreaSolicitante({
       `• Este relatório contempla apenas as solicitações da área ${textoSeguro(area)}.`,
     ],
     margin + 8,
-    obsY + 8
+    obsY + 7
   );
 
   desenharRodape(doc, pageWidth, pageHeight, margin);
