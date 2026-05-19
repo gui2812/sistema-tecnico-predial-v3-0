@@ -247,7 +247,6 @@ export async function gerarPDFAreaSolicitante({
   doc.setTextColor(...navy);
   doc.text("Resumo executivo", 204, 13);
 
-  // cards do resumo - corrigidos
   desenharCardResumo(doc, 176, 23, "Itens", quantidadeItens, 36, "IT");
   desenharCardResumo(doc, 215, 23, "Solicitações", quantidadeSolicitacoes, 36, "SL");
   desenharCardResumo(doc, 254, 23, "Valor total estimado", brl(totalGeral), 33, "R$");
@@ -295,11 +294,11 @@ export async function gerarPDFAreaSolicitante({
     theme: "grid",
     styles: {
       font: "helvetica",
-      fontSize: 7.5,
-      cellPadding: 2.3,
+      fontSize: 7.3,
+      cellPadding: 2.2,
       textColor: [15, 23, 42],
-      lineColor: [214, 221, 230],
-      lineWidth: 0.22,
+      lineColor: [220, 226, 235],
+      lineWidth: 0.18,
       valign: "middle",
       overflow: "linebreak",
     },
@@ -307,12 +306,12 @@ export async function gerarPDFAreaSolicitante({
       fillColor: navy,
       textColor: [255, 255, 255],
       fontStyle: "bold",
-      fontSize: 7.5,
+      fontSize: 7.4,
       halign: "center",
       valign: "middle",
     },
     alternateRowStyles: {
-      fillColor: [248, 250, 252],
+      fillColor: [250, 252, 255],
     },
     bodyStyles: {
       minCellHeight: 14,
@@ -330,43 +329,71 @@ export async function gerarPDFAreaSolicitante({
     },
     didParseCell: (data) => {
       if (data.section === "body" && data.column.index === 8) {
+        data.cell.text = [String(data.cell.raw || "")];
+        data.cell.styles.textColor = [255, 255, 255];
+      }
+    },
+    didDrawCell: (data) => {
+      if (data.section === "body" && data.column.index === 8) {
         const status = String(data.cell.raw || "");
-        data.cell.styles.fillColor = corStatus(status);
-        data.cell.styles.textColor = corTextoStatus(status);
-        data.cell.styles.fontStyle = "bold";
+        const fill = corStatus(status);
+        const text = corTextoStatus(status);
+
+        const cell = data.cell;
+        const pillW = Math.min(cell.width - 4, 20);
+        const pillH = 6.5;
+        const pillX = cell.x + (cell.width - pillW) / 2;
+        const pillY = cell.y + (cell.height - pillH) / 2;
+
+        doc.setFillColor(...fill);
+        doc.roundedRect(pillX, pillY, pillW, pillH, 2, 2, "F");
+
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(7);
+        doc.setTextColor(...text);
+        doc.text(status, cell.x + cell.width / 2, pillY + 4.5, {
+          align: "center",
+        });
       }
     },
     margin: { left: margin, right: margin },
   });
 
-  // AJUSTE DE ESPAÇAMENTO FINAL
   let y = doc.lastAutoTable.finalY + 5;
 
-  // reserva espaço melhor para total + observações + rodapé
   const espacoMinimoFinal = 38;
+
   if (y > pageHeight - espacoMinimoFinal) {
     y = pageHeight - espacoMinimoFinal;
   }
 
-  const totalBoxW = 100;
+  const totalBoxW = 104;
   const totalBoxX = pageWidth - margin - totalBoxW;
 
   doc.setFillColor(240, 253, 250);
   doc.setDrawColor(...teal);
-  doc.roundedRect(totalBoxX, y, totalBoxW, 15, 2, 2, "FD");
+  doc.roundedRect(totalBoxX, y, totalBoxW, 16, 2, 2, "FD");
+
+  doc.setFillColor(204, 251, 241);
+  doc.circle(totalBoxX + 11, y + 8, 4.5, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(8);
+  doc.setTextColor(...darkTeal);
+  doc.text("R$", totalBoxX + 11, y + 10.3, { align: "center" });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(...darkTeal);
-  doc.text("Total geral da área:", totalBoxX + 12, y + 9.5);
+  doc.text("Total geral da área:", totalBoxX + 22, y + 9.8);
 
   doc.setFontSize(16);
   doc.setTextColor(...darkTeal);
-  doc.text(brl(totalGeral), totalBoxX + totalBoxW - 7, y + 9.8, {
+  doc.text(brl(totalGeral), totalBoxX + totalBoxW - 7, y + 10.2, {
     align: "right",
   });
 
-  const obsY = y + 18;
+  const obsY = y + 19;
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
