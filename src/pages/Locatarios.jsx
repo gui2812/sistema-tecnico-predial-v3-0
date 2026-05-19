@@ -9,12 +9,17 @@ import {
   Upload,
   Zap
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Cell, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import CardResumo from '../components/CardResumo';
 import Tabela from '../components/Tabela';
-import { addItem, deleteItem, getItem } from '../services/storageService';
 import { calcularConsumosLocatarios, parseMedicoes } from '../utils/calculosLocatarios';
+import {
+  criarMedicaoLocatariosSupabase,
+  excluirMedicaoLocatariosSupabase,
+  listarMedicoesLocatariosSupabase,
+} from '../services/medicoesLocatariosSupabaseService';
+import { registrarHistoricoSupabase } from '../services/historicoSupabaseService';
 import { int, today } from '../utils/formatters';
 
 const UNIDADES_PADRAO = [
@@ -193,17 +198,15 @@ function aplicarTextoNasLinhas(linhas, texto, campo) {
   }));
 }
 
-export default function Locatarios(){
-  const historicoInicial = getItem('medicoes', []);
-  const ultimaMedicao = historicoInicial[0];
-  const unidadesFixas = unidadesDoHistorico(historicoInicial);
+export default function Locatarios({ user }){
+  const [historico, setHistorico] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [medicaoSelecionadaId, setMedicaoSelecionadaId] = useState('');
 
-  const [historico, setHistorico] = useState(historicoInicial);
-  const [medicaoSelecionadaId, setMedicaoSelecionadaId] = useState(ultimaMedicao?.id || '');
-
-  const [mes,setMes]=useState(ultimaMedicao?.mes || today());
-  const [data,setData]=useState(ultimaMedicao?.dataMedicao || today());
-  const [linhasTabela,setLinhasTabela]=useState(() => linhasPelaMedicao(ultimaMedicao, unidadesFixas));
+  const [mes,setMes]=useState(today());
+  const [data,setData]=useState(today());
+  const [linhasTabela,setLinhasTabela]=useState(() => criarLinhasTabela(UNIDADES_PADRAO));
   const [importacaoAnterior,setImportacaoAnterior]=useState('');
   const [importacaoAtual,setImportacaoAtual]=useState('');
 
@@ -217,19 +220,53 @@ export default function Locatarios(){
     [linhasTabela]
   );
 
-  const [resultado,setResultado]=useState(() => {
-    if (ultimaMedicao?.resumo) return ultimaMedicao.resumo;
-
-    if (ultimaMedicao?.anterior && ultimaMedicao?.atual) {
-      return calcularConsumosLocatarios(ultimaMedicao.anterior, ultimaMedicao.atual);
-    }
-
-    return calcularConsumosLocatarios('', '');
-  });
+  const [resultado,setResultado]=useState(() => calcularConsumosLocatarios('', ''));
 
   const [busca,setBusca]=useState('');
   const [filtroAlerta,setFiltroAlerta]=useState('Todos');
   const [versao,setVersao]=useState(0);
+
+  async function carregarHistorico() {
+    setCarregando(true);
+
+    try {
+      const lista = await listarMedicoesLocatariosSupabase();
+      setHistorico(lista);
+
+      if (lista.length > 0) {
+        const ultima = lista[0];
+        const unidades = unidadesDoHistorico(lista);
+
+        setMedicaoSelecionadaId(ultima.id);
+        setMes(ultima?.mes || today());
+        setData(ultima?.dataMedicao || today());
+        setLinhasTabela(linhasPelaMedicao(ultima, unidades));
+
+        if (ultima?.resumo) {
+          setResultado(ultima.resumo);
+        } else {
+          setResultado(calcularConsumosLocatarios(ultima?.anterior || '', ultima?.atual || ''));
+        }
+      } else {
+        setMedicaoSelecionadaId('');
+        setMes(today());
+        setData(today());
+        setLinhasTabela(criarLinhasTabela(UNIDADES_PADRAO));
+        setResultado(calcularConsumosLocatarios('', ''));
+      }
+
+      setVersao(v => v + 1);
+    } catch (err) {
+      console.error(err);
+      alert('Não foi possível carregar as medições do Supabase.');
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  useEffect(() => {
+    carregarHistorico();
+  }, []);
 
   const linhasAnalisadas = useMemo(() => gerarAnalise(resultado.linhas || [], historico), [resultado, historico, versao]);
 
@@ -348,7 +385,7 @@ export default function Locatarios(){
     alert('Leituras atuais importadas para a tabela.');
   }
 
-  function salvar(){
+  async function salvar(){
     const r = calcularConsumosLocatarios(anterior,atual);
     const analise = gerarAnalise(r.linhas, historico);
 
@@ -357,27 +394,65 @@ export default function Locatarios(){
       return;
     }
 
-    const novaMedicao = addItem('medicoes',{
-      mes,
-      dataMedicao:data,
-      anterior,
-      atual,
-      linhas:r.linhas,
-      resumo:r,
-      analise
-    });
+    setSalvando(true);
 
-    setHistorico([novaMedicao, ...historico]);
-    setMedicaoSelecionadaId(novaMedicao.id);
-    setResultado(r);
-    setVersao(v=>v+1);
-    alert('Medição de energia salva no histórico.');
+    try {
+      const novaMedicao = await criarMedicaoLocatariosSupabase({
+        mes,
+        dataMedicao: data,
+        anterior,
+        atual,
+        linhas: r.linhas,
+        resumo: r,
+        analise,
+        criadoPor: user?.nome || user?.usuario || '',
+        criadoPorId: user?.id || null,
+      });
+
+      try {
+        await registrarHistoricoSupabase({
+          tipo: 'Energia dos Locatários',
+          modulo: 'Energia dos Locatários',
+          acao: 'Medição salva',
+          descricao: `Medição de energia dos locatários salva com total de ${r.total || 0} kWh.`,
+          usuario: user?.nome || user?.usuario || 'Sistema',
+          usuario_id: user?.id || null,
+          referencia_id: novaMedicao?.id || null,
+          dados: {
+            dataMedicao: data,
+            dataAnterior: mes,
+            total: r.total,
+            quantidade: r.quantidade,
+            media: r.media,
+          },
+        });
+      } catch (errHistorico) {
+        console.error('Erro ao registrar histórico da medição:', errHistorico);
+      }
+
+      setHistorico([novaMedicao, ...historico]);
+      setMedicaoSelecionadaId(novaMedicao.id);
+      setResultado(r);
+      setVersao(v=>v+1);
+      alert('Medição de energia salva no Supabase.');
+    } catch (err) {
+      console.error(err);
+      alert('Não foi possível salvar a medição no Supabase. ' + (err?.message || ''));
+    } finally {
+      setSalvando(false);
+    }
   }
 
-  function excluirMedicao(id){
+  async function excluirMedicao(id){
     if(!confirm('Deseja realmente excluir esta medição?')) return;
 
-    deleteItem('medicoes', id);
+    try {
+      await excluirMedicaoLocatariosSupabase(id);
+    } catch (err) {
+      console.error(err);
+      alert('Não foi possível excluir a medição do Supabase.');
+      return;
+    }
 
     const novoHistorico = historico.filter((m) => m.id !== id);
     setHistorico(novoHistorico);
@@ -418,7 +493,20 @@ export default function Locatarios(){
       <p className="text-slate-300 mt-2">
         Preencha as leituras em uma tabela fixa por unidade. A última medição salva pode virar automaticamente o mês anterior.
       </p>
+
+      <button
+        onClick={carregarHistorico}
+        className="mt-4 px-4 py-2 rounded-2xl bg-white/10 border border-white/10 text-white text-sm font-semibold"
+      >
+        Atualizar medições
+      </button>
     </div>
+
+    {carregando && (
+      <div className="bg-blue-50 border border-blue-100 text-blue-700 rounded-2xl p-4 text-sm">
+        Carregando medições salvas no Supabase...
+      </div>
+    )}
 
     <div className="bg-white rounded-3xl shadow-sm border border-slate-100 p-5">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
@@ -658,9 +746,10 @@ export default function Locatarios(){
 
         <button
           onClick={salvar}
-          className="px-5 py-3 rounded-2xl bg-teal-600 text-white font-semibold flex gap-2"
+          disabled={salvando}
+          className="px-5 py-3 rounded-2xl bg-teal-600 text-white font-semibold flex gap-2 disabled:opacity-60"
         >
-          <Save size={18}/>Salvar medição
+          <Save size={18}/>{salvando ? 'Salvando...' : 'Salvar medição'}
         </button>
       </div>
     </div>
