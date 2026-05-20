@@ -16,6 +16,21 @@ function dataOuNulo(valor) {
   return texto ? texto : null;
 }
 
+function parseBRNumber(valor) {
+  if (valor === null || valor === undefined || valor === "") return null;
+
+  if (typeof valor === "number") return valor;
+
+  const texto = String(valor)
+    .replace(/[R$\s]/g, "")
+    .replace(/\./g, "")
+    .replace(",", ".");
+
+  const numero = Number(texto);
+
+  return Number.isFinite(numero) ? numero : null;
+}
+
 export async function listarSolicitacoesSupabase() {
   const { data, error } = await supabase
     .from("solicitacoes_material")
@@ -62,7 +77,8 @@ export async function criarSolicitacaoSupabase(solicitacao, itens = []) {
       unidade: item.unidade || "",
       descricao: item.descricao,
       marca_modelo: item.marca_modelo || item.marcaModelo || item.marca || "",
-      local_aplicacao: item.local_aplicacao || item.localAplicacao || item.local || "",
+      local_aplicacao:
+        item.local_aplicacao || item.localAplicacao || item.local || "",
       urgencia: item.urgencia || "",
       observacao: item.observacao || "",
       status: item.status || "Nova",
@@ -117,20 +133,31 @@ export async function atualizarItemSolicitacaoSupabase(id, patch) {
     unidade: patch.unidade,
     descricao: patch.descricao,
     marca_modelo: patch.marca_modelo ?? patch.marcaModelo ?? patch.marca,
-    local_aplicacao: patch.local_aplicacao ?? patch.localAplicacao ?? patch.local,
+    local_aplicacao:
+      patch.local_aplicacao ?? patch.localAplicacao ?? patch.local,
     urgencia: patch.urgencia,
     observacao: patch.observacao,
     status: patch.status,
     motivo_reprovacao: patch.motivo_reprovacao ?? patch.motivoReprovacao,
-    valor_unitario: patch.valor_unitario ?? patch.valorUnitario,
+
+    valor_unitario:
+      patch.valor_unitario !== undefined || patch.valorUnitario !== undefined
+        ? parseBRNumber(patch.valor_unitario ?? patch.valorUnitario)
+        : undefined,
+
     fornecedor: patch.fornecedor,
     numero_nota_fiscal:
       patch.numero_nota_fiscal ?? patch.numeroNotaFiscal ?? patch.notaFiscal,
     recebido_por: patch.recebido_por ?? patch.recebidoPor,
-    data_recebimento: dataOuNulo(patch.data_recebimento ?? patch.dataRecebimento),
+    data_recebimento: dataOuNulo(
+      patch.data_recebimento ?? patch.dataRecebimento
+    ),
     observacao_recebimento:
-      patch.observacao_recebimento ?? patch.obsRecebimento ?? patch.observacaoRecebimento,
-    enviado_malote: patch.enviado_malote ?? patch.enviadoMalote ?? patch.maloteEnviado,
+      patch.observacao_recebimento ??
+      patch.obsRecebimento ??
+      patch.observacaoRecebimento,
+    enviado_malote:
+      patch.enviado_malote ?? patch.enviadoMalote ?? patch.maloteEnviado,
     data_envio_malote: dataOuNulo(
       patch.data_envio_malote ?? patch.dataEnvioMalote ?? patch.dataMalote
     ),
@@ -164,10 +191,20 @@ export async function atualizarItensEmLoteSupabase(ids, patch) {
     status: patch.status,
     motivo_reprovacao: patch.motivo_reprovacao ?? patch.motivoReprovacao,
     fornecedor: patch.fornecedor,
+
+    valor_unitario:
+      patch.valor_unitario !== undefined || patch.valorUnitario !== undefined
+        ? parseBRNumber(patch.valor_unitario ?? patch.valorUnitario)
+        : undefined,
+
     recebido_por: patch.recebido_por ?? patch.recebidoPor,
-    data_recebimento: dataOuNulo(patch.data_recebimento ?? patch.dataRecebimento),
+    data_recebimento: dataOuNulo(
+      patch.data_recebimento ?? patch.dataRecebimento
+    ),
     observacao_recebimento:
-      patch.observacao_recebimento ?? patch.obsRecebimento ?? patch.observacaoRecebimento,
+      patch.observacao_recebimento ??
+      patch.obsRecebimento ??
+      patch.observacaoRecebimento,
     atualizado_por: patch.atualizado_por ?? patch.atualizadoPor,
     atualizado_em: new Date().toISOString(),
   };
