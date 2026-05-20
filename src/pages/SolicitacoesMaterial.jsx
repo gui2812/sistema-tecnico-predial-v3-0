@@ -63,6 +63,7 @@ const itemVazio = {
 const statusItem = [
   "Nova",
   "Em análise",
+  "Ajuste solicitado",
   "Aprovada",
   "Reprovada",
   "Comprada",
@@ -192,6 +193,7 @@ function statusGeral(sol) {
     return "Comprada";
   }
   if (itens.some((i) => i.status === "Aprovada")) return "Aprovada";
+  if (itens.some((i) => i.status === "Ajuste solicitado")) return "Ajuste solicitado";
   if (itens.some((i) => i.status === "Reprovada")) return "Em análise";
 
   return sol.status || "Nova";
@@ -201,6 +203,7 @@ function BadgeStatus({ status }) {
   const estilos = {
     Nova: "bg-blue-50 text-blue-700",
     "Em análise": "bg-amber-50 text-amber-700",
+    "Ajuste solicitado": "bg-orange-50 text-orange-700",
     Aprovada: "bg-emerald-50 text-emerald-700",
     Reprovada: "bg-rose-50 text-rose-700",
     Comprada: "bg-indigo-50 text-indigo-700",
@@ -819,8 +822,8 @@ export default function SolicitacoesMaterial({ user }) {
       user?.nome || "Sistema"
     }\nData: ${formatarDataNotificacao()}`;
 
-    if (novoStatus === "Reprovada" && motivo) {
-      msg += `\nMotivo: ${motivo}`;
+    if ((novoStatus === "Reprovada" || novoStatus === "Ajuste solicitado") && motivo) {
+      msg += `\nMotivo/ajuste solicitado: ${motivo}`;
     }
 
     return msg;
@@ -839,7 +842,7 @@ export default function SolicitacoesMaterial({ user }) {
       destinatario_setor: sol.setor || "",
       referencia_id: sol.id || null,
       criada_por: user?.nome || user?.usuario || "Sistema",
-      prioridade: novoStatus === "Reprovada" ? "alta" : "normal",
+      prioridade: novoStatus === "Reprovada" || novoStatus === "Ajuste solicitado" ? "alta" : "normal",
     });
 
     if (novoStatus === "Entregue" && !it.enviadoMalote) {
@@ -1226,6 +1229,12 @@ export default function SolicitacoesMaterial({ user }) {
   async function salvarDadosAdminItem(it) {
     try {
       await atualizarItemSolicitacaoSupabase(it.id, {
+        quantidade: it.quantidade || "",
+        unidade: it.unidade || "un",
+        descricao: it.descricao || "",
+        marca: it.marca || "",
+        local: it.local || "",
+        observacao: it.observacao || "",
         valorUnitario: it.valorUnitario || "",
         fornecedor: it.fornecedor || "",
         numeroNotaFiscal: it.numeroNotaFiscal || "",
@@ -1290,6 +1299,65 @@ export default function SolicitacoesMaterial({ user }) {
       status: "Reprovada",
       motivoReprovacao: motivo.trim(),
     });
+  }
+
+  function devolverItemParaAjuste(solId, itemId, atual = "") {
+    const motivo = window.prompt(
+      "Informe o que o solicitante precisa ajustar neste item:",
+      atual || ""
+    );
+
+    if (!motivo || !motivo.trim()) {
+      alert("Para devolver para ajuste, informe o que precisa ser corrigido.");
+      return;
+    }
+
+    atualizarItem(solId, itemId, {
+      status: "Ajuste solicitado",
+      motivoReprovacao: motivo.trim(),
+    });
+  }
+
+  async function reenviarItemAjustado(solId, it) {
+    if (!String(it.quantidade || "").trim() || !String(it.descricao || "").trim()) {
+      alert("Preencha quantidade e descrição antes de reenviar.");
+      return;
+    }
+
+    if (localObrigatorio && !String(it.local || "").trim()) {
+      alert("Informe o local de aplicação antes de reenviar.");
+      return;
+    }
+
+    try {
+      await atualizarItemSolicitacaoSupabase(it.id, {
+        quantidade: it.quantidade || "",
+        unidade: it.unidade || "un",
+        descricao: it.descricao || "",
+        marca: it.marca || "",
+        local: it.local || "",
+        observacao: it.observacao || "",
+        status: "Em análise",
+        motivoReprovacao: "",
+        atualizado_por: user?.nome || user?.usuario || "Solicitante",
+      });
+
+      await registrarHistorico(
+        "Item ajustado pelo solicitante",
+        `Item "${it.descricao}" foi ajustado e reenviado para análise.`,
+        it.id,
+        {
+          solicitacaoId: solId,
+          item: it,
+        }
+      );
+
+      await carregarSolicitacoes();
+      alert("Item reenviado para análise.");
+    } catch (err) {
+      console.error(err);
+      alert("Não foi possível reenviar o item ajustado.");
+    }
   }
 
   function marcarCompradoItem(solId, itemId, itemAtual) {
@@ -1998,6 +2066,20 @@ export default function SolicitacoesMaterial({ user }) {
                                         </p>
                                       )}
 
+                                      {it.status === "Ajuste solicitado" && it.motivoReprovacao && (
+                                        <div className="mt-3 rounded-2xl bg-orange-50 border border-orange-100 p-3 text-sm text-orange-700 overflow-hidden">
+                                          <strong>Ajuste solicitado:</strong>{" "}
+                                          <span className="break-words">{it.motivoReprovacao}</span>
+                                        </div>
+                                      )}
+
+                                      {it.status === "Ajuste solicitado" && it.motivoReprovacao && (
+                                        <div className="mt-3 rounded-2xl bg-orange-50 border border-orange-100 p-3 text-sm text-orange-700 overflow-hidden">
+                                          <strong>Ajuste solicitado:</strong>{" "}
+                                          <span className="break-words">{it.motivoReprovacao}</span>
+                                        </div>
+                                      )}
+
                                       {it.status === "Reprovada" && it.motivoReprovacao && (
                                         <div className="mt-3 rounded-2xl bg-rose-50 border border-rose-100 p-3 text-sm text-rose-700 overflow-hidden">
                                           <strong>Motivo da reprovação:</strong>{" "}
@@ -2279,6 +2361,80 @@ export default function SolicitacoesMaterial({ user }) {
                                 <div className="rounded-2xl bg-slate-50 border border-slate-100 p-3 space-y-3">
                                   <div>
                                     <p className="text-xs font-black text-slate-700 mb-2">
+                                      Dados do item
+                                    </p>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                                      <input
+                                        value={it.quantidade || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            quantidade: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Quantidade"
+                                      />
+
+                                      <input
+                                        value={it.unidade || "un"}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            unidade: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Unidade"
+                                      />
+
+                                      <input
+                                        value={it.descricao || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            descricao: e.target.value,
+                                          })
+                                        }
+                                        className="sm:col-span-2 rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Descrição do material"
+                                      />
+
+                                      <input
+                                        value={it.marca || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            marca: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Marca/modelo"
+                                      />
+
+                                      <input
+                                        value={it.local || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            local: e.target.value,
+                                          })
+                                        }
+                                        className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                        placeholder="Local de aplicação"
+                                      />
+
+                                      <textarea
+                                        value={it.observacao || ""}
+                                        onChange={(e) =>
+                                          atualizarItemLocal(sol.id, it.id, {
+                                            observacao: e.target.value,
+                                          })
+                                        }
+                                        className="sm:col-span-2 rounded-2xl border bg-white p-2 text-sm min-h-20 min-w-0"
+                                        placeholder="Link do item / orçamento"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  <div>
+                                    <p className="text-xs font-black text-slate-700 mb-2">
                                       Dados administrativos
                                     </p>
 
@@ -2458,6 +2614,16 @@ export default function SolicitacoesMaterial({ user }) {
                               </button>
 
                               <button
+                                onClick={() =>
+                                  devolverItemParaAjuste(sol.id, it.id, it.motivoReprovacao)
+                                }
+                                className="px-3 py-2 rounded-2xl bg-orange-500 text-white text-xs font-bold flex items-center gap-1"
+                              >
+                                <RefreshCcw size={14} />
+                                Devolver ajuste
+                              </button>
+
+                              <button
                                 onClick={() => marcarCompradoItem(sol.id, it.id, it)}
                                 className="px-3 py-2 rounded-2xl bg-indigo-600 text-white text-xs font-bold flex items-center gap-1"
                               >
@@ -2503,6 +2669,98 @@ export default function SolicitacoesMaterial({ user }) {
                               </select>
                             </div>
                           </div>                        )}
+
+                        {!isAdmin && it.status === "Ajuste solicitado" && (
+                          <div className="w-full 2xl:w-[430px] 2xl:shrink-0">
+                            <div className="rounded-2xl bg-orange-50 border border-orange-100 p-3 space-y-3">
+                              <p className="text-xs font-black text-orange-700">
+                                Ajuste solicitado pelo administrador
+                              </p>
+
+                              {it.motivoReprovacao && (
+                                <p className="text-sm text-orange-700 break-words">
+                                  {it.motivoReprovacao}
+                                </p>
+                              )}
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                  value={it.quantidade || ""}
+                                  onChange={(e) =>
+                                    atualizarItemLocal(sol.id, it.id, {
+                                      quantidade: e.target.value,
+                                    })
+                                  }
+                                  className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                  placeholder="Quantidade"
+                                />
+
+                                <input
+                                  value={it.unidade || "un"}
+                                  onChange={(e) =>
+                                    atualizarItemLocal(sol.id, it.id, {
+                                      unidade: e.target.value,
+                                    })
+                                  }
+                                  className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                  placeholder="Unidade"
+                                />
+
+                                <input
+                                  value={it.descricao || ""}
+                                  onChange={(e) =>
+                                    atualizarItemLocal(sol.id, it.id, {
+                                      descricao: e.target.value,
+                                    })
+                                  }
+                                  className="sm:col-span-2 rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                  placeholder="Descrição do material"
+                                />
+
+                                <input
+                                  value={it.marca || ""}
+                                  onChange={(e) =>
+                                    atualizarItemLocal(sol.id, it.id, {
+                                      marca: e.target.value,
+                                    })
+                                  }
+                                  className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                  placeholder="Marca/modelo"
+                                />
+
+                                <input
+                                  value={it.local || ""}
+                                  onChange={(e) =>
+                                    atualizarItemLocal(sol.id, it.id, {
+                                      local: e.target.value,
+                                    })
+                                  }
+                                  className="rounded-2xl border bg-white p-2 text-sm min-w-0"
+                                  placeholder={localObrigatorio ? "Local de aplicação *" : "Local de aplicação"}
+                                />
+
+                                <textarea
+                                  value={it.observacao || ""}
+                                  onChange={(e) =>
+                                    atualizarItemLocal(sol.id, it.id, {
+                                      observacao: e.target.value,
+                                    })
+                                  }
+                                  className="sm:col-span-2 rounded-2xl border bg-white p-2 text-sm min-h-20 min-w-0"
+                                  placeholder="Link do item / orçamento"
+                                />
+                              </div>
+
+                              <button
+                                onClick={() => reenviarItemAjustado(sol.id, it)}
+                                className="px-4 py-2 rounded-2xl bg-orange-600 text-white text-xs font-bold flex items-center gap-1"
+                              >
+                                <Save size={14} />
+                                Reenviar para análise
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
