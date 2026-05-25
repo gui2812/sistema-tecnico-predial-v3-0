@@ -194,7 +194,7 @@ function CardResumo({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
   const c = cores[cor] || cores.blue;
 
   return (
-    <div className={`rounded-3xl border p-5 min-w-0 ${c.box}`}>
+    <div className={`rounded-3xl border p-5 min-w-0 overflow-hidden ${c.box}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-[11px] font-black uppercase opacity-80 leading-tight">
@@ -232,15 +232,26 @@ function MiniCard({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
   };
 
   return (
-    <div className={`rounded-2xl border p-4 min-w-0 ${cores[cor] || cores.blue}`}>
-      <Icon size={20} className="mb-3" />
-      <p className="text-[10px] uppercase font-black opacity-75 leading-tight">
-        {titulo}
-      </p>
-      <p className="text-base 2xl:text-lg font-black mt-1 whitespace-nowrap">
-        {valor}
-      </p>
-      <p className="text-[11px] font-semibold opacity-70 mt-1">{subtitulo}</p>
+    <div className={`rounded-2xl border p-4 min-w-0 overflow-hidden ${cores[cor] || cores.blue}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase font-black opacity-75 leading-tight">
+            {titulo}
+          </p>
+
+          <p className="text-lg 2xl:text-xl font-black mt-2 leading-tight break-words">
+            {valor}
+          </p>
+
+          <p className="text-[11px] font-semibold opacity-70 mt-1">
+            {subtitulo}
+          </p>
+        </div>
+
+        <div className="w-9 h-9 rounded-xl bg-white/70 flex items-center justify-center shrink-0">
+          <Icon size={18} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -281,11 +292,11 @@ function MiniRelatorioPreview({ resultado }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_1fr_220px] gap-6 mt-6">
+      <div className="grid grid-cols-1 2xl:grid-cols-[1fr_0.9fr_220px] gap-6 mt-6">
         <div>
           <h4 className="font-black text-slate-900 mb-4">Resumo executivo</h4>
 
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-3 gap-4">
             <MiniCard
               titulo="Mês referência"
               valor={resultado.mesReferencia || "-"}
@@ -335,12 +346,12 @@ function MiniRelatorioPreview({ resultado }) {
           </div>
         </div>
 
-        <div className="border-l border-slate-200 xl:pl-6">
+        <div className="border-l border-slate-200 2xl:pl-6">
           <h4 className="font-black text-slate-900 mb-4">
             Detalhamento do consumo
           </h4>
 
-          <div className="flex flex-col sm:flex-row items-center gap-5">
+          <div className="flex flex-col sm:flex-row 2xl:flex-col items-center gap-5">
             <div
               className="w-32 h-32 rounded-full shrink-0"
               style={{
