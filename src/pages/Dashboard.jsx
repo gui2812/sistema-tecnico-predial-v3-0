@@ -22,9 +22,11 @@ import {
   XAxis,
   YAxis
 } from 'recharts';
+import { useEffect, useState } from 'react';
 import CardResumo from '../components/CardResumo';
 import Tabela from '../components/Tabela';
 import { getItem } from '../services/storageService';
+import { listarMedicoesLocatariosSupabase } from '../services/medicoesLocatariosSupabaseService';
 import { brl, int, num, parseBRNumber } from '../utils/formatters';
 
 function valorItem(item) {
@@ -179,9 +181,58 @@ function descricaoCalculoTecnico(item) {
   return resultado ? `${tipo} • Resultado: ${num(resultado)}` : tipo;
 }
 
+function numeroSeguro(valor) {
+  const n = Number(valor || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function calcularResumoEnergia(medicao) {
+  const linhas = Array.isArray(medicao?.linhas) ? medicao.linhas : [];
+  const linhasComConsumo = linhas.filter((linha) => numeroSeguro(linha.consumo) > 0);
+
+  const total = linhas.reduce((soma, linha) => soma + numeroSeguro(linha.consumo), 0);
+  const quantidade = linhas.length;
+  const media = linhasComConsumo.length ? total / linhasComConsumo.length : 0;
+  const virou = linhas.filter((linha) => linha.virou).length;
+
+  const maior = linhasComConsumo.length
+    ? linhasComConsumo.reduce((a, b) =>
+        numeroSeguro(b.consumo) > numeroSeguro(a.consumo) ? b : a
+      )
+    : null;
+
+  return {
+    total,
+    quantidade,
+    media,
+    virou,
+    maior,
+  };
+}
+
 export default function Dashboard() {
+  const [medicoes, setMedicoes] = useState([]);
+  const [carregandoMedicoes, setCarregandoMedicoes] = useState(false);
+
+  useEffect(() => {
+    async function carregarMedicoes() {
+      setCarregandoMedicoes(true);
+
+      try {
+        const lista = await listarMedicoesLocatariosSupabase();
+        setMedicoes(lista || []);
+      } catch (err) {
+        console.error('Erro ao carregar medições dos locatários no dashboard:', err);
+        setMedicoes([]);
+      } finally {
+        setCarregandoMedicoes(false);
+      }
+    }
+
+    carregarMedicoes();
+  }, []);
+
   const geradores = getItem('geradores', []);
-  const medicoes = getItem('medicoes', []);
   const solicitacoes = getItem('solicitacoes', []);
   const rateios = getItem('rateios_agua', []);
   const dieselTecnico = getItem('tecnicos_diesel', []);
@@ -195,13 +246,14 @@ export default function Dashboard() {
   ];
 
   const ultimaEnergia = medicoes[0];
+  const resumoEnergia = calcularResumoEnergia(ultimaEnergia);
   const ultimoRateio = rateios[0];
   const ultimoDiesel = dieselTecnico[0];
   const ultimoCalculoTecnico = calculosTecnicos[0] || dieselTecnico[0];
 
-  const consumoEnergia = Number(ultimaEnergia?.resumo?.total || 0);
-  const unidadesMedidas = Number(ultimaEnergia?.resumo?.quantidade || 0);
-  const virou = ultimaEnergia?.linhas?.filter(l => l.virou).length || 0;
+  const consumoEnergia = resumoEnergia.total;
+  const unidadesMedidas = resumoEnergia.quantidade;
+  const virou = resumoEnergia.virou;
 
   const dieselMes =
     Number(ultimoDiesel?.total || ultimoDiesel?.resultado?.total || 0) ||
@@ -274,7 +326,7 @@ export default function Dashboard() {
     );
 
   const mediaEnergiaUnidade =
-    Number(ultimaEnergia?.resumo?.media || 0) ||
+    resumoEnergia.media ||
     mediaNumerica(energiaUnidadesChart, 'consumo');
 
   const serieEnergia = medicoes
@@ -282,7 +334,7 @@ export default function Dashboard() {
     .reverse()
     .map(m => ({
       mes: rotuloMes(m.mes || m.dataMedicao?.slice(0, 7) || '-'),
-      energia: Number(m.resumo?.total || 0)
+      energia: calcularResumoEnergia(m).total
     }));
 
   const mediaSerieEnergia = mediaNumerica(serieEnergia, 'energia');
@@ -316,7 +368,8 @@ export default function Dashboard() {
     ...(virou ? [`${virou} medidor(es) de energia viraram no último lançamento.`] : []),
     ...(abertas ? [`${abertas} item(ns) aguardando análise/aprovação.`] : []),
     ...(reprovadas ? [`${reprovadas} item(ns) reprovado(s) em solicitações de material.`] : []),
-    ...(!ultimaEnergia ? ['Medição de energia dos locatários ainda não lançada.'] : []),
+    ...(carregandoMedicoes ? ['Carregando medições de energia dos locatários...'] : []),
+    ...(!carregandoMedicoes && !ultimaEnergia ? ['Medição de energia dos locatários ainda não lançada.'] : []),
     ...(!ultimoRateio ? ['Rateio de água ainda não gerado.'] : []),
     ...(!ultimoCalculoTecnico ? ['Cálculos técnicos ainda não lançados.'] : [])
   ].slice(0, 7);
@@ -400,7 +453,7 @@ export default function Dashboard() {
     ...medicoes.slice(0, 3).map(m => ({
       data: dataRegistro(m),
       tipo: 'Energia',
-      descricao: `${int(m.resumo?.total)} kWh • ${m.resumo?.quantidade || 0} unidades`
+      descricao: `${int(calcularResumoEnergia(m).total)} kWh • ${calcularResumoEnergia(m).quantidade || 0} unidades`
     })),
     ...rateios.slice(0, 3).map(r => ({
       data: dataRegistro(r),
