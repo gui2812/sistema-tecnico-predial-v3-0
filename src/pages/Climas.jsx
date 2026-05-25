@@ -1,10 +1,14 @@
 import {
   AlertTriangle,
   BarChart3,
+  CalendarDays,
   CheckCircle2,
+  Clock3,
   FileDown,
   FileText,
+  Gauge,
   Loader2,
+  Printer,
   Upload,
   Zap,
 } from "lucide-react";
@@ -35,6 +39,13 @@ function formatarNumeroBR(valor, casas = 3) {
   return Number(valor || 0).toLocaleString("pt-BR", {
     minimumFractionDigits: casas,
     maximumFractionDigits: casas,
+  });
+}
+
+function formatarPercentual(valor) {
+  return Number(valor || 0).toLocaleString("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
@@ -150,7 +161,6 @@ async function extrairTextoPDF(file) {
     const content = await page.getTextContent();
 
     const textoPagina = content.items.map((item) => item.str).join(" ");
-
     textoFinal += `\n${textoPagina}`;
   }
 
@@ -159,41 +169,250 @@ async function extrairTextoPDF(file) {
 
 function CardResumo({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
   const cores = {
-    blue: "bg-blue-50 text-blue-700 border-blue-100",
-    green: "bg-emerald-50 text-emerald-700 border-emerald-100",
-    amber: "bg-amber-50 text-amber-700 border-amber-100",
-    purple: "bg-purple-50 text-purple-700 border-purple-100",
-    slate: "bg-slate-50 text-slate-700 border-slate-100",
+    blue: {
+      box: "bg-blue-50 text-blue-700 border-blue-100",
+      icon: "bg-blue-100 text-blue-700",
+    },
+    green: {
+      box: "bg-emerald-50 text-emerald-700 border-emerald-100",
+      icon: "bg-emerald-100 text-emerald-700",
+    },
+    amber: {
+      box: "bg-amber-50 text-amber-700 border-amber-100",
+      icon: "bg-amber-100 text-amber-700",
+    },
+    purple: {
+      box: "bg-purple-50 text-purple-700 border-purple-100",
+      icon: "bg-purple-100 text-purple-700",
+    },
+    slate: {
+      box: "bg-slate-50 text-slate-700 border-slate-100",
+      icon: "bg-slate-100 text-slate-700",
+    },
   };
 
+  const c = cores[cor] || cores.blue;
+
   return (
-    <div
-      className={`rounded-3xl border p-4 min-w-0 overflow-hidden ${
-        cores[cor] || cores.blue
-      }`}
-    >
-      <div className="flex items-start justify-between gap-3 min-w-0">
-        <div className="min-w-0">
-          <p className="text-[11px] font-black uppercase opacity-80 break-words">
+    <div className={`rounded-3xl border p-5 min-w-0 ${c.box}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-black uppercase opacity-80 leading-tight">
             {titulo}
           </p>
 
-          <p className="text-xl 2xl:text-2xl font-black mt-2 leading-tight break-words">
+          <p className="text-[clamp(1.25rem,1.5vw,1.85rem)] font-black mt-2 leading-tight whitespace-nowrap">
             {valor}
           </p>
 
           {subtitulo && (
-            <p className="text-xs font-semibold mt-1 opacity-75 break-words">
+            <p className="text-xs font-semibold mt-1 opacity-75 leading-tight">
               {subtitulo}
             </p>
           )}
         </div>
 
-        <div className="w-10 h-10 rounded-2xl bg-white/70 flex items-center justify-center shrink-0">
+        <div
+          className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${c.icon}`}
+        >
           <Icon size={20} />
         </div>
       </div>
     </div>
+  );
+}
+
+function MiniCard({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
+  const cores = {
+    blue: "bg-blue-50 border-blue-100 text-blue-700",
+    green: "bg-emerald-50 border-emerald-100 text-emerald-700",
+    amber: "bg-amber-50 border-amber-100 text-amber-700",
+    purple: "bg-purple-50 border-purple-100 text-purple-700",
+    slate: "bg-slate-50 border-slate-100 text-slate-700",
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 min-w-0 ${cores[cor] || cores.blue}`}>
+      <Icon size={20} className="mb-3" />
+      <p className="text-[10px] uppercase font-black opacity-75 leading-tight">
+        {titulo}
+      </p>
+      <p className="text-base 2xl:text-lg font-black mt-1 whitespace-nowrap">
+        {valor}
+      </p>
+      <p className="text-[11px] font-semibold opacity-70 mt-1">{subtitulo}</p>
+    </div>
+  );
+}
+
+function MiniRelatorioPreview({ resultado }) {
+  if (!resultado) return null;
+
+  const pctPonta =
+    resultado.total > 0 ? (resultado.horaPonta / resultado.total) * 100 : 0;
+
+  const pctFora =
+    resultado.total > 0 ? (resultado.foraPonta / resultado.total) * 100 : 0;
+
+  return (
+    <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 overflow-hidden">
+      <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 border-b border-slate-200 pb-5">
+        <div>
+          <h3 className="text-2xl font-black text-slate-950">
+            Relatório Resumido — Conta ENEL
+          </h3>
+          <div className="w-32 h-1 bg-blue-600 rounded-full mt-4" />
+        </div>
+
+        <div className="flex flex-wrap gap-5 text-sm">
+          <div>
+            <p className="font-black text-slate-900">Edifício JK 1455</p>
+            <p className="text-slate-500">Sistema Técnico Predial</p>
+          </div>
+
+          <div className="h-10 w-px bg-slate-200 hidden sm:block" />
+
+          <div>
+            <p className="font-black text-slate-900">Mês referência</p>
+            <p className="text-slate-600 font-bold">
+              {resultado.mesReferencia || "-"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[1.15fr_1fr_220px] gap-6 mt-6">
+        <div>
+          <h4 className="font-black text-slate-900 mb-4">Resumo executivo</h4>
+
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <MiniCard
+              titulo="Mês referência"
+              valor={resultado.mesReferencia || "-"}
+              subtitulo="Conta"
+              icon={CalendarDays}
+              cor="blue"
+            />
+
+            <MiniCard
+              titulo="Demanda"
+              valor={formatarNumeroBR(resultado.demandaKw)}
+              subtitulo="kW"
+              icon={Gauge}
+              cor="slate"
+            />
+
+            <MiniCard
+              titulo="Hora Ponta"
+              valor={formatarNumeroBR(resultado.horaPonta)}
+              subtitulo="kWh"
+              icon={Zap}
+              cor="amber"
+            />
+
+            <MiniCard
+              titulo="Hora Fora Ponta"
+              valor={formatarNumeroBR(resultado.foraPonta)}
+              subtitulo="kWh"
+              icon={Clock3}
+              cor="purple"
+            />
+
+            <MiniCard
+              titulo="Total"
+              valor={formatarNumeroBR(resultado.total)}
+              subtitulo="kWh"
+              icon={BarChart3}
+              cor="green"
+            />
+          </div>
+
+          <div className="mt-5 rounded-2xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-900">
+            <strong>Cálculo realizado:</strong>{" "}
+            {formatarNumeroBR(resultado.horaPonta)} kWh +{" "}
+            {formatarNumeroBR(resultado.foraPonta)} kWh ={" "}
+            <strong>{formatarNumeroBR(resultado.total)} kWh</strong>
+          </div>
+        </div>
+
+        <div className="border-l border-slate-200 xl:pl-6">
+          <h4 className="font-black text-slate-900 mb-4">
+            Detalhamento do consumo
+          </h4>
+
+          <div className="flex flex-col sm:flex-row items-center gap-5">
+            <div
+              className="w-32 h-32 rounded-full shrink-0"
+              style={{
+                background: `conic-gradient(#f97316 0 ${pctPonta}%, #8b5cf6 ${pctPonta}% 100%)`,
+              }}
+            >
+              <div className="w-20 h-20 bg-white rounded-full mx-auto mt-6 shadow-inner" />
+            </div>
+
+            <div className="space-y-4 text-sm w-full">
+              <div className="flex items-start gap-3">
+                <span className="w-3 h-3 rounded-full bg-orange-500 mt-1" />
+                <div className="flex-1">
+                  <p className="font-bold text-slate-700">Hora Ponta</p>
+                  <p className="text-slate-500">
+                    {formatarNumeroBR(resultado.horaPonta)} kWh
+                  </p>
+                </div>
+                <p className="font-bold text-slate-700">
+                  {formatarPercentual(pctPonta)}%
+                </p>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <span className="w-3 h-3 rounded-full bg-violet-500 mt-1" />
+                <div className="flex-1">
+                  <p className="font-bold text-slate-700">Hora Fora Ponta</p>
+                  <p className="text-slate-500">
+                    {formatarNumeroBR(resultado.foraPonta)} kWh
+                  </p>
+                </div>
+                <p className="font-bold text-slate-700">
+                  {formatarPercentual(pctFora)}%
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl bg-emerald-50 border border-emerald-100 p-5 text-emerald-800">
+          <p className="text-sm font-black">Total consumido</p>
+          <p className="text-3xl font-black mt-2">
+            {formatarNumeroBR(resultado.total)}
+          </p>
+          <p className="font-bold mt-1">kWh</p>
+
+          <div className="h-px bg-emerald-200 my-5" />
+
+          <p className="text-sm font-black">Dias faturados</p>
+          <p className="text-2xl font-black mt-1">
+            {resultado.diasFaturados || "-"}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 border-t border-slate-200 pt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-slate-500">
+        <p>Relatório gerado pelo Sistema Técnico Predial</p>
+
+        <div className="flex items-center gap-3">
+          <p>Data de geração: {new Date().toLocaleDateString("pt-BR")}</p>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="px-4 py-2 rounded-xl border border-slate-200 font-bold text-slate-700 flex items-center gap-2"
+          >
+            <Printer size={15} />
+            Imprimir
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -329,55 +548,11 @@ function gerarMiniRelatorioClimas(resultado, nomeArquivo = "") {
     doc.text(subtitle, x + 4, y + 22);
   }
 
-  cardPdf(
-    14,
-    86,
-    34,
-    "Mês referência",
-    resultado.mesReferencia || "-",
-    "Conta ENEL",
-    "blue"
-  );
-
-  cardPdf(
-    52,
-    86,
-    34,
-    "Demanda",
-    formatarNumeroBR(resultado.demandaKw),
-    "kW",
-    "slate"
-  );
-
-  cardPdf(
-    90,
-    86,
-    34,
-    "Hora Ponta",
-    formatarNumeroBR(resultado.horaPonta),
-    "kWh",
-    "amber"
-  );
-
-  cardPdf(
-    128,
-    86,
-    34,
-    "Fora Ponta",
-    formatarNumeroBR(resultado.foraPonta),
-    "kWh",
-    "purple"
-  );
-
-  cardPdf(
-    166,
-    86,
-    30,
-    "Total",
-    formatarNumeroBR(resultado.total),
-    "kWh",
-    "green"
-  );
+  cardPdf(14, 86, 34, "Mês referência", resultado.mesReferencia || "-", "Conta ENEL", "blue");
+  cardPdf(52, 86, 34, "Demanda", formatarNumeroBR(resultado.demandaKw), "kW", "slate");
+  cardPdf(90, 86, 34, "Hora Ponta", formatarNumeroBR(resultado.horaPonta), "kWh", "amber");
+  cardPdf(128, 86, 34, "Fora Ponta", formatarNumeroBR(resultado.foraPonta), "kWh", "purple");
+  cardPdf(166, 86, 30, "Total", formatarNumeroBR(resultado.total), "kWh", "green");
 
   doc.setFillColor(239, 246, 255);
   doc.setDrawColor(191, 219, 254);
@@ -399,16 +574,16 @@ function gerarMiniRelatorioClimas(resultado, nomeArquivo = "") {
     margin: { left: 14, right: 14, bottom: 24 },
     head: [["Indicador", "Valor", "Participação"]],
     body: [
-      ["Demanda contratada/medida", `${formatarNumeroBR(resultado.demandaKw)} kW`, "-"],
+      ["Demanda", `${formatarNumeroBR(resultado.demandaKw)} kW`, "-"],
       [
         "Consumo Hora Ponta",
         `${formatarNumeroBR(resultado.horaPonta)} kWh`,
-        `${formatarNumeroBR(percentualPonta, 2)}%`,
+        `${formatarPercentual(percentualPonta)}%`,
       ],
       [
         "Consumo Hora Fora Ponta",
         `${formatarNumeroBR(resultado.foraPonta)} kWh`,
-        `${formatarNumeroBR(percentualForaPonta, 2)}%`,
+        `${formatarPercentual(percentualForaPonta)}%`,
       ],
       ["Total consumido", `${formatarNumeroBR(resultado.total)} kWh`, "100,00%"],
       ["Dias faturados", String(resultado.diasFaturados || "-"), "-"],
@@ -521,19 +696,16 @@ export default function Climas() {
     <div className="space-y-6">
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
-                <Zap size={24} />
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
+              <Zap size={24} />
+            </div>
 
-              <div>
-                <h2 className="text-2xl font-black text-slate-900">Climas</h2>
-                <p className="text-sm text-slate-500">
-                  Análise automática da conta ENEL para consumo Hora Ponta e
-                  Hora Fora Ponta.
-                </p>
-              </div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900">Climas</h2>
+              <p className="text-sm text-slate-500">
+                Análise automática da conta ENEL para consumo Hora Ponta e Hora Fora Ponta.
+              </p>
             </div>
           </div>
 
@@ -546,24 +718,20 @@ export default function Climas() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-1 bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+      <section className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6">
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
               <Upload size={22} />
             </div>
 
             <div>
-              <h3 className="font-black text-slate-900">
-                Upload da conta ENEL
-              </h3>
-              <p className="text-xs text-slate-500">
-                Envie o PDF da conta para análise.
-              </p>
+              <h3 className="font-black text-slate-900">Upload da conta ENEL</h3>
+              <p className="text-xs text-slate-500">Envie o PDF da conta para análise.</p>
             </div>
           </div>
 
-          <label className="block border-2 border-dashed border-slate-200 rounded-3xl p-6 text-center cursor-pointer hover:bg-slate-50 transition">
+          <label className="block border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center cursor-pointer hover:bg-slate-50 transition">
             <input
               type="file"
               accept="application/pdf,.pdf"
@@ -577,15 +745,14 @@ export default function Climas() {
               }}
             />
 
-            <FileText className="mx-auto text-slate-400 mb-3" size={34} />
+            <FileText className="mx-auto text-slate-400 mb-3" size={42} />
 
             <p className="font-bold text-slate-800 break-words">
               {nomeArquivo || "Clique para selecionar o PDF"}
             </p>
 
             <p className="text-xs text-slate-400 mt-2">
-              Funciona melhor com PDF digital. PDF escaneado pode precisar de
-              OCR depois.
+              Funciona melhor com PDF digital. PDF escaneado pode precisar de OCR depois.
             </p>
           </label>
 
@@ -615,7 +782,7 @@ export default function Climas() {
           )}
         </div>
 
-        <div className="xl:col-span-2 space-y-6">
+        <div className="space-y-6 min-w-0">
           {!resultado && (
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 text-center">
               <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-700 flex items-center justify-center mx-auto mb-4">
@@ -627,8 +794,7 @@ export default function Climas() {
               </h3>
 
               <p className="text-sm text-slate-500 mt-2">
-                Envie uma conta ENEL em PDF e clique em analisar para extrair o
-                consumo.
+                Envie uma conta ENEL em PDF e clique em analisar para extrair o consumo.
               </p>
             </div>
           )}
@@ -636,16 +802,14 @@ export default function Climas() {
           {resultado && (
             <>
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-                <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-4 mb-5">
+                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-5">
                   <div className="flex items-center gap-3">
                     <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
                       <CheckCircle2 size={22} />
                     </div>
 
                     <div>
-                      <h3 className="font-black text-slate-900">
-                        Conta analisada
-                      </h3>
+                      <h3 className="font-black text-slate-900">Conta analisada</h3>
                       <p className="text-xs text-slate-500">
                         Dados extraídos automaticamente do PDF.
                       </p>
@@ -666,7 +830,7 @@ export default function Climas() {
                     titulo="Mês referência"
                     valor={resultado.mesReferencia || "-"}
                     subtitulo="Identificado na conta"
-                    icon={FileText}
+                    icon={CalendarDays}
                     cor="blue"
                   />
 
@@ -674,7 +838,7 @@ export default function Climas() {
                     titulo="Demanda"
                     valor={formatarNumeroBR(resultado.demandaKw)}
                     subtitulo="kW"
-                    icon={Zap}
+                    icon={Gauge}
                     cor="slate"
                   />
 
@@ -690,7 +854,7 @@ export default function Climas() {
                     titulo="Hora Fora Ponta"
                     valor={formatarNumeroBR(resultado.foraPonta)}
                     subtitulo="kWh"
-                    icon={Zap}
+                    icon={Clock3}
                     cor="purple"
                   />
 
@@ -712,11 +876,12 @@ export default function Climas() {
                 {resultado.diasFaturados ? (
                   <>
                     {" "}
-                    • <strong>Dias faturados:</strong>{" "}
-                    {resultado.diasFaturados}
+                    • <strong>Dias faturados:</strong> {resultado.diasFaturados}
                   </>
                 ) : null}
               </div>
+
+              <MiniRelatorioPreview resultado={resultado} />
             </>
           )}
 
