@@ -378,7 +378,9 @@ export function pdfFancoil(registros = [], periodo = {}) {
     14,
     91,
     { maxWidth: 180 }
-  );  autoTable(doc, {
+  );
+
+  autoTable(doc, {
     startY: 108,
     margin: { bottom: 42 },
     head: [['Data', 'Potência kW', 'Horas/dia', 'Dias úteis', 'Preço kWh', 'Consumo', 'Custo']],
