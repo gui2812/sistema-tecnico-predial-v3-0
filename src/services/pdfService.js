@@ -169,8 +169,8 @@ function desenharHeaderLocatarios(doc, { periodoTexto, emissao }) {
     doc.text(String(value || '-'), x + 5, 22);
   }
 
-  cardInfo(pageWidth - 83, 'Período', periodoTexto, 44);
-  cardInfo(pageWidth - 35, 'Emissão', emissao, 27);
+  cardInfo(pageWidth - 90, 'Período', periodoTexto, 48);
+  cardInfo(pageWidth - 38, 'Emissão', emissao, 32);
 
   doc.setFillColor(255, 255, 255);
   doc.rect(0, 34, pageWidth, 8, 'F');
@@ -195,26 +195,22 @@ function cardResumoLocatarios(doc, x, y, w, titulo, valor, subtitulo, cor) {
   const cores = {
     blue: {
       bg: [239, 246, 255],
-      border: [191, 219, 254],
-      circle: [219, 234, 254],
+      border: [147, 197, 253],
       text: [29, 78, 216],
     },
     green: {
       bg: [240, 253, 244],
-      border: [187, 247, 208],
-      circle: [220, 252, 231],
+      border: [134, 239, 172],
       text: [5, 150, 105],
     },
     amber: {
       bg: [255, 251, 235],
-      border: [253, 230, 138],
-      circle: [254, 243, 199],
+      border: [253, 224, 71],
       text: [217, 119, 6],
     },
     purple: {
       bg: [250, 245, 255],
-      border: [233, 213, 255],
-      circle: [243, 232, 255],
+      border: [216, 180, 254],
       text: [126, 34, 206],
     },
   };
@@ -223,29 +219,23 @@ function cardResumoLocatarios(doc, x, y, w, titulo, valor, subtitulo, cor) {
 
   doc.setFillColor(...c.bg);
   doc.setDrawColor(...c.border);
-  doc.roundedRect(x, y, w, 26, 2.5, 2.5, 'FD');
-
-  doc.setFillColor(...c.circle);
-  doc.circle(x + 9, y + 13, 6, 'F');
-
-  doc.setTextColor(...c.text);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('•', x + 9, y + 16, { align: 'center' });
+  doc.setLineWidth(0.5);
+  doc.roundedRect(x, y, w, 25, 2.5, 2.5, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(30, 64, 100);
-  doc.text(titulo, x + 19, y + 8.5);
+  doc.text(titulo, x + 5, y + 8);
 
-  doc.setTextColor(...c.text);
+  doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
-  doc.text(String(valor), x + 19, y + 18);
+  doc.setTextColor(...c.text);
+  doc.text(String(valor), x + 5, y + 17);
 
-  doc.setTextColor(71, 85, 105);
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.text(subtitulo, x + 19, y + 23);
+  doc.setFontSize(7);
+  doc.setTextColor(71, 85, 105);
+  doc.text(subtitulo, x + 5, y + 22);
 }
 
 function rodapeLocatarios(doc, totalPages) {
@@ -388,9 +378,7 @@ export function pdfFancoil(registros = [], periodo = {}) {
     14,
     91,
     { maxWidth: 180 }
-  );
-
-  autoTable(doc, {
+  );  autoTable(doc, {
     startY: 108,
     margin: { bottom: 42 },
     head: [['Data', 'Potência kW', 'Horas/dia', 'Dias úteis', 'Preço kWh', 'Consumo', 'Custo']],
@@ -470,12 +458,12 @@ export function pdfLocatarios(medicao, periodo = {}) {
   desenharTituloLocatarios(doc);
 
   cardResumoLocatarios(doc, 14, 72, 42, 'Unidades', totalUnidades, 'Total de unidades', 'blue');
-  cardResumoLocatarios(doc, 61, 72, 47, 'Total consumido', totalConsumido, 'kWh no período', 'green');
+  cardResumoLocatarios(doc, 61, 72, 47, 'Total consumido', totalConsumido, 'kWh no periodo', 'green');
   cardResumoLocatarios(doc, 113, 72, 42, 'Maior consumo', maiorConsumo, 'Unidade', 'amber');
-  cardResumoLocatarios(doc, 160, 72, 36, 'Média', mediaConsumo, 'kWh por unidade', 'purple');
+  cardResumoLocatarios(doc, 160, 72, 36, 'Media', mediaConsumo, 'kWh por unidade', 'purple');
 
   autoTable(doc, {
-    startY: 111,
+    startY: 112,
     margin: {
       top: 24,
       bottom: 18,
@@ -488,41 +476,42 @@ export function pdfLocatarios(medicao, periodo = {}) {
       int(r.anterior),
       String(r.atual).padStart(5, '0'),
       int(r.consumo),
-      r.virou ? '●  Sim' : '●  Não',
+      r.virou ? 'Sim' : 'Nao',
     ]),
     styles: {
-      fontSize: 8.2,
-      cellPadding: 2.2,
+      fontSize: 8,
+      cellPadding: 2.1,
       overflow: 'linebreak',
       valign: 'middle',
       textColor: [15, 23, 42],
       lineColor: [226, 232, 240],
-      lineWidth: 0.12,
+      lineWidth: 0.15,
     },
     headStyles: {
-      fillColor: [29, 78, 216],
+      fillColor: [0, 82, 204],
       textColor: [255, 255, 255],
-      fontSize: 8.5,
+      fontSize: 8.2,
       fontStyle: 'bold',
       halign: 'center',
+      cellPadding: 2.4,
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
     bodyStyles: {
-      minCellHeight: 7.8,
+      minCellHeight: 7.4,
     },
     columnStyles: {
       0: { cellWidth: 30, halign: 'center', fontStyle: 'bold' },
       1: { cellWidth: 38, halign: 'center' },
       2: { cellWidth: 38, halign: 'center' },
       3: { cellWidth: 38, halign: 'center', fontStyle: 'bold' },
-      4: { cellWidth: 38, halign: 'center' },
+      4: { cellWidth: 38, halign: 'center', fontStyle: 'bold' },
     },
     didParseCell: function (data) {
       if (data.section === 'body' && data.column.index === 4) {
-        const virou = String(data.cell.raw || '').includes('Sim');
-        data.cell.styles.textColor = virou ? [5, 150, 105] : [22, 163, 74];
+        const virou = String(data.cell.raw || '') === 'Sim';
+        data.cell.styles.textColor = virou ? [217, 119, 6] : [5, 150, 105];
         data.cell.styles.fontStyle = 'bold';
       }
     },
