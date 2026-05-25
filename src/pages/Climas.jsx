@@ -4,12 +4,17 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  CloudRain,
+  Droplets,
   FileDown,
+  FileSpreadsheet,
   FileText,
   Gauge,
   Loader2,
   Printer,
+  RefreshCcw,
   Upload,
+  Waves,
   Zap,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -17,10 +22,19 @@ import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const EDIFICIO = "Edifício JK 1455";
+
+const TABS = [
+  { id: "energia", label: "Energia ENEL", icon: Zap },
+  { id: "pocos", label: "Poços artesianos", icon: Droplets },
+  { id: "sabesp", label: "SABESP", icon: Waves },
+  { id: "pluvial", label: "Águas pluviais", icon: CloudRain },
+  { id: "consolidado", label: "Consolidado ESG", icon: BarChart3 },
+];
 
 function parseNumeroBR(valor) {
   if (valor === null || valor === undefined) return 0;
@@ -35,11 +49,15 @@ function parseNumeroBR(valor) {
   return Number.isFinite(numero) ? numero : 0;
 }
 
-function formatarNumeroBR(valor, casas = 3) {
+function formatarNumeroBR(valor, casas = 2) {
   return Number(valor || 0).toLocaleString("pt-BR", {
     minimumFractionDigits: casas,
     maximumFractionDigits: casas,
   });
+}
+
+function formatarKwh(valor) {
+  return formatarNumeroBR(valor, 3);
 }
 
 function formatarPercentual(valor) {
@@ -54,6 +72,15 @@ function normalizarTexto(texto) {
     .replace(/\s+/g, " ")
     .replace(/–/g, "-")
     .replace(/—/g, "-")
+    .trim();
+}
+
+function normalizarChave(texto) {
+  return String(texto || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
 
@@ -79,11 +106,31 @@ function buscarMesReferencia(texto) {
   return match ? match[0].toUpperCase() : "";
 }
 
+function hojeBR() {
+  return new Date().toLocaleDateString("pt-BR");
+}
+
+async function extrairTextoPDF(file) {
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+
+  let textoFinal = "";
+
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+
+    const textoPagina = content.items.map((item) => item.str).join(" ");
+    textoFinal += `\n${textoPagina}`;
+  }
+
+  return textoFinal;
+}
+
 function extrairConsumosEnel(textoOriginal) {
   const texto = normalizarTexto(textoOriginal);
 
   const meses = "JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ";
-
   const numeroDecimalBR =
     "[0-9]{1,3}(?:\\.[0-9]{3})*,[0-9]{1,3}|[0-9]+,[0-9]{1,3}";
 
@@ -150,21 +197,208 @@ function extrairConsumosEnel(textoOriginal) {
   };
 }
 
-async function extrairTextoPDF(file) {
-  const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+function extrairPocosDoDemonstrativo(textoOriginal) {
+  const texto = normalizarTexto(textoOriginal);
 
-  let textoFinal = "";
+  const numero = "[0-9]{1,3}(?:\\.[0-9]{3})*,[0-9]{1,2}|[0-9]+(?:,[0-9]{1,2})?";
 
-  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
-    const page = await pdf.getPage(pageNumber);
-    const content = await page.getTextContent();
+  const encontrados = [];
 
-    const textoPagina = content.items.map((item) => item.str).join(" ");
-    textoFinal += `\n${textoPagina}`;
+  const regexLinhaCompleta = new RegExp(
+    `(Pot[aá]vel\\/?Po[cç]o(?:\\s+Hidr[oô]metro)?)\\s+` +
+      `(\\d{2}\\/\\d{2}\\/\\d{2,4})\\s+` +
+      `(${numero})\\s+` +
+      `(\\d{2}\\/\\d{2}\\/\\d{2,4})\\s+` +
+      `(${numero})\\s+` +
+      `(${numero})`,
+    "gi"
+  );
+
+  let match;
+  while ((match = regexLinhaCompleta.exec(texto)) !== null) {
+    encontrados.push({
+      nome: encontrados.length === 0 ? "Poço 1" : `Poço ${encontrados.length + 1}`,
+      tipo: match[1],
+      dataAnterior: match[2],
+      leituraAnterior: parseNumeroBR(match[3]),
+      dataAtual: match[4],
+      leituraAtual: parseNumeroBR(match[5]),
+      consumo: parseNumeroBR(match[6]),
+      origem: "PDF",
+    });
   }
 
-  return textoFinal;
+  if (encontrados.length) {
+    return {
+      pocos: encontrados,
+      total: encontrados.reduce((soma, item) => soma + Number(item.consumo || 0), 0),
+      encontrado: true,
+      precisaConferencia: false,
+    };
+  }
+
+  /*
+    Plano B para PDF digital quebrado:
+    tenta localizar números próximos a "quantidade medida em m3".
+  */
+  const quantidades = [...texto.matchAll(new RegExp(`Quantidade\\s+Medida\\s+em\\s+M3.*?(${numero})`, "gi"))]
+    .map((m) => parseNumeroBR(m[1]))
+    .filter((v) => v > 0);
+
+  if (quantidades.length) {
+    const pocos = quantidades.map((consumo, index) => ({
+      nome: index === 0 ? "Poço 1" : `Poço ${index + 1}`,
+      tipo: "Potável/Poço",
+      dataAnterior: "",
+      leituraAnterior: 0,
+      dataAtual: "",
+      leituraAtual: 0,
+      consumo,
+      origem: "PDF",
+    }));
+
+    return {
+      pocos,
+      total: pocos.reduce((soma, item) => soma + Number(item.consumo || 0), 0),
+      encontrado: true,
+      precisaConferencia: true,
+    };
+  }
+
+  return {
+    pocos: [],
+    total: 0,
+    encontrado: false,
+    precisaConferencia: true,
+  };
+}
+
+function extrairSabesp(textoOriginal) {
+  const texto = normalizarTexto(textoOriginal);
+
+  const ligacaoSabesp = texto.match(
+    /LIGA[CÇ][AÃ]O\s+SABESP\s*-\s*[ÁA]GUA\s+E\s+ESGOTO.*?Leitura\s+Anterior.*?Leitura\s+atual.*?Consumo.*?([0-9]+)\s+([0-9]+).*?([0-9]+)(?=\s+C[oó]digo|\s+M[eé]dia|\s+End\.|$)/i
+  );
+
+  let leituraAnterior = 0;
+  let leituraAtual = 0;
+  let consumo = 0;
+
+  if (ligacaoSabesp) {
+    leituraAnterior = parseNumeroBR(ligacaoSabesp[1]);
+    leituraAtual = parseNumeroBR(ligacaoSabesp[2]);
+    consumo = parseNumeroBR(ligacaoSabesp[3]);
+  } else {
+    const consumoCabecalho = texto.match(/Água:\s+\d{2}\/\d{2}\/\d{4}\s+\d{2}\/\d{2}\/\d{4}\s+([0-9]+)/i);
+    consumo = consumoCabecalho ? parseNumeroBR(consumoCabecalho[1]) : 0;
+  }
+
+  const valorAguaMatch = texto.match(/Água:\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+,[0-9]{2})/i);
+  const valorEsgotoMatch = texto.match(/Esgoto:\s*([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+,[0-9]{2})/i);
+  const totalMatch = texto.match(/TOTAL:\s*R\$\s*\*+([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2}|[0-9]+,[0-9]{2})/i);
+
+  const valorAgua = valorAguaMatch ? parseNumeroBR(valorAguaMatch[1]) : 0;
+  const valorEsgoto = valorEsgotoMatch ? parseNumeroBR(valorEsgotoMatch[1]) : 0;
+  const valorTotal = totalMatch ? parseNumeroBR(totalMatch[1]) : valorAgua + valorEsgoto;
+
+  return {
+    leituraAnterior,
+    leituraAtual,
+    consumo,
+    volumeEfluente: consumo,
+    valorAgua,
+    valorEsgoto,
+    valorTotal,
+    encontrado: consumo > 0,
+  };
+}
+
+async function extrairPlanilhaPluvial(file) {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+
+  const linhas = [];
+
+  workbook.SheetNames.forEach((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+    json.forEach((row) => {
+      const normalizada = {};
+      Object.entries(row).forEach(([key, value]) => {
+        normalizada[normalizarChave(key)] = value;
+      });
+
+      const data =
+        normalizada["data"] ||
+        normalizada["dia"] ||
+        normalizada["dt"] ||
+        "";
+
+      const mes =
+        normalizada["mes"] ||
+        normalizada["m s"] ||
+        "";
+
+      const ano =
+        normalizada["ano"] ||
+        "";
+
+      const pluvial =
+        normalizada["alimentacao via agua pluvial"] ??
+        normalizada["agua pluvial"] ??
+        normalizada["pluvial"] ??
+        normalizada["reuso agua pluvial"] ??
+        normalizada["captacao agua pluvial"] ??
+        "";
+
+      const mix =
+        normalizada["alimentacao via mix reservatorio"] ??
+        normalizada["alimentacao via mix"] ??
+        normalizada["mix reservatorio"] ??
+        "";
+
+      const consumoDiario =
+        normalizada["consumo diario"] ??
+        normalizada["consumo"] ??
+        "";
+
+      const pluvialNum = parseNumeroBR(pluvial);
+      const mixNum = parseNumeroBR(mix);
+      const consumoNum = parseNumeroBR(consumoDiario);
+
+      if (pluvialNum > 0 || mixNum > 0 || consumoNum > 0) {
+        linhas.push({
+          sheetName,
+          data: data instanceof Date ? data.toLocaleDateString("pt-BR") : String(data || ""),
+          mes: String(mes || ""),
+          ano: String(ano || ""),
+          pluvial: pluvialNum,
+          mix: mixNum,
+          consumoDiario: consumoNum,
+        });
+      }
+    });
+  });
+
+  const totalPluvial = linhas.reduce((soma, linha) => soma + Number(linha.pluvial || 0), 0);
+  const totalMix = linhas.reduce((soma, linha) => soma + Number(linha.mix || 0), 0);
+  const totalConsumo = linhas.reduce((soma, linha) => soma + Number(linha.consumoDiario || 0), 0);
+
+  return {
+    linhas,
+    totalPluvial,
+    totalMix,
+    totalConsumo,
+    encontrado: linhas.length > 0,
+  };
+}
+
+function brl(valor) {
+  return Number(valor || 0).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
 }
 
 function CardResumo({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
@@ -188,6 +422,10 @@ function CardResumo({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
     slate: {
       box: "bg-slate-50 text-slate-700 border-slate-100",
       icon: "bg-slate-100 text-slate-700",
+    },
+    cyan: {
+      box: "bg-cyan-50 text-cyan-700 border-cyan-100",
+      icon: "bg-cyan-100 text-cyan-700",
     },
   };
 
@@ -222,6 +460,107 @@ function CardResumo({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
   );
 }
 
+function UploadBox({
+  titulo,
+  subtitulo,
+  arquivo,
+  accept,
+  icon: Icon = FileText,
+  onArquivo,
+  onAnalisar,
+  carregando,
+  disabled,
+  botao = "Analisar arquivo",
+}) {
+  const nomeArquivo = arquivo?.name || "";
+
+  return (
+    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
+          <Upload size={22} />
+        </div>
+
+        <div>
+          <h3 className="font-black text-slate-900">{titulo}</h3>
+          <p className="text-xs text-slate-500">{subtitulo}</p>
+        </div>
+      </div>
+
+      <label className="block border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center cursor-pointer hover:bg-slate-50 transition">
+        <input
+          type="file"
+          accept={accept}
+          className="hidden"
+          onChange={(e) => onArquivo(e.target.files?.[0] || null)}
+        />
+
+        <Icon className="mx-auto text-slate-400 mb-3" size={42} />
+
+        <p className="font-bold text-slate-800 break-words">
+          {nomeArquivo || "Clique para selecionar o arquivo"}
+        </p>
+
+        <p className="text-xs text-slate-400 mt-2">
+          Arquivos digitais são lidos automaticamente. PDFs escaneados podem exigir conferência manual.
+        </p>
+      </label>
+
+      <button
+        onClick={onAnalisar}
+        disabled={carregando || disabled || !arquivo}
+        className="mt-5 w-full rounded-2xl bg-slate-950 text-white py-3 font-black hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+      >
+        {carregando ? (
+          <>
+            <Loader2 size={18} className="animate-spin" />
+            Analisando...
+          </>
+        ) : (
+          <>
+            <BarChart3 size={18} />
+            {botao}
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function TabButton({ active, item, onClick }) {
+  const Icon = item.icon;
+
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black whitespace-nowrap transition ${
+        active
+          ? "bg-slate-950 text-white shadow-lg shadow-slate-300/40"
+          : "bg-white text-slate-600 border border-slate-100 hover:bg-slate-50"
+      }`}
+    >
+      <Icon size={18} />
+      {item.label}
+    </button>
+  );
+}
+
+function Aviso({ children, tipo = "amber" }) {
+  const cores = {
+    amber: "bg-amber-50 border-amber-100 text-amber-800",
+    blue: "bg-blue-50 border-blue-100 text-blue-800",
+    green: "bg-emerald-50 border-emerald-100 text-emerald-800",
+    rose: "bg-rose-50 border-rose-100 text-rose-800",
+  };
+
+  return (
+    <div className={`rounded-3xl border p-4 text-sm flex gap-2 ${cores[tipo] || cores.amber}`}>
+      <AlertTriangle size={18} className="shrink-0 mt-0.5" />
+      <div>{children}</div>
+    </div>
+  );
+}
+
 function MiniCard({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
   const cores = {
     blue: "bg-blue-50 border-blue-100 text-blue-700",
@@ -229,6 +568,7 @@ function MiniCard({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
     amber: "bg-amber-50 border-amber-100 text-amber-700",
     purple: "bg-purple-50 border-purple-100 text-purple-700",
     slate: "bg-slate-50 border-slate-100 text-slate-700",
+    cyan: "bg-cyan-50 border-cyan-100 text-cyan-700",
   };
 
   return (
@@ -256,7 +596,7 @@ function MiniCard({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
   );
 }
 
-function MiniRelatorioPreview({ resultado }) {
+function MiniRelatorioEnergiaPreview({ resultado }) {
   if (!resultado) return null;
 
   const pctPonta =
@@ -307,7 +647,7 @@ function MiniRelatorioPreview({ resultado }) {
 
             <MiniCard
               titulo="Demanda"
-              valor={formatarNumeroBR(resultado.demandaKw)}
+              valor={formatarKwh(resultado.demandaKw)}
               subtitulo="kW"
               icon={Gauge}
               cor="slate"
@@ -315,7 +655,7 @@ function MiniRelatorioPreview({ resultado }) {
 
             <MiniCard
               titulo="Hora Ponta"
-              valor={formatarNumeroBR(resultado.horaPonta)}
+              valor={formatarKwh(resultado.horaPonta)}
               subtitulo="kWh"
               icon={Zap}
               cor="amber"
@@ -323,7 +663,7 @@ function MiniRelatorioPreview({ resultado }) {
 
             <MiniCard
               titulo="Hora Fora Ponta"
-              valor={formatarNumeroBR(resultado.foraPonta)}
+              valor={formatarKwh(resultado.foraPonta)}
               subtitulo="kWh"
               icon={Clock3}
               cor="purple"
@@ -331,7 +671,7 @@ function MiniRelatorioPreview({ resultado }) {
 
             <MiniCard
               titulo="Total"
-              valor={formatarNumeroBR(resultado.total)}
+              valor={formatarKwh(resultado.total)}
               subtitulo="kWh"
               icon={BarChart3}
               cor="green"
@@ -340,9 +680,9 @@ function MiniRelatorioPreview({ resultado }) {
 
           <div className="mt-5 rounded-2xl bg-blue-50 border border-blue-100 p-4 text-sm text-blue-900">
             <strong>Cálculo realizado:</strong>{" "}
-            {formatarNumeroBR(resultado.horaPonta)} kWh +{" "}
-            {formatarNumeroBR(resultado.foraPonta)} kWh ={" "}
-            <strong>{formatarNumeroBR(resultado.total)} kWh</strong>
+            {formatarKwh(resultado.horaPonta)} kWh +{" "}
+            {formatarKwh(resultado.foraPonta)} kWh ={" "}
+            <strong>{formatarKwh(resultado.total)} kWh</strong>
           </div>
         </div>
 
@@ -367,7 +707,7 @@ function MiniRelatorioPreview({ resultado }) {
                 <div className="flex-1">
                   <p className="font-bold text-slate-700">Hora Ponta</p>
                   <p className="text-slate-500">
-                    {formatarNumeroBR(resultado.horaPonta)} kWh
+                    {formatarKwh(resultado.horaPonta)} kWh
                   </p>
                 </div>
                 <p className="font-bold text-slate-700">
@@ -380,7 +720,7 @@ function MiniRelatorioPreview({ resultado }) {
                 <div className="flex-1">
                   <p className="font-bold text-slate-700">Hora Fora Ponta</p>
                   <p className="text-slate-500">
-                    {formatarNumeroBR(resultado.foraPonta)} kWh
+                    {formatarKwh(resultado.foraPonta)} kWh
                   </p>
                 </div>
                 <p className="font-bold text-slate-700">
@@ -394,7 +734,7 @@ function MiniRelatorioPreview({ resultado }) {
         <div className="rounded-3xl bg-emerald-50 border border-emerald-100 p-5 text-emerald-800">
           <p className="text-sm font-black">Total consumido</p>
           <p className="text-3xl font-black mt-2">
-            {formatarNumeroBR(resultado.total)}
+            {formatarKwh(resultado.total)}
           </p>
           <p className="font-bold mt-1">kWh</p>
 
@@ -411,7 +751,7 @@ function MiniRelatorioPreview({ resultado }) {
         <p>Relatório gerado pelo Sistema Técnico Predial</p>
 
         <div className="flex items-center gap-3">
-          <p>Data de geração: {new Date().toLocaleDateString("pt-BR")}</p>
+          <p>Data de geração: {hojeBR()}</p>
 
           <button
             type="button"
@@ -427,12 +767,238 @@ function MiniRelatorioPreview({ resultado }) {
   );
 }
 
-function gerarMiniRelatorioClimas(resultado, nomeArquivo = "") {
+function TabelaSimples({ columns, rows }) {
+  return (
+    <div className="overflow-x-auto rounded-3xl border border-slate-100">
+      <table className="min-w-full text-sm">
+        <thead className="bg-slate-50 text-slate-500">
+          <tr>
+            {columns.map((column) => (
+              <th key={column.key} className="text-left px-4 py-3 font-black">
+                {column.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+
+        <tbody className="divide-y divide-slate-100 bg-white">
+          {rows.length === 0 && (
+            <tr>
+              <td
+                colSpan={columns.length}
+                className="px-4 py-8 text-center text-slate-400"
+              >
+                Nenhum dado encontrado.
+              </td>
+            </tr>
+          )}
+
+          {rows.map((row, index) => (
+            <tr key={index}>
+              {columns.map((column) => (
+                <td key={column.key} className="px-4 py-3 text-slate-700">
+                  {column.render ? column.render(row) : row[column.key]}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function gerarRelatorioHidrico({ energia, pocos, sabesp, pluvial }) {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.width;
+  const hoje = hojeBR();
+
+  const totalPocos = Number(pocos?.total || 0);
+  const totalSabesp = Number(sabesp?.consumo || 0);
+  const totalPluvial = Number(pluvial?.totalPluvial || 0);
+  const totalControlado = totalPocos + totalSabesp + totalPluvial;
+
+  const pctPocos = totalControlado ? (totalPocos / totalControlado) * 100 : 0;
+  const pctSabesp = totalControlado ? (totalSabesp / totalControlado) * 100 : 0;
+  const pctPluvial = totalControlado ? (totalPluvial / totalControlado) * 100 : 0;
+
+  doc.setFillColor(6, 23, 55);
+  doc.rect(0, 0, pageWidth, 34, "F");
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("Sistema Técnico Predial", 14, 14);
+
+  doc.setTextColor(125, 211, 252);
+  doc.setFontSize(10);
+  doc.text(EDIFICIO, 14, 23);
+
+  doc.setTextColor(15, 42, 90);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(20);
+  doc.text("Relatório Hídrico Consolidado", 14, 52);
+
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(0.8);
+  doc.line(14, 57, 75, 57);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(71, 85, 105);
+  doc.setFontSize(9);
+  doc.text(
+    "Consolidado de água captada por poços, água consumida via concessionária e água pluvial reutilizada.",
+    14,
+    66,
+    { maxWidth: 180 }
+  );
+
+  function cardPdf(x, y, w, title, value, subtitle, color) {
+    const cores = {
+      blue: {
+        bg: [239, 246, 255],
+        border: [147, 197, 253],
+        text: [29, 78, 216],
+      },
+      green: {
+        bg: [240, 253, 244],
+        border: [134, 239, 172],
+        text: [5, 150, 105],
+      },
+      amber: {
+        bg: [255, 251, 235],
+        border: [253, 224, 71],
+        text: [217, 119, 6],
+      },
+      cyan: {
+        bg: [236, 254, 255],
+        border: [103, 232, 249],
+        text: [8, 145, 178],
+      },
+    };
+
+    const c = cores[color] || cores.blue;
+
+    doc.setFillColor(...c.bg);
+    doc.setDrawColor(...c.border);
+    doc.roundedRect(x, y, w, 26, 3, 3, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(30, 64, 100);
+    doc.text(title, x + 4, y + 8);
+
+    doc.setFontSize(13);
+    doc.setTextColor(...c.text);
+    doc.text(value, x + 4, y + 17);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(71, 85, 105);
+    doc.text(subtitle, x + 4, y + 23);
+  }
+
+  cardPdf(14, 80, 43, "Poços artesianos", `${formatarNumeroBR(totalPocos)} m³`, `${formatarPercentual(pctPocos)}%`, "blue");
+  cardPdf(61, 80, 43, "SABESP", `${formatarNumeroBR(totalSabesp)} m³`, `${formatarPercentual(pctSabesp)}%`, "cyan");
+  cardPdf(108, 80, 43, "Pluvial / reuso", `${formatarNumeroBR(totalPluvial)} m³`, `${formatarPercentual(pctPluvial)}%`, "green");
+  cardPdf(155, 80, 41, "Total controlado", `${formatarNumeroBR(totalControlado)} m³`, "Poços + SABESP + Pluvial", "amber");
+
+  autoTable(doc, {
+    startY: 122,
+    head: [["Indicador", "Volume", "Observação"]],
+    body: [
+      ["Volume de água captada a partir de poço artesiano", `${formatarNumeroBR(totalPocos)} m³`, `${pocos?.pocos?.length || 0} poço(s)`],
+      ["Volume de água consumido via concessionária", `${formatarNumeroBR(totalSabesp)} m³`, "SABESP"],
+      ["Volume de efluente para rede pública", `${formatarNumeroBR(sabesp?.volumeEfluente || totalSabesp)} m³`, "Conforme consumo da concessionária"],
+      ["Volume de água captada da chuva para reuso", `${formatarNumeroBR(totalPluvial)} m³`, "Planilha de águas pluviais"],
+      ["Total de água controlada", `${formatarNumeroBR(totalControlado)} m³`, "Consolidado ESG"],
+    ],
+    styles: {
+      fontSize: 8.5,
+      cellPadding: 2.5,
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: [0, 82, 204],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+  });
+
+  autoTable(doc, {
+    startY: doc.lastAutoTable.finalY + 12,
+    head: [["Fonte", "Volume", "Participação"]],
+    body: [
+      ["Poços artesianos", `${formatarNumeroBR(totalPocos)} m³`, `${formatarPercentual(pctPocos)}%`],
+      ["SABESP / Concessionária", `${formatarNumeroBR(totalSabesp)} m³`, `${formatarPercentual(pctSabesp)}%`],
+      ["Água pluvial / Reuso", `${formatarNumeroBR(totalPluvial)} m³`, `${formatarPercentual(pctPluvial)}%`],
+    ],
+    styles: {
+      fontSize: 8.5,
+      cellPadding: 2.5,
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: [15, 23, 42],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+  });
+
+  if (energia?.total) {
+    autoTable(doc, {
+      startY: doc.lastAutoTable.finalY + 12,
+      head: [["Energia ENEL", "Valor"]],
+      body: [
+        ["Mês referência", energia.mesReferencia || "-"],
+        ["Hora Ponta", `${formatarKwh(energia.horaPonta)} kWh`],
+        ["Hora Fora Ponta", `${formatarKwh(energia.foraPonta)} kWh`],
+        ["Total consumido", `${formatarKwh(energia.total)} kWh`],
+      ],
+      styles: {
+        fontSize: 8.5,
+        cellPadding: 2.5,
+        textColor: [15, 23, 42],
+        lineColor: [226, 232, 240],
+        lineWidth: 0.15,
+      },
+      headStyles: {
+        fillColor: [37, 99, 235],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+      },
+    });
+  }
+
+  const pageHeight = doc.internal.pageSize.height;
+
+  doc.setFillColor(6, 23, 55);
+  doc.rect(0, pageHeight - 9, pageWidth, 9, "F");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(203, 213, 225);
+  doc.text(`Relatório gerado pelo Sistema Técnico Predial • ${hoje}`, 14, pageHeight - 3.5);
+
+  doc.save("relatorio-hidrico-consolidado.pdf");
+}
+
+function gerarMiniRelatorioEnergia(resultado, nomeArquivo = "") {
   if (!resultado) return;
 
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
-  const hoje = new Date().toLocaleDateString("pt-BR");
+  const hoje = hojeBR();
   const hora = new Date().toLocaleTimeString("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
@@ -447,43 +1013,14 @@ function gerarMiniRelatorioClimas(resultado, nomeArquivo = "") {
   doc.setFillColor(6, 23, 55);
   doc.rect(0, 0, pageWidth, 34, "F");
 
-  doc.setFillColor(10, 41, 90);
-  doc.roundedRect(10, 8, 16, 16, 3, 3, "F");
-
-  doc.setDrawColor(52, 211, 235);
-  doc.setLineWidth(0.6);
-  doc.roundedRect(10, 8, 16, 16, 3, 3, "S");
-
-  doc.setTextColor(52, 211, 235);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.text("JK", 18, 18, { align: "center" });
-
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
-  doc.text("Sistema Técnico Predial", 31, 15);
+  doc.setFont("helvetica", "bold");
+  doc.text("Sistema Técnico Predial", 14, 15);
 
   doc.setFontSize(10);
   doc.setTextColor(125, 211, 252);
-  doc.text(EDIFICIO, 31, 23);
-
-  function topoCard(x, label, value, w = 38) {
-    doc.setDrawColor(96, 165, 250);
-    doc.setFillColor(10, 41, 90);
-    doc.roundedRect(x, 7, w, 20, 2.5, 2.5, "FD");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.setTextColor(219, 234, 254);
-    doc.text(label, x + 5, 14);
-
-    doc.setFontSize(10.5);
-    doc.setTextColor(103, 232, 249);
-    doc.text(String(value || "-"), x + 5, 22);
-  }
-
-  topoCard(pageWidth - 88, "Mês referência", resultado.mesReferencia || "-", 42);
-  topoCard(pageWidth - 42, "Emissão", hoje, 36);
+  doc.text(EDIFICIO, 14, 23);
 
   doc.setTextColor(15, 42, 90);
   doc.setFont("helvetica", "bold");
@@ -508,101 +1045,30 @@ function gerarMiniRelatorioClimas(resultado, nomeArquivo = "") {
     { maxWidth: 180 }
   );
 
-  function cardPdf(x, y, w, title, value, subtitle, color) {
-    const cores = {
-      blue: {
-        bg: [239, 246, 255],
-        border: [147, 197, 253],
-        text: [29, 78, 216],
-      },
-      green: {
-        bg: [240, 253, 244],
-        border: [134, 239, 172],
-        text: [5, 150, 105],
-      },
-      amber: {
-        bg: [255, 251, 235],
-        border: [253, 224, 71],
-        text: [217, 119, 6],
-      },
-      purple: {
-        bg: [250, 245, 255],
-        border: [216, 180, 254],
-        text: [126, 34, 206],
-      },
-      slate: {
-        bg: [248, 250, 252],
-        border: [203, 213, 225],
-        text: [51, 65, 85],
-      },
-    };
-
-    const c = cores[color] || cores.blue;
-
-    doc.setFillColor(...c.bg);
-    doc.setDrawColor(...c.border);
-    doc.setLineWidth(0.5);
-    doc.roundedRect(x, y, w, 25, 2.5, 2.5, "FD");
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.setTextColor(30, 64, 100);
-    doc.text(title, x + 4, y + 8);
-
-    doc.setFontSize(String(value).length > 12 ? 10.5 : 13);
-    doc.setTextColor(...c.text);
-    doc.text(String(value), x + 4, y + 17);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(6.8);
-    doc.setTextColor(71, 85, 105);
-    doc.text(subtitle, x + 4, y + 22);
-  }
-
-  cardPdf(14, 86, 34, "Mês referência", resultado.mesReferencia || "-", "Conta ENEL", "blue");
-  cardPdf(52, 86, 34, "Demanda", formatarNumeroBR(resultado.demandaKw), "kW", "slate");
-  cardPdf(90, 86, 34, "Hora Ponta", formatarNumeroBR(resultado.horaPonta), "kWh", "amber");
-  cardPdf(128, 86, 34, "Fora Ponta", formatarNumeroBR(resultado.foraPonta), "kWh", "purple");
-  cardPdf(166, 86, 30, "Total", formatarNumeroBR(resultado.total), "kWh", "green");
-
-  doc.setFillColor(239, 246, 255);
-  doc.setDrawColor(191, 219, 254);
-  doc.roundedRect(14, 122, 182, 18, 3, 3, "FD");
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(30, 64, 175);
-  doc.text(
-    `Cálculo: ${formatarNumeroBR(resultado.horaPonta)} kWh + ${formatarNumeroBR(
-      resultado.foraPonta
-    )} kWh = ${formatarNumeroBR(resultado.total)} kWh`,
-    19,
-    133
-  );
-
   autoTable(doc, {
-    startY: 152,
+    startY: 92,
     margin: { left: 14, right: 14, bottom: 24 },
     head: [["Indicador", "Valor", "Participação"]],
     body: [
-      ["Demanda", `${formatarNumeroBR(resultado.demandaKw)} kW`, "-"],
+      ["Mês referência", resultado.mesReferencia || "-", "-"],
+      ["Demanda", `${formatarKwh(resultado.demandaKw)} kW`, "-"],
       [
         "Consumo Hora Ponta",
-        `${formatarNumeroBR(resultado.horaPonta)} kWh`,
+        `${formatarKwh(resultado.horaPonta)} kWh`,
         `${formatarPercentual(percentualPonta)}%`,
       ],
       [
         "Consumo Hora Fora Ponta",
-        `${formatarNumeroBR(resultado.foraPonta)} kWh`,
+        `${formatarKwh(resultado.foraPonta)} kWh`,
         `${formatarPercentual(percentualForaPonta)}%`,
       ],
-      ["Total consumido", `${formatarNumeroBR(resultado.total)} kWh`, "100,00%"],
+      ["Total consumido", `${formatarKwh(resultado.total)} kWh`, "100,00%"],
       ["Dias faturados", String(resultado.diasFaturados || "-"), "-"],
       ["Arquivo analisado", nomeArquivo || "-", "-"],
     ],
     styles: {
-      fontSize: 8,
-      cellPadding: 2.2,
+      fontSize: 8.5,
+      cellPadding: 2.5,
       textColor: [15, 23, 42],
       lineColor: [226, 232, 240],
       lineWidth: 0.15,
@@ -650,57 +1116,252 @@ function gerarMiniRelatorioClimas(resultado, nomeArquivo = "") {
 }
 
 export default function Climas() {
-  const [arquivo, setArquivo] = useState(null);
-  const [carregando, setCarregando] = useState(false);
-  const [resultado, setResultado] = useState(null);
-  const [erro, setErro] = useState("");
-  const [textoExtraido, setTextoExtraido] = useState("");
-  const [mostrarTexto, setMostrarTexto] = useState(false);
+  const [aba, setAba] = useState("energia");
 
-  const nomeArquivo = useMemo(() => arquivo?.name || "", [arquivo]);
+  const [arquivoEnergia, setArquivoEnergia] = useState(null);
+  const [arquivoPocos, setArquivoPocos] = useState(null);
+  const [arquivoSabesp, setArquivoSabesp] = useState(null);
+  const [arquivoPluvial, setArquivoPluvial] = useState(null);
 
-  async function analisarConta() {
-    if (!arquivo) {
-      setErro("Selecione uma conta da ENEL em PDF antes de analisar.");
+  const [carregandoEnergia, setCarregandoEnergia] = useState(false);
+  const [carregandoPocos, setCarregandoPocos] = useState(false);
+  const [carregandoSabesp, setCarregandoSabesp] = useState(false);
+  const [carregandoPluvial, setCarregandoPluvial] = useState(false);
+
+  const [energia, setEnergia] = useState(null);
+  const [pocos, setPocos] = useState(null);
+  const [sabesp, setSabesp] = useState(null);
+  const [pluvial, setPluvial] = useState(null);
+
+  const [erroEnergia, setErroEnergia] = useState("");
+  const [erroPocos, setErroPocos] = useState("");
+  const [erroSabesp, setErroSabesp] = useState("");
+  const [erroPluvial, setErroPluvial] = useState("");
+
+  const [textoEnergia, setTextoEnergia] = useState("");
+  const [textoPocos, setTextoPocos] = useState("");
+  const [textoSabesp, setTextoSabesp] = useState("");
+  const [mostrarTexto, setMostrarTexto] = useState("");
+
+  const consolidado = useMemo(() => {
+    const totalPocos = Number(pocos?.total || 0);
+    const totalSabesp = Number(sabesp?.consumo || 0);
+    const totalPluvial = Number(pluvial?.totalPluvial || 0);
+    const total = totalPocos + totalSabesp + totalPluvial;
+
+    return {
+      totalPocos,
+      totalSabesp,
+      totalPluvial,
+      total,
+      pctPocos: total ? (totalPocos / total) * 100 : 0,
+      pctSabesp: total ? (totalSabesp / total) * 100 : 0,
+      pctPluvial: total ? (totalPluvial / total) * 100 : 0,
+    };
+  }, [pocos, sabesp, pluvial]);
+
+  async function analisarEnergia() {
+    if (!arquivoEnergia) {
+      setErroEnergia("Selecione uma conta da ENEL em PDF antes de analisar.");
       return;
     }
 
-    setCarregando(true);
-    setErro("");
-    setResultado(null);
-    setTextoExtraido("");
+    setCarregandoEnergia(true);
+    setErroEnergia("");
+    setEnergia(null);
+    setTextoEnergia("");
 
     try {
-      const texto = await extrairTextoPDF(arquivo);
-      setTextoExtraido(texto);
+      const texto = await extrairTextoPDF(arquivoEnergia);
+      setTextoEnergia(texto);
 
       const dados = extrairConsumosEnel(texto);
 
       if (!dados.encontrado) {
-        setErro(
-          "Não consegui localizar automaticamente Hora Ponta e Hora Fora Ponta nesse PDF. O arquivo pode estar escaneado como imagem ou com texto fora do padrão."
+        setErroEnergia(
+          "Não consegui localizar automaticamente Hora Ponta e Hora Fora Ponta nesse PDF."
         );
-        setResultado(null);
         return;
       }
 
-      setResultado(dados);
+      setEnergia(dados);
     } catch (err) {
       console.error(err);
-      setErro(
-        "Não foi possível ler o PDF. Confirme se o arquivo é uma conta em PDF digital."
-      );
+      setErroEnergia("Não foi possível ler o PDF da ENEL.");
     } finally {
-      setCarregando(false);
+      setCarregandoEnergia(false);
     }
   }
 
-  function limpar() {
-    setArquivo(null);
-    setResultado(null);
-    setErro("");
-    setTextoExtraido("");
-    setMostrarTexto(false);
+  async function analisarPocos() {
+    if (!arquivoPocos) {
+      setErroPocos("Selecione o demonstrativo dos poços em PDF.");
+      return;
+    }
+
+    setCarregandoPocos(true);
+    setErroPocos("");
+    setPocos(null);
+    setTextoPocos("");
+
+    try {
+      const texto = await extrairTextoPDF(arquivoPocos);
+      setTextoPocos(texto);
+
+      const dados = extrairPocosDoDemonstrativo(texto);
+
+      if (!dados.encontrado) {
+        setErroPocos(
+          "Não consegui ler automaticamente o PDF dos poços. Como esse demonstrativo costuma ser escaneado, preencha os valores manualmente nos campos abaixo."
+        );
+
+        setPocos({
+          pocos: [
+            {
+              nome: "Poço 1",
+              tipo: "Potável/Poço",
+              dataAnterior: "",
+              leituraAnterior: 0,
+              dataAtual: "",
+              leituraAtual: 0,
+              consumo: 0,
+              origem: "Manual",
+            },
+            {
+              nome: "Poço 2",
+              tipo: "Potável/Poço",
+              dataAnterior: "",
+              leituraAnterior: 0,
+              dataAtual: "",
+              leituraAtual: 0,
+              consumo: 0,
+              origem: "Manual",
+            },
+          ],
+          total: 0,
+          encontrado: false,
+          precisaConferencia: true,
+        });
+
+        return;
+      }
+
+      setPocos(dados);
+    } catch (err) {
+      console.error(err);
+      setErroPocos("Não foi possível ler o PDF dos poços.");
+    } finally {
+      setCarregandoPocos(false);
+    }
+  }
+
+  async function analisarSabesp() {
+    if (!arquivoSabesp) {
+      setErroSabesp("Selecione a fatura SABESP em PDF.");
+      return;
+    }
+
+    setCarregandoSabesp(true);
+    setErroSabesp("");
+    setSabesp(null);
+    setTextoSabesp("");
+
+    try {
+      const texto = await extrairTextoPDF(arquivoSabesp);
+      setTextoSabesp(texto);
+
+      const dados = extrairSabesp(texto);
+
+      if (!dados.encontrado) {
+        setErroSabesp("Não consegui localizar o consumo SABESP automaticamente.");
+        return;
+      }
+
+      setSabesp(dados);
+    } catch (err) {
+      console.error(err);
+      setErroSabesp("Não foi possível ler o PDF da SABESP.");
+    } finally {
+      setCarregandoSabesp(false);
+    }
+  }
+
+  async function analisarPluvial() {
+    if (!arquivoPluvial) {
+      setErroPluvial("Selecione a planilha de águas pluviais.");
+      return;
+    }
+
+    setCarregandoPluvial(true);
+    setErroPluvial("");
+    setPluvial(null);
+
+    try {
+      const dados = await extrairPlanilhaPluvial(arquivoPluvial);
+
+      if (!dados.encontrado) {
+        setErroPluvial(
+          "Não consegui encontrar colunas de água pluvial na planilha. Verifique se existe uma coluna chamada Alimentação via Água Pluvial."
+        );
+        return;
+      }
+
+      setPluvial(dados);
+    } catch (err) {
+      console.error(err);
+      setErroPluvial("Não foi possível ler a planilha de águas pluviais.");
+    } finally {
+      setCarregandoPluvial(false);
+    }
+  }
+
+  function atualizarPoco(index, campo, valor) {
+    setPocos((prev) => {
+      const base = prev || {
+        pocos: [],
+        total: 0,
+        encontrado: false,
+        precisaConferencia: true,
+      };
+
+      const novosPocos = [...(base.pocos || [])];
+      novosPocos[index] = {
+        ...novosPocos[index],
+        [campo]: ["leituraAnterior", "leituraAtual", "consumo"].includes(campo)
+          ? parseNumeroBR(valor)
+          : valor,
+        origem: "Manual",
+      };
+
+      const total = novosPocos.reduce((soma, item) => soma + Number(item.consumo || 0), 0);
+
+      return {
+        ...base,
+        pocos: novosPocos,
+        total,
+        encontrado: total > 0,
+        precisaConferencia: true,
+      };
+    });
+  }
+
+  function limparTudo() {
+    setArquivoEnergia(null);
+    setArquivoPocos(null);
+    setArquivoSabesp(null);
+    setArquivoPluvial(null);
+    setEnergia(null);
+    setPocos(null);
+    setSabesp(null);
+    setPluvial(null);
+    setErroEnergia("");
+    setErroPocos("");
+    setErroSabesp("");
+    setErroPluvial("");
+    setTextoEnergia("");
+    setTextoPocos("");
+    setTextoSabesp("");
+    setMostrarTexto("");
   }
 
   return (
@@ -715,207 +1376,657 @@ export default function Climas() {
             <div>
               <h2 className="text-2xl font-black text-slate-900">Climas</h2>
               <p className="text-sm text-slate-500">
-                Análise automática da conta ENEL para consumo Hora Ponta e Hora Fora Ponta.
+                Energia, água, poços, SABESP, pluvial e consolidado ESG.
               </p>
             </div>
           </div>
 
           <button
-            onClick={limpar}
-            className="px-4 py-3 rounded-2xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50"
+            onClick={limparTudo}
+            className="px-4 py-3 rounded-2xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50 flex items-center gap-2"
           >
-            Limpar análise
+            <RefreshCcw size={17} />
+            Limpar análises
           </button>
         </div>
       </section>
 
-      <section className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6">
-        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-          <div className="flex items-center gap-3 mb-5">
-            <div className="w-11 h-11 rounded-2xl bg-slate-100 text-slate-700 flex items-center justify-center">
-              <Upload size={22} />
-            </div>
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {TABS.map((item) => (
+          <TabButton
+            key={item.id}
+            item={item}
+            active={aba === item.id}
+            onClick={() => setAba(item.id)}
+          />
+        ))}
+      </div>
 
-            <div>
-              <h3 className="font-black text-slate-900">Upload da conta ENEL</h3>
-              <p className="text-xs text-slate-500">Envie o PDF da conta para análise.</p>
-            </div>
-          </div>
+      {aba === "energia" && (
+        <section className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6">
+          <UploadBox
+            titulo="Upload da conta ENEL"
+            subtitulo="Envie o PDF da conta para análise."
+            arquivo={arquivoEnergia}
+            accept="application/pdf,.pdf"
+            onArquivo={(file) => {
+              setArquivoEnergia(file);
+              setEnergia(null);
+              setErroEnergia("");
+              setTextoEnergia("");
+            }}
+            onAnalisar={analisarEnergia}
+            carregando={carregandoEnergia}
+            botao="Analisar conta"
+          />
 
-          <label className="block border-2 border-dashed border-slate-200 rounded-3xl p-8 text-center cursor-pointer hover:bg-slate-50 transition">
-            <input
-              type="file"
-              accept="application/pdf,.pdf"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                setArquivo(file || null);
-                setResultado(null);
-                setErro("");
-                setTextoExtraido("");
-              }}
-            />
+          <div className="space-y-6 min-w-0">
+            {!energia && (
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 text-center">
+                <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-700 flex items-center justify-center mx-auto mb-4">
+                  <FileText size={30} />
+                </div>
 
-            <FileText className="mx-auto text-slate-400 mb-3" size={42} />
+                <h3 className="text-xl font-black text-slate-900">
+                  Nenhuma conta analisada ainda
+                </h3>
 
-            <p className="font-bold text-slate-800 break-words">
-              {nomeArquivo || "Clique para selecionar o PDF"}
-            </p>
-
-            <p className="text-xs text-slate-400 mt-2">
-              Funciona melhor com PDF digital. PDF escaneado pode precisar de OCR depois.
-            </p>
-          </label>
-
-          <button
-            onClick={analisarConta}
-            disabled={carregando || !arquivo}
-            className="mt-5 w-full rounded-2xl bg-slate-950 text-white py-3 font-black hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          >
-            {carregando ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                Analisando...
-              </>
-            ) : (
-              <>
-                <BarChart3 size={18} />
-                Analisar conta
-              </>
-            )}
-          </button>
-
-          {erro && (
-            <div className="mt-4 rounded-2xl bg-amber-50 border border-amber-100 p-4 text-sm text-amber-800 flex gap-2">
-              <AlertTriangle size={18} className="shrink-0 mt-0.5" />
-              <span>{erro}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-6 min-w-0">
-          {!resultado && (
-            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 text-center">
-              <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-700 flex items-center justify-center mx-auto mb-4">
-                <FileText size={30} />
+                <p className="text-sm text-slate-500 mt-2">
+                  Envie uma conta ENEL em PDF e clique em analisar.
+                </p>
               </div>
+            )}
 
-              <h3 className="text-xl font-black text-slate-900">
-                Nenhuma conta analisada ainda
-              </h3>
+            {erroEnergia && <Aviso>{erroEnergia}</Aviso>}
 
-              <p className="text-sm text-slate-500 mt-2">
-                Envie uma conta ENEL em PDF e clique em analisar para extrair o consumo.
-              </p>
-            </div>
-          )}
+            {energia && (
+              <>
+                <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+                  <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                        <CheckCircle2 size={22} />
+                      </div>
 
-          {resultado && (
-            <>
-              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-                <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                      <CheckCircle2 size={22} />
+                      <div>
+                        <h3 className="font-black text-slate-900">
+                          Conta analisada
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          Dados extraídos automaticamente do PDF.
+                        </p>
+                      </div>
                     </div>
 
-                    <div>
-                      <h3 className="font-black text-slate-900">Conta analisada</h3>
-                      <p className="text-xs text-slate-500">
-                        Dados extraídos automaticamente do PDF.
-                      </p>
-                    </div>
+                    <button
+                      onClick={() => gerarMiniRelatorioEnergia(energia, arquivoEnergia?.name || "")}
+                      className="rounded-2xl bg-slate-950 text-white px-5 py-3 font-black hover:bg-slate-800 flex items-center justify-center gap-2"
+                    >
+                      <FileDown size={18} />
+                      Emitir mini relatório
+                    </button>
                   </div>
 
-                  <button
-                    onClick={() => gerarMiniRelatorioClimas(resultado, nomeArquivo)}
-                    className="rounded-2xl bg-slate-950 text-white px-5 py-3 font-black hover:bg-slate-800 flex items-center justify-center gap-2"
-                  >
-                    <FileDown size={18} />
-                    Emitir mini relatório
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
+                    <CardResumo
+                      titulo="Mês referência"
+                      valor={energia.mesReferencia || "-"}
+                      subtitulo="Identificado na conta"
+                      icon={CalendarDays}
+                      cor="blue"
+                    />
+
+                    <CardResumo
+                      titulo="Demanda"
+                      valor={formatarKwh(energia.demandaKw)}
+                      subtitulo="kW"
+                      icon={Gauge}
+                      cor="slate"
+                    />
+
+                    <CardResumo
+                      titulo="Hora Ponta"
+                      valor={formatarKwh(energia.horaPonta)}
+                      subtitulo="kWh"
+                      icon={Zap}
+                      cor="amber"
+                    />
+
+                    <CardResumo
+                      titulo="Hora Fora Ponta"
+                      valor={formatarKwh(energia.foraPonta)}
+                      subtitulo="kWh"
+                      icon={Clock3}
+                      cor="purple"
+                    />
+
+                    <CardResumo
+                      titulo="Total consumido"
+                      valor={formatarKwh(energia.total)}
+                      subtitulo="Ponta + Fora Ponta"
+                      icon={BarChart3}
+                      cor="green"
+                    />
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
-                  <CardResumo
-                    titulo="Mês referência"
-                    valor={resultado.mesReferencia || "-"}
-                    subtitulo="Identificado na conta"
-                    icon={CalendarDays}
-                    cor="blue"
-                  />
-
-                  <CardResumo
-                    titulo="Demanda"
-                    valor={formatarNumeroBR(resultado.demandaKw)}
-                    subtitulo="kW"
-                    icon={Gauge}
-                    cor="slate"
-                  />
-
-                  <CardResumo
-                    titulo="Hora Ponta"
-                    valor={formatarNumeroBR(resultado.horaPonta)}
-                    subtitulo="kWh"
-                    icon={Zap}
-                    cor="amber"
-                  />
-
-                  <CardResumo
-                    titulo="Hora Fora Ponta"
-                    valor={formatarNumeroBR(resultado.foraPonta)}
-                    subtitulo="kWh"
-                    icon={Clock3}
-                    cor="purple"
-                  />
-
-                  <CardResumo
-                    titulo="Total consumido"
-                    valor={formatarNumeroBR(resultado.total)}
-                    subtitulo="Ponta + Fora Ponta"
-                    icon={BarChart3}
-                    cor="green"
-                  />
+                <div className="bg-blue-50 border border-blue-100 rounded-3xl p-5 text-sm text-blue-900">
+                  <strong>Cálculo realizado:</strong>{" "}
+                  {formatarKwh(energia.horaPonta)} kWh +{" "}
+                  {formatarKwh(energia.foraPonta)} kWh ={" "}
+                  <strong>{formatarKwh(energia.total)} kWh</strong>
+                  {energia.diasFaturados ? (
+                    <>
+                      {" "}
+                      • <strong>Dias faturados:</strong> {energia.diasFaturados}
+                    </>
+                  ) : null}
                 </div>
+
+                <MiniRelatorioEnergiaPreview resultado={energia} />
+              </>
+            )}
+
+            {textoEnergia && (
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+                <button
+                  onClick={() => setMostrarTexto(mostrarTexto === "energia" ? "" : "energia")}
+                  className="text-sm font-black text-blue-700 hover:text-blue-900"
+                >
+                  {mostrarTexto === "energia"
+                    ? "Ocultar texto extraído"
+                    : "Ver texto extraído do PDF"}
+                </button>
+
+                {mostrarTexto === "energia" && (
+                  <pre className="mt-4 max-h-72 overflow-auto rounded-2xl bg-slate-950 text-slate-100 p-4 text-xs whitespace-pre-wrap">
+                    {textoEnergia}
+                  </pre>
+                )}
               </div>
+            )}
+          </div>
+        </section>
+      )}
 
-              <div className="bg-blue-50 border border-blue-100 rounded-3xl p-5 text-sm text-blue-900">
-                <strong>Cálculo realizado:</strong>{" "}
-                {formatarNumeroBR(resultado.horaPonta)} kWh +{" "}
-                {formatarNumeroBR(resultado.foraPonta)} kWh ={" "}
-                <strong>{formatarNumeroBR(resultado.total)} kWh</strong>
-                {resultado.diasFaturados ? (
-                  <>
-                    {" "}
-                    • <strong>Dias faturados:</strong> {resultado.diasFaturados}
-                  </>
-                ) : null}
-              </div>
+      {aba === "pocos" && (
+        <section className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6">
+          <UploadBox
+            titulo="Upload demonstrativo dos poços"
+            subtitulo="Envie o PDF dos dois poços artesianos."
+            arquivo={arquivoPocos}
+            accept="application/pdf,.pdf"
+            icon={Droplets}
+            onArquivo={(file) => {
+              setArquivoPocos(file);
+              setPocos(null);
+              setErroPocos("");
+              setTextoPocos("");
+            }}
+            onAnalisar={analisarPocos}
+            carregando={carregandoPocos}
+            botao="Analisar poços"
+          />
 
-              <MiniRelatorioPreview resultado={resultado} />
-            </>
-          )}
+          <div className="space-y-6">
+            {erroPocos && <Aviso>{erroPocos}</Aviso>}
 
-          {textoExtraido && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <CardResumo
+                titulo="Volume poços"
+                valor={`${formatarNumeroBR(pocos?.total || 0)} m³`}
+                subtitulo="Poço 1 + Poço 2"
+                icon={Droplets}
+                cor="blue"
+              />
+
+              <CardResumo
+                titulo="Quantidade de poços"
+                valor={pocos?.pocos?.length || 0}
+                subtitulo="Demonstrativos"
+                icon={Gauge}
+                cor="slate"
+              />
+
+              <CardResumo
+                titulo="Status"
+                valor={pocos?.encontrado ? "Lido" : "Pendente"}
+                subtitulo={pocos?.precisaConferencia ? "Conferência recomendada" : "Automático"}
+                icon={CheckCircle2}
+                cor={pocos?.encontrado ? "green" : "amber"}
+              />
+            </div>
+
             <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-              <button
-                onClick={() => setMostrarTexto((v) => !v)}
-                className="text-sm font-black text-blue-700 hover:text-blue-900"
-              >
-                {mostrarTexto
-                  ? "Ocultar texto extraído"
-                  : "Ver texto extraído do PDF"}
-              </button>
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="font-black text-slate-900">
+                    Volume de água captada a partir de poço artesiano
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    Como alguns demonstrativos são escaneados, revise ou preencha manualmente se necessário.
+                  </p>
+                </div>
+              </div>
 
-              {mostrarTexto && (
-                <pre className="mt-4 max-h-72 overflow-auto rounded-2xl bg-slate-950 text-slate-100 p-4 text-xs whitespace-pre-wrap">
-                  {textoExtraido}
-                </pre>
+              <TabelaSimples
+                columns={[
+                  { key: "nome", label: "Poço" },
+                  { key: "dataAnterior", label: "Data anterior" },
+                  {
+                    key: "leituraAnterior",
+                    label: "Leitura anterior",
+                    render: (r) => `${formatarNumeroBR(r.leituraAnterior)} m³`,
+                  },
+                  { key: "dataAtual", label: "Data atual" },
+                  {
+                    key: "leituraAtual",
+                    label: "Leitura atual",
+                    render: (r) => `${formatarNumeroBR(r.leituraAtual)} m³`,
+                  },
+                  {
+                    key: "consumo",
+                    label: "Volume captado",
+                    render: (r) => `${formatarNumeroBR(r.consumo)} m³`,
+                  },
+                ]}
+                rows={pocos?.pocos || []}
+              />
+
+              {(!pocos || pocos?.precisaConferencia) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                  {[0, 1].map((index) => {
+                    const item = pocos?.pocos?.[index] || {
+                      nome: `Poço ${index + 1}`,
+                      dataAnterior: "",
+                      leituraAnterior: 0,
+                      dataAtual: "",
+                      leituraAtual: 0,
+                      consumo: 0,
+                    };
+
+                    return (
+                      <div key={index} className="rounded-3xl border border-slate-100 p-4">
+                        <h4 className="font-black text-slate-900 mb-3">
+                          {item.nome}
+                        </h4>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <input
+                            value={item.dataAnterior || ""}
+                            onChange={(e) => atualizarPoco(index, "dataAnterior", e.target.value)}
+                            placeholder="Data anterior"
+                            className="rounded-2xl border border-slate-200 p-3 text-sm"
+                          />
+
+                          <input
+                            value={item.dataAtual || ""}
+                            onChange={(e) => atualizarPoco(index, "dataAtual", e.target.value)}
+                            placeholder="Data atual"
+                            className="rounded-2xl border border-slate-200 p-3 text-sm"
+                          />
+
+                          <input
+                            value={item.leituraAnterior || ""}
+                            onChange={(e) => atualizarPoco(index, "leituraAnterior", e.target.value)}
+                            placeholder="Leitura anterior"
+                            className="rounded-2xl border border-slate-200 p-3 text-sm"
+                          />
+
+                          <input
+                            value={item.leituraAtual || ""}
+                            onChange={(e) => atualizarPoco(index, "leituraAtual", e.target.value)}
+                            placeholder="Leitura atual"
+                            className="rounded-2xl border border-slate-200 p-3 text-sm"
+                          />
+
+                          <input
+                            value={item.consumo || ""}
+                            onChange={(e) => atualizarPoco(index, "consumo", e.target.value)}
+                            placeholder="Volume captado m³"
+                            className="rounded-2xl border border-slate-200 p-3 text-sm sm:col-span-2"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          )}
-        </div>
-      </section>
+
+            {textoPocos && (
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+                <button
+                  onClick={() => setMostrarTexto(mostrarTexto === "pocos" ? "" : "pocos")}
+                  className="text-sm font-black text-blue-700 hover:text-blue-900"
+                >
+                  {mostrarTexto === "pocos"
+                    ? "Ocultar texto extraído"
+                    : "Ver texto extraído do PDF"}
+                </button>
+
+                {mostrarTexto === "pocos" && (
+                  <pre className="mt-4 max-h-72 overflow-auto rounded-2xl bg-slate-950 text-slate-100 p-4 text-xs whitespace-pre-wrap">
+                    {textoPocos}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {aba === "sabesp" && (
+        <section className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6">
+          <UploadBox
+            titulo="Upload fatura SABESP"
+            subtitulo="Envie a fatura completa da concessionária."
+            arquivo={arquivoSabesp}
+            accept="application/pdf,.pdf"
+            icon={Waves}
+            onArquivo={(file) => {
+              setArquivoSabesp(file);
+              setSabesp(null);
+              setErroSabesp("");
+              setTextoSabesp("");
+            }}
+            onAnalisar={analisarSabesp}
+            carregando={carregandoSabesp}
+            botao="Analisar SABESP"
+          />
+
+          <div className="space-y-6">
+            {erroSabesp && <Aviso>{erroSabesp}</Aviso>}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <CardResumo
+                titulo="Água via SABESP"
+                valor={`${formatarNumeroBR(sabesp?.consumo || 0)} m³`}
+                subtitulo="Concessionária"
+                icon={Waves}
+                cor="cyan"
+              />
+
+              <CardResumo
+                titulo="Efluente rede pública"
+                valor={`${formatarNumeroBR(sabesp?.volumeEfluente || 0)} m³`}
+                subtitulo="Base: volume consumido"
+                icon={Droplets}
+                cor="purple"
+              />
+
+              <CardResumo
+                titulo="Valor total"
+                valor={brl(sabesp?.valorTotal || 0)}
+                subtitulo="Conta SABESP"
+                icon={Gauge}
+                cor="green"
+              />
+            </div>
+
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+              <h3 className="font-black text-slate-900 mb-4">
+                Volume de água consumido e gerando efluente para rede pública
+              </h3>
+
+              <TabelaSimples
+                columns={[
+                  {
+                    key: "indicador",
+                    label: "Indicador",
+                  },
+                  {
+                    key: "valor",
+                    label: "Valor",
+                  },
+                ]}
+                rows={[
+                  {
+                    indicador: "Leitura anterior",
+                    valor: `${formatarNumeroBR(sabesp?.leituraAnterior || 0)} m³`,
+                  },
+                  {
+                    indicador: "Leitura atual",
+                    valor: `${formatarNumeroBR(sabesp?.leituraAtual || 0)} m³`,
+                  },
+                  {
+                    indicador: "Consumo via concessionária",
+                    valor: `${formatarNumeroBR(sabesp?.consumo || 0)} m³`,
+                  },
+                  {
+                    indicador: "Volume de efluente para rede pública",
+                    valor: `${formatarNumeroBR(sabesp?.volumeEfluente || 0)} m³`,
+                  },
+                  {
+                    indicador: "Valor água",
+                    valor: brl(sabesp?.valorAgua || 0),
+                  },
+                  {
+                    indicador: "Valor esgoto",
+                    valor: brl(sabesp?.valorEsgoto || 0),
+                  },
+                  {
+                    indicador: "Total da fatura",
+                    valor: brl(sabesp?.valorTotal || 0),
+                  },
+                ]}
+              />
+            </div>
+
+            {textoSabesp && (
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+                <button
+                  onClick={() => setMostrarTexto(mostrarTexto === "sabesp" ? "" : "sabesp")}
+                  className="text-sm font-black text-blue-700 hover:text-blue-900"
+                >
+                  {mostrarTexto === "sabesp"
+                    ? "Ocultar texto extraído"
+                    : "Ver texto extraído do PDF"}
+                </button>
+
+                {mostrarTexto === "sabesp" && (
+                  <pre className="mt-4 max-h-72 overflow-auto rounded-2xl bg-slate-950 text-slate-100 p-4 text-xs whitespace-pre-wrap">
+                    {textoSabesp}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {aba === "pluvial" && (
+        <section className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6">
+          <UploadBox
+            titulo="Upload planilha águas pluviais"
+            subtitulo="Envie a planilha .xlsx de reuso/pluvial."
+            arquivo={arquivoPluvial}
+            accept=".xlsx,.xls"
+            icon={FileSpreadsheet}
+            onArquivo={(file) => {
+              setArquivoPluvial(file);
+              setPluvial(null);
+              setErroPluvial("");
+            }}
+            onAnalisar={analisarPluvial}
+            carregando={carregandoPluvial}
+            botao="Analisar planilha"
+          />
+
+          <div className="space-y-6">
+            {erroPluvial && <Aviso>{erroPluvial}</Aviso>}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <CardResumo
+                titulo="Água pluvial"
+                valor={`${formatarNumeroBR(pluvial?.totalPluvial || 0)} m³`}
+                subtitulo="Captada para reuso"
+                icon={CloudRain}
+                cor="green"
+              />
+
+              <CardResumo
+                titulo="Alimentação MIX"
+                valor={`${formatarNumeroBR(pluvial?.totalMix || 0)} m³`}
+                subtitulo="Reservatório/MIX"
+                icon={Droplets}
+                cor="blue"
+              />
+
+              <CardResumo
+                titulo="Consumo diário"
+                valor={`${formatarNumeroBR(pluvial?.totalConsumo || 0)} m³`}
+                subtitulo={`${pluvial?.linhas?.length || 0} registro(s)`}
+                icon={Gauge}
+                cor="slate"
+              />
+            </div>
+
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+              <h3 className="font-black text-slate-900 mb-4">
+                Volume de água captada a partir da chuva para reuso
+              </h3>
+
+              <TabelaSimples
+                columns={[
+                  { key: "data", label: "Data" },
+                  { key: "mes", label: "Mês" },
+                  { key: "ano", label: "Ano" },
+                  {
+                    key: "pluvial",
+                    label: "Água pluvial",
+                    render: (r) => `${formatarNumeroBR(r.pluvial)} m³`,
+                  },
+                  {
+                    key: "mix",
+                    label: "MIX / Reservatório",
+                    render: (r) => `${formatarNumeroBR(r.mix)} m³`,
+                  },
+                  {
+                    key: "consumoDiario",
+                    label: "Consumo diário",
+                    render: (r) => `${formatarNumeroBR(r.consumoDiario)} m³`,
+                  },
+                ]}
+                rows={(pluvial?.linhas || []).slice(0, 20)}
+              />
+
+              {pluvial?.linhas?.length > 20 && (
+                <p className="text-xs text-slate-400 mt-3">
+                  Exibindo os primeiros 20 registros. O total considera a planilha inteira.
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {aba === "consolidado" && (
+        <section className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <CardResumo
+              titulo="Poços artesianos"
+              valor={`${formatarNumeroBR(consolidado.totalPocos)} m³`}
+              subtitulo={`${formatarPercentual(consolidado.pctPocos)}% do total`}
+              icon={Droplets}
+              cor="blue"
+            />
+
+            <CardResumo
+              titulo="SABESP"
+              valor={`${formatarNumeroBR(consolidado.totalSabesp)} m³`}
+              subtitulo={`${formatarPercentual(consolidado.pctSabesp)}% do total`}
+              icon={Waves}
+              cor="cyan"
+            />
+
+            <CardResumo
+              titulo="Água pluvial"
+              valor={`${formatarNumeroBR(consolidado.totalPluvial)} m³`}
+              subtitulo={`${formatarPercentual(consolidado.pctPluvial)}% do total`}
+              icon={CloudRain}
+              cor="green"
+            />
+
+            <CardResumo
+              titulo="Total controlado"
+              valor={`${formatarNumeroBR(consolidado.total)} m³`}
+              subtitulo="Poços + SABESP + Pluvial"
+              icon={BarChart3}
+              cor="amber"
+            />
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
+            <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-5">
+              <div>
+                <h3 className="font-black text-slate-900">
+                  Consolidado ESG hídrico
+                </h3>
+                <p className="text-sm text-slate-500">
+                  Resumo dos volumes por fonte de abastecimento e reuso.
+                </p>
+              </div>
+
+              <button
+                onClick={() =>
+                  gerarRelatorioHidrico({
+                    energia,
+                    pocos,
+                    sabesp,
+                    pluvial,
+                  })
+                }
+                className="rounded-2xl bg-slate-950 text-white px-5 py-3 font-black hover:bg-slate-800 flex items-center justify-center gap-2"
+              >
+                <FileDown size={18} />
+                Emitir relatório hídrico
+              </button>
+            </div>
+
+            <TabelaSimples
+              columns={[
+                { key: "fonte", label: "Fonte" },
+                { key: "volume", label: "Volume" },
+                { key: "participacao", label: "Participação" },
+                { key: "descricao", label: "Descrição" },
+              ]}
+              rows={[
+                {
+                  fonte: "Poços artesianos",
+                  volume: `${formatarNumeroBR(consolidado.totalPocos)} m³`,
+                  participacao: `${formatarPercentual(consolidado.pctPocos)}%`,
+                  descricao: "Volume de água captada a partir de poço artesiano.",
+                },
+                {
+                  fonte: "SABESP / Concessionária",
+                  volume: `${formatarNumeroBR(consolidado.totalSabesp)} m³`,
+                  participacao: `${formatarPercentual(consolidado.pctSabesp)}%`,
+                  descricao: "Volume de água consumido via concessionária.",
+                },
+                {
+                  fonte: "Água pluvial / Reuso",
+                  volume: `${formatarNumeroBR(consolidado.totalPluvial)} m³`,
+                  participacao: `${formatarPercentual(consolidado.pctPluvial)}%`,
+                  descricao: "Volume de água captada a partir da chuva para reuso.",
+                },
+                {
+                  fonte: "Total controlado",
+                  volume: `${formatarNumeroBR(consolidado.total)} m³`,
+                  participacao: "100,00%",
+                  descricao: "Soma de poços, concessionária e pluvial.",
+                },
+              ]}
+            />
+          </div>
+
+          <Aviso tipo="blue">
+            Para o consolidado ficar completo, analise pelo menos um arquivo em
+            <strong> Poços artesianos</strong>, um em <strong>SABESP</strong> e
+            a planilha em <strong>Águas pluviais</strong>.
+          </Aviso>
+        </section>
+      )}
     </div>
   );
 }
