@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
+  FileDown,
   FileText,
   Loader2,
   Upload,
@@ -10,8 +11,12 @@ import {
 import { useMemo, useState } from "react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+
+const EDIFICIO = "Edifício JK 1455";
 
 function parseNumeroBR(valor) {
   if (valor === null || valor === undefined) return 0;
@@ -66,18 +71,6 @@ function buscarMesReferencia(texto) {
 function extrairConsumosEnel(textoOriginal) {
   const texto = normalizarTexto(textoOriginal);
 
-  /*
-    Padrão mais confiável para a tabela de histórico:
-
-    Mês/Ano | Demanda kW | Hora Ponta | Hora Fora Ponta | Nº Dias FAT
-
-    Exemplo:
-    ABR/26 900,000 32.453,820 208.816,020 30
-
-    O sistema anterior estava confundindo ABR/26 com 26,000.
-    Por isso agora a extração prioriza a linha completa do histórico.
-  */
-
   const meses = "JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ";
 
   const numeroDecimalBR =
@@ -111,12 +104,6 @@ function extrairConsumosEnel(textoOriginal) {
       encontrado: horaPonta > 0 || foraPonta > 0,
     };
   }
-
-  /*
-    Plano B:
-    Caso o PDF venha com os textos quebrados, tenta achar a sequência depois de
-    "Consumo Faturado kWh", mas ainda exigindo números com vírgula decimal.
-  */
 
   const regexSequencia = new RegExp(
     `consumo\\s*faturado\\s*kwh.*?hora\\s*ponta.*?(${numeroDecimalBR}).*?` +
@@ -180,22 +167,300 @@ function CardResumo({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
   };
 
   return (
-    <div className={`rounded-3xl border p-5 ${cores[cor] || cores.blue}`}>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase opacity-80">{titulo}</p>
-          <p className="text-2xl font-black mt-2">{valor}</p>
+    <div
+      className={`rounded-3xl border p-4 min-w-0 overflow-hidden ${
+        cores[cor] || cores.blue
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3 min-w-0">
+        <div className="min-w-0">
+          <p className="text-[11px] font-black uppercase opacity-80 break-words">
+            {titulo}
+          </p>
+
+          <p className="text-xl 2xl:text-2xl font-black mt-2 leading-tight break-words">
+            {valor}
+          </p>
+
           {subtitulo && (
-            <p className="text-xs font-semibold mt-1 opacity-75">{subtitulo}</p>
+            <p className="text-xs font-semibold mt-1 opacity-75 break-words">
+              {subtitulo}
+            </p>
           )}
         </div>
 
-        <div className="w-12 h-12 rounded-2xl bg-white/70 flex items-center justify-center shrink-0">
-          <Icon size={22} />
+        <div className="w-10 h-10 rounded-2xl bg-white/70 flex items-center justify-center shrink-0">
+          <Icon size={20} />
         </div>
       </div>
     </div>
   );
+}
+
+function gerarMiniRelatorioClimas(resultado, nomeArquivo = "") {
+  if (!resultado) return;
+
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.width;
+  const hoje = new Date().toLocaleDateString("pt-BR");
+  const hora = new Date().toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const percentualPonta =
+    resultado.total > 0 ? (resultado.horaPonta / resultado.total) * 100 : 0;
+
+  const percentualForaPonta =
+    resultado.total > 0 ? (resultado.foraPonta / resultado.total) * 100 : 0;
+
+  doc.setFillColor(6, 23, 55);
+  doc.rect(0, 0, pageWidth, 34, "F");
+
+  doc.setFillColor(10, 41, 90);
+  doc.roundedRect(10, 8, 16, 16, 3, 3, "F");
+
+  doc.setDrawColor(52, 211, 235);
+  doc.setLineWidth(0.6);
+  doc.roundedRect(10, 8, 16, 16, 3, 3, "S");
+
+  doc.setTextColor(52, 211, 235);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11);
+  doc.text("JK", 18, 18, { align: "center" });
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.text("Sistema Técnico Predial", 31, 15);
+
+  doc.setFontSize(10);
+  doc.setTextColor(125, 211, 252);
+  doc.text(EDIFICIO, 31, 23);
+
+  function topoCard(x, label, value, w = 38) {
+    doc.setDrawColor(96, 165, 250);
+    doc.setFillColor(10, 41, 90);
+    doc.roundedRect(x, 7, w, 20, 2.5, 2.5, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(219, 234, 254);
+    doc.text(label, x + 5, 14);
+
+    doc.setFontSize(10.5);
+    doc.setTextColor(103, 232, 249);
+    doc.text(String(value || "-"), x + 5, 22);
+  }
+
+  topoCard(pageWidth - 88, "Mês referência", resultado.mesReferencia || "-", 42);
+  topoCard(pageWidth - 42, "Emissão", hoje, 36);
+
+  doc.setTextColor(15, 42, 90);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(19);
+  doc.text("Relatório Resumido", 14, 50);
+
+  doc.setTextColor(25, 80, 180);
+  doc.setFontSize(22);
+  doc.text("Conta ENEL", 14, 62);
+
+  doc.setDrawColor(59, 130, 246);
+  doc.setLineWidth(0.7);
+  doc.line(14, 66, 44, 66);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    "Resumo do consumo faturado em kWh extraído automaticamente da conta ENEL.",
+    14,
+    74,
+    { maxWidth: 180 }
+  );
+
+  function cardPdf(x, y, w, title, value, subtitle, color) {
+    const cores = {
+      blue: {
+        bg: [239, 246, 255],
+        border: [147, 197, 253],
+        text: [29, 78, 216],
+      },
+      green: {
+        bg: [240, 253, 244],
+        border: [134, 239, 172],
+        text: [5, 150, 105],
+      },
+      amber: {
+        bg: [255, 251, 235],
+        border: [253, 224, 71],
+        text: [217, 119, 6],
+      },
+      purple: {
+        bg: [250, 245, 255],
+        border: [216, 180, 254],
+        text: [126, 34, 206],
+      },
+      slate: {
+        bg: [248, 250, 252],
+        border: [203, 213, 225],
+        text: [51, 65, 85],
+      },
+    };
+
+    const c = cores[color] || cores.blue;
+
+    doc.setFillColor(...c.bg);
+    doc.setDrawColor(...c.border);
+    doc.setLineWidth(0.5);
+    doc.roundedRect(x, y, w, 25, 2.5, 2.5, "FD");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+    doc.setTextColor(30, 64, 100);
+    doc.text(title, x + 4, y + 8);
+
+    doc.setFontSize(String(value).length > 12 ? 10.5 : 13);
+    doc.setTextColor(...c.text);
+    doc.text(String(value), x + 4, y + 17);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(6.8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(subtitle, x + 4, y + 22);
+  }
+
+  cardPdf(
+    14,
+    86,
+    34,
+    "Mês referência",
+    resultado.mesReferencia || "-",
+    "Conta ENEL",
+    "blue"
+  );
+
+  cardPdf(
+    52,
+    86,
+    34,
+    "Demanda",
+    formatarNumeroBR(resultado.demandaKw),
+    "kW",
+    "slate"
+  );
+
+  cardPdf(
+    90,
+    86,
+    34,
+    "Hora Ponta",
+    formatarNumeroBR(resultado.horaPonta),
+    "kWh",
+    "amber"
+  );
+
+  cardPdf(
+    128,
+    86,
+    34,
+    "Fora Ponta",
+    formatarNumeroBR(resultado.foraPonta),
+    "kWh",
+    "purple"
+  );
+
+  cardPdf(
+    166,
+    86,
+    30,
+    "Total",
+    formatarNumeroBR(resultado.total),
+    "kWh",
+    "green"
+  );
+
+  doc.setFillColor(239, 246, 255);
+  doc.setDrawColor(191, 219, 254);
+  doc.roundedRect(14, 122, 182, 18, 3, 3, "FD");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(30, 64, 175);
+  doc.text(
+    `Cálculo: ${formatarNumeroBR(resultado.horaPonta)} kWh + ${formatarNumeroBR(
+      resultado.foraPonta
+    )} kWh = ${formatarNumeroBR(resultado.total)} kWh`,
+    19,
+    133
+  );
+
+  autoTable(doc, {
+    startY: 152,
+    margin: { left: 14, right: 14, bottom: 24 },
+    head: [["Indicador", "Valor", "Participação"]],
+    body: [
+      ["Demanda contratada/medida", `${formatarNumeroBR(resultado.demandaKw)} kW`, "-"],
+      [
+        "Consumo Hora Ponta",
+        `${formatarNumeroBR(resultado.horaPonta)} kWh`,
+        `${formatarNumeroBR(percentualPonta, 2)}%`,
+      ],
+      [
+        "Consumo Hora Fora Ponta",
+        `${formatarNumeroBR(resultado.foraPonta)} kWh`,
+        `${formatarNumeroBR(percentualForaPonta, 2)}%`,
+      ],
+      ["Total consumido", `${formatarNumeroBR(resultado.total)} kWh`, "100,00%"],
+      ["Dias faturados", String(resultado.diasFaturados || "-"), "-"],
+      ["Arquivo analisado", nomeArquivo || "-", "-"],
+    ],
+    styles: {
+      fontSize: 8,
+      cellPadding: 2.2,
+      textColor: [15, 23, 42],
+      lineColor: [226, 232, 240],
+      lineWidth: 0.15,
+    },
+    headStyles: {
+      fillColor: [0, 82, 204],
+      textColor: [255, 255, 255],
+      fontStyle: "bold",
+      halign: "center",
+    },
+    alternateRowStyles: {
+      fillColor: [248, 250, 252],
+    },
+    columnStyles: {
+      0: { fontStyle: "bold" },
+      1: { halign: "right" },
+      2: { halign: "right" },
+    },
+  });
+
+  const pageHeight = doc.internal.pageSize.height;
+
+  doc.setDrawColor(226, 232, 240);
+  doc.line(14, pageHeight - 15, pageWidth - 14, pageHeight - 15);
+
+  doc.setFillColor(6, 23, 55);
+  doc.rect(0, pageHeight - 9, pageWidth, 9, "F");
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7.5);
+  doc.setTextColor(203, 213, 225);
+  doc.text("Relatório gerado pelo Sistema Técnico Predial", 14, pageHeight - 3.5);
+
+  doc.setTextColor(125, 211, 252);
+  doc.text(`${EDIFICIO} • ${hoje} ${hora}`, pageWidth / 2, pageHeight - 3.5, {
+    align: "center",
+  });
+
+  doc.setTextColor(255, 255, 255);
+  doc.text("Página 1 de 1", pageWidth - 14, pageHeight - 3.5, {
+    align: "right",
+  });
+
+  doc.save(`relatorio-climas-${resultado.mesReferencia || "enel"}.pdf`);
 }
 
 export default function Climas() {
@@ -314,7 +579,7 @@ export default function Climas() {
 
             <FileText className="mx-auto text-slate-400 mb-3" size={34} />
 
-            <p className="font-bold text-slate-800">
+            <p className="font-bold text-slate-800 break-words">
               {nomeArquivo || "Clique para selecionar o PDF"}
             </p>
 
@@ -360,6 +625,7 @@ export default function Climas() {
               <h3 className="text-xl font-black text-slate-900">
                 Nenhuma conta analisada ainda
               </h3>
+
               <p className="text-sm text-slate-500 mt-2">
                 Envie uma conta ENEL em PDF e clique em analisar para extrair o
                 consumo.
@@ -370,22 +636,32 @@ export default function Climas() {
           {resultado && (
             <>
               <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <CheckCircle2 size={22} />
+                <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-4 mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                      <CheckCircle2 size={22} />
+                    </div>
+
+                    <div>
+                      <h3 className="font-black text-slate-900">
+                        Conta analisada
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Dados extraídos automaticamente do PDF.
+                      </p>
+                    </div>
                   </div>
 
-                  <div>
-                    <h3 className="font-black text-slate-900">
-                      Conta analisada
-                    </h3>
-                    <p className="text-xs text-slate-500">
-                      Dados extraídos automaticamente do PDF.
-                    </p>
-                  </div>
+                  <button
+                    onClick={() => gerarMiniRelatorioClimas(resultado, nomeArquivo)}
+                    className="rounded-2xl bg-slate-950 text-white px-5 py-3 font-black hover:bg-slate-800 flex items-center justify-center gap-2"
+                  >
+                    <FileDown size={18} />
+                    Emitir mini relatório
+                  </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-4">
                   <CardResumo
                     titulo="Mês referência"
                     valor={resultado.mesReferencia || "-"}
