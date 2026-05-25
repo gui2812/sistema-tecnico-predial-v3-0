@@ -1,20 +1,59 @@
 import { supabase } from "./supabaseClient";
 
+const LIMITE_MEDIDOR = 100000;
+
 function numeroSeguro(valor) {
   const n = Number(valor || 0);
   return Number.isFinite(n) ? n : 0;
 }
 
+function calcularConsumoExcel(anterior, atual, limite = LIMITE_MEDIDOR) {
+  const ant = numeroSeguro(anterior);
+  const atu = numeroSeguro(atual);
+
+  // Equivalente ao Excel:
+  // MOD(atual - anterior; 100000)
+  return ((atu - ant) % limite + limite) % limite;
+}
+
 function recalcularResumo(linhas = []) {
   const lista = Array.isArray(linhas) ? linhas : [];
 
-  const linhasComConsumo = lista.filter((linha) => numeroSeguro(linha.consumo) > 0);
+  const linhasCalculadas = lista.map((linha) => {
+    const anterior = numeroSeguro(linha.anterior);
+    const atual = numeroSeguro(linha.atual);
 
-  const total = lista.reduce((soma, linha) => {
+    const temLeitura =
+      linha.anterior !== "" &&
+      linha.anterior !== null &&
+      linha.anterior !== undefined &&
+      linha.atual !== "" &&
+      linha.atual !== null &&
+      linha.atual !== undefined;
+
+    const consumo = temLeitura
+      ? calcularConsumoExcel(anterior, atual)
+      : 0;
+
+    return {
+      ...linha,
+      anterior,
+      atual,
+      consumo,
+      virou: temLeitura ? atual < anterior : false,
+      observacao: temLeitura && atual < anterior ? "Medidor virou" : linha.observacao || "",
+    };
+  });
+
+  const linhasComConsumo = linhasCalculadas.filter(
+    (linha) => numeroSeguro(linha.consumo) > 0
+  );
+
+  const total = linhasCalculadas.reduce((soma, linha) => {
     return soma + numeroSeguro(linha.consumo);
   }, 0);
 
-  const quantidade = lista.length;
+  const quantidade = linhasCalculadas.length;
 
   const maior = linhasComConsumo.length
     ? linhasComConsumo.reduce((a, b) =>
@@ -29,31 +68,37 @@ function recalcularResumo(linhas = []) {
     : null;
 
   return {
-    total,
-    quantidade,
-    media: linhasComConsumo.length ? total / linhasComConsumo.length : 0,
-    maior: maior
-      ? {
-          unidade: maior.unidade,
-          consumo: numeroSeguro(maior.consumo),
-        }
-      : null,
-    menor: menor
-      ? {
-          unidade: menor.unidade,
-          consumo: numeroSeguro(menor.consumo),
-        }
-      : null,
+    linhas: linhasCalculadas,
+    resumo: {
+      total,
+      quantidade,
+      media: linhasComConsumo.length ? total / linhasComConsumo.length : 0,
+      maior: maior
+        ? {
+            unidade: maior.unidade,
+            consumo: numeroSeguro(maior.consumo),
+          }
+        : null,
+      menor: menor
+        ? {
+            unidade: menor.unidade,
+            consumo: numeroSeguro(menor.consumo),
+          }
+        : null,
+    },
   };
 }
 
 function normalizarMedicao(row) {
   if (!row) return null;
 
-  const linhas = Array.isArray(row.linhas) ? row.linhas : [];
+  const linhasOriginais = Array.isArray(row.linhas) ? row.linhas : [];
 
-  // Sempre recalcula pelas linhas para evitar resumo antigo salvo no banco
-  const resumoCalculado = recalcularResumo(linhas);
+  // Sempre recalcula pelas leituras anterior/atual.
+  // Assim evita usar consumo ou resumo antigo salvo errado no banco.
+  const calculo = recalcularResumo(linhasOriginais);
+  const linhas = calculo.linhas;
+  const resumoCalculado = calculo.resumo;
 
   return {
     id: row.id,
@@ -99,8 +144,11 @@ export async function criarMedicaoLocatariosSupabase({
 }) {
   const linhasTratadas = Array.isArray(linhas) ? linhas : [];
 
-  // Recalcula antes de salvar para garantir que o Supabase receba o total correto
-  const resumoCalculado = recalcularResumo(linhasTratadas);
+  // Recalcula antes de salvar para garantir que o Supabase receba:
+  // linhas.consumo correto + total correto.
+  const calculo = recalcularResumo(linhasTratadas);
+  const linhasCalculadas = calculo.linhas;
+  const resumoCalculado = calculo.resumo;
 
   const maior = resumoCalculado.maior || null;
   const menor = resumoCalculado.menor || null;
@@ -111,15 +159,20 @@ export async function criarMedicaoLocatariosSupabase({
     data_medicao: dataMedicao || null,
     anterior,
     atual,
+
     total: numeroSeguro(resumoCalculado.total),
     quantidade: numeroSeguro(resumoCalculado.quantidade),
     media: numeroSeguro(resumoCalculado.media),
+
     maior_unidade: maior?.unidade || null,
     maior_consumo: numeroSeguro(maior?.consumo),
     menor_unidade: menor?.unidade || null,
     menor_consumo: numeroSeguro(menor?.consumo),
-    linhas: linhasTratadas,
+
+    // Importante: salva as linhas recalculadas, não as linhas antigas.
+    linhas: linhasCalculadas,
     resumo: resumoCalculado,
+
     analise: analise || [],
     criado_por: criadoPor || "",
     criado_por_id: criadoPorId || null,
