@@ -1,20 +1,59 @@
 import { supabase } from "./supabaseClient";
 
+function numeroSeguro(valor) {
+  const n = Number(valor || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function recalcularResumo(linhas = []) {
+  const lista = Array.isArray(linhas) ? linhas : [];
+
+  const linhasComConsumo = lista.filter((linha) => numeroSeguro(linha.consumo) > 0);
+
+  const total = lista.reduce((soma, linha) => {
+    return soma + numeroSeguro(linha.consumo);
+  }, 0);
+
+  const quantidade = lista.length;
+
+  const maior = linhasComConsumo.length
+    ? linhasComConsumo.reduce((a, b) =>
+        numeroSeguro(b.consumo) > numeroSeguro(a.consumo) ? b : a
+      )
+    : null;
+
+  const menor = linhasComConsumo.length
+    ? linhasComConsumo.reduce((a, b) =>
+        numeroSeguro(b.consumo) < numeroSeguro(a.consumo) ? b : a
+      )
+    : null;
+
+  return {
+    total,
+    quantidade,
+    media: linhasComConsumo.length ? total / linhasComConsumo.length : 0,
+    maior: maior
+      ? {
+          unidade: maior.unidade,
+          consumo: numeroSeguro(maior.consumo),
+        }
+      : null,
+    menor: menor
+      ? {
+          unidade: menor.unidade,
+          consumo: numeroSeguro(menor.consumo),
+        }
+      : null,
+  };
+}
+
 function normalizarMedicao(row) {
   if (!row) return null;
 
-  const resumo = row.resumo || {
-    total: Number(row.total || 0),
-    quantidade: Number(row.quantidade || 0),
-    media: Number(row.media || 0),
-    maior: row.maior_unidade
-      ? { unidade: row.maior_unidade, consumo: Number(row.maior_consumo || 0) }
-      : null,
-    menor: row.menor_unidade
-      ? { unidade: row.menor_unidade, consumo: Number(row.menor_consumo || 0) }
-      : null,
-    linhas: row.linhas || [],
-  };
+  const linhas = Array.isArray(row.linhas) ? row.linhas : [];
+
+  // Sempre recalcula pelas linhas para evitar resumo antigo salvo no banco
+  const resumoCalculado = recalcularResumo(linhas);
 
   return {
     id: row.id,
@@ -22,8 +61,8 @@ function normalizarMedicao(row) {
     dataMedicao: row.data_medicao || "",
     anterior: row.anterior || "",
     atual: row.atual || "",
-    linhas: Array.isArray(row.linhas) ? row.linhas : [],
-    resumo,
+    linhas,
+    resumo: resumoCalculado,
     analise: Array.isArray(row.analise) ? row.analise : [],
     criadoPor: row.criado_por || "",
     criadoPorId: row.criado_por_id || "",
@@ -58,8 +97,13 @@ export async function criarMedicaoLocatariosSupabase({
   criadoPor = "",
   criadoPorId = null,
 }) {
-  const maior = resumo?.maior || null;
-  const menor = resumo?.menor || null;
+  const linhasTratadas = Array.isArray(linhas) ? linhas : [];
+
+  // Recalcula antes de salvar para garantir que o Supabase receba o total correto
+  const resumoCalculado = recalcularResumo(linhasTratadas);
+
+  const maior = resumoCalculado.maior || null;
+  const menor = resumoCalculado.menor || null;
 
   const payload = {
     mes,
@@ -67,15 +111,15 @@ export async function criarMedicaoLocatariosSupabase({
     data_medicao: dataMedicao || null,
     anterior,
     atual,
-    total: Number(resumo?.total || 0),
-    quantidade: Number(resumo?.quantidade || linhas?.length || 0),
-    media: Number(resumo?.media || 0),
+    total: numeroSeguro(resumoCalculado.total),
+    quantidade: numeroSeguro(resumoCalculado.quantidade),
+    media: numeroSeguro(resumoCalculado.media),
     maior_unidade: maior?.unidade || null,
-    maior_consumo: Number(maior?.consumo || 0),
+    maior_consumo: numeroSeguro(maior?.consumo),
     menor_unidade: menor?.unidade || null,
-    menor_consumo: Number(menor?.consumo || 0),
-    linhas: linhas || [],
-    resumo: resumo || {},
+    menor_consumo: numeroSeguro(menor?.consumo),
+    linhas: linhasTratadas,
+    resumo: resumoCalculado,
     analise: analise || [],
     criado_por: criadoPor || "",
     criado_por_id: criadoPorId || null,
