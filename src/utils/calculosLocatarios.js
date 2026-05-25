@@ -1,6 +1,6 @@
 export function parseMedicoes(texto) {
-  return String(texto || '')
-    .split('\n')
+  return String(texto || "")
+    .split("\n")
     .map((linha) => linha.trim())
     .filter(Boolean)
     .map((linha) => {
@@ -10,40 +10,53 @@ export function parseMedicoes(texto) {
 
       return {
         unidade: match[1].trim(),
-        leitura: Number(match[2].replace(/\D/g, ''))
+        leitura: Number(String(match[2]).replace(/\D/g, "")),
       };
     })
     .filter(Boolean);
 }
 
-export function calcularConsumosLocatarios(anteriorTexto, atualTexto, limite = 99999) {
+function modExcel(valor, limite = 100000) {
+  return ((valor % limite) + limite) % limite;
+}
+
+export function calcularConsumosLocatarios(
+  anteriorTexto,
+  atualTexto,
+  limite = 100000
+) {
   const anteriores = parseMedicoes(anteriorTexto);
   const atuais = parseMedicoes(atualTexto);
 
-  const mapAnterior = new Map(
-    anteriores.map((m) => [m.unidade, m.leitura])
-  );
+  const mapAnterior = new Map(anteriores.map((m) => [m.unidade, m.leitura]));
 
   const linhas = atuais.map((atual) => {
     const temAnterior = mapAnterior.has(atual.unidade);
-    const anterior = temAnterior ? mapAnterior.get(atual.unidade) : '';
+    const anterior = temAnterior ? mapAnterior.get(atual.unidade) : "";
 
-    if (!temAnterior || atual.leitura === '' || atual.leitura === null || atual.leitura === undefined) {
+    if (
+      !temAnterior ||
+      atual.leitura === "" ||
+      atual.leitura === null ||
+      atual.leitura === undefined
+    ) {
       return {
         unidade: atual.unidade,
         anterior,
         atual: atual.leitura,
-        consumo: '',
+        consumo: "",
         virou: false,
-        observacao: 'Leitura anterior não encontrada'
+        observacao: "Leitura anterior não encontrada",
       };
     }
 
-    const virou = atual.leitura < anterior;
+    const diferenca = Number(atual.leitura) - Number(anterior);
 
-    const consumo = virou
-      ? (limite - anterior) + atual.leitura
-      : atual.leitura - anterior;
+    // Fórmula equivalente ao Excel:
+    // MOD(atual - anterior; 100000)
+    const consumo = modExcel(diferenca, limite);
+
+    const virou = Number(atual.leitura) < Number(anterior);
 
     return {
       unidade: atual.unidade,
@@ -51,20 +64,26 @@ export function calcularConsumosLocatarios(anteriorTexto, atualTexto, limite = 9
       atual: atual.leitura,
       consumo,
       virou,
-      observacao: virou ? 'Medidor virou' : ''
+      observacao: virou ? "Medidor virou" : "",
     };
   });
 
   const linhasComConsumo = linhas.filter((l) => Number(l.consumo) > 0);
 
-  const total = linhas.reduce((s, l) => s + Number(l.consumo || 0), 0);
+  const total = linhas.reduce((soma, linha) => {
+    return soma + Number(linha.consumo || 0);
+  }, 0);
 
   const maior = linhasComConsumo.length
-    ? linhasComConsumo.reduce((a, b) => Number(b.consumo) > Number(a.consumo) ? b : a, linhasComConsumo[0])
+    ? linhasComConsumo.reduce((a, b) =>
+        Number(b.consumo) > Number(a.consumo) ? b : a
+      )
     : null;
 
   const menor = linhasComConsumo.length
-    ? linhasComConsumo.reduce((a, b) => Number(b.consumo) < Number(a.consumo) ? b : a, linhasComConsumo[0])
+    ? linhasComConsumo.reduce((a, b) =>
+        Number(b.consumo) < Number(a.consumo) ? b : a
+      )
     : null;
 
   return {
@@ -73,6 +92,6 @@ export function calcularConsumosLocatarios(anteriorTexto, atualTexto, limite = 9
     quantidade: linhas.length,
     maior,
     menor,
-    media: linhasComConsumo.length ? total / linhasComConsumo.length : 0
+    media: linhasComConsumo.length ? total / linhasComConsumo.length : 0,
   };
 }
