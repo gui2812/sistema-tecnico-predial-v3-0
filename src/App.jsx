@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { testarConexaoSupabase } from "./services/supabaseTestService";
 import Layout from "./components/Layout";
 import CalculadoraEletrica from "./pages/CalculadoraEletrica";
+import Climas from "./pages/Climas";
 import Dashboard from "./pages/Dashboard";
 import Geradores from "./pages/Geradores";
 import Historico from "./pages/Historico";
@@ -37,6 +38,7 @@ function primeiraPaginaPermitida(user) {
     "dashboard",
     "pendencias",
     "solicitacoes",
+    "climas",
     "calculadora",
     "tecnicos",
     "geradores",
@@ -84,6 +86,10 @@ export default function App() {
         return <Dashboard />;
       case "pendencias":
         return <Pendencias user={user} />;
+      case "solicitacoes":
+        return <SolicitacoesMaterial user={user} />;
+      case "climas":
+        return <Climas user={user} />;
       case "calculadora":
         return <CalculadoraEletrica />;
       case "tecnicos":
@@ -96,8 +102,6 @@ export default function App() {
         return <Malote />;
       case "rateioAgua":
         return <RateioAgua />;
-      case "solicitacoes":
-        return <SolicitacoesMaterial user={user} />;
       case "historico":
         return <Historico />;
       case "relatorios":
