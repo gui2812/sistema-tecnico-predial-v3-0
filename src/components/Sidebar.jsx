@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   BarChart3,
+  Building2,
   Calculator,
   ClipboardList,
   CloudSun,
@@ -21,6 +22,7 @@ const items = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'pendencias', label: 'Pendências', icon: AlertTriangle },
   { id: 'solicitacoes', label: 'Solicitação Material', icon: PackagePlus },
+  { id: 'mapa3d', label: 'Mapa 3D', icon: Building2 },
   { id: 'climas', label: 'Climas', icon: CloudSun },
   { id: 'calculadora', label: 'Calculadora Elétrica', icon: Calculator },
   { id: 'tecnicos', label: 'Cálculos Técnicos', icon: Wrench },
