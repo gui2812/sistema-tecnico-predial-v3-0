@@ -9,10 +9,7 @@ import {
   FileDown,
   FileSpreadsheet,
   FileText,
-  Flame,
-  Fuel,
   Gauge,
-  ImageIcon,
   Loader2,
   Printer,
   RefreshCcw,
@@ -36,8 +33,6 @@ const TABS = [
   { id: "pocos", label: "Poços artesianos", icon: Droplets },
   { id: "sabesp", label: "SABESP", icon: Waves },
   { id: "pluvial", label: "Águas pluviais", icon: CloudRain },
-  { id: "gas", label: "Gás", icon: Flame },
-  { id: "diesel", label: "Diesel / Geradores", icon: Fuel },
   { id: "consolidado", label: "Consolidado ESG", icon: BarChart3 },
 ];
 
@@ -301,6 +296,136 @@ function extrairPocosDoDemonstrativo(textoOriginal) {
   };
 }
 
+
+async function extrairPocosPlanilha(file) {
+  const buffer = await file.arrayBuffer();
+  const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+
+  const sheetNames = workbook.SheetNames || [];
+
+  const candidatos = [];
+
+  sheetNames.forEach((sheetName) => {
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, {
+      header: 1,
+      defval: "",
+      raw: false,
+    });
+
+    const headerIndex = rows.findIndex((row) => {
+      const joined = row.map((cell) => normalizarChave(cell)).join(" ");
+      return (
+        joined.includes("leitura") &&
+        (
+          joined.includes("hidrometro") ||
+          joined.includes("hidrômetro") ||
+          joined.includes("quantidade medida") ||
+          joined.includes("abastecimento")
+        )
+      );
+    });
+
+    if (headerIndex === -1) return;
+
+    const headers = rows[headerIndex];
+
+    const tipoCol = localizarColuna(headers, [
+      "tipo de abastecimento",
+      "abastecimento",
+      "tipo",
+      "fonte",
+      "poco",
+      "poço",
+    ]);
+
+    const dataAnteriorCol = localizarColuna(headers, [
+      "data da leitura anterior",
+      "data leitura anterior",
+      "data anterior",
+    ]);
+
+    const leituraAnteriorCol = localizarColuna(headers, [
+      "leitura anterior do hidrometro",
+      "leitura anterior do hidrômetro",
+      "leitura anterior",
+      "anterior",
+    ]);
+
+    const dataAtualCol = localizarColuna(headers, [
+      "data da leitura",
+      "data leitura atual",
+      "data atual",
+      "data da leitura atual",
+    ]);
+
+    const leituraAtualCol = localizarColuna(headers, [
+      "leitura atual do hidrometro",
+      "leitura atual do hidrômetro",
+      "leitura do hidrometro",
+      "leitura atual",
+      "atual",
+    ]);
+
+    const quantidadeCol = localizarColuna(headers, [
+      "quantidade medida em m3",
+      "quantidade medida",
+      "medida em m3",
+      "consumo",
+      "volume",
+      "m3",
+    ]);
+
+    rows.slice(headerIndex + 1).forEach((row) => {
+      const tipo = String(valorCelula(row, tipoCol) || "").trim();
+      const leituraAnterior = parseNumeroBR(valorCelula(row, leituraAnteriorCol));
+      const leituraAtual = parseNumeroBR(valorCelula(row, leituraAtualCol));
+      const quantidade = parseNumeroBR(valorCelula(row, quantidadeCol));
+
+      const textoLinha = normalizarChave(row.join(" "));
+      const parecePoco =
+        textoLinha.includes("poco") ||
+        textoLinha.includes("poço") ||
+        textoLinha.includes("hidrometro") ||
+        textoLinha.includes("hidrômetro") ||
+        quantidade > 0 ||
+        (leituraAnterior > 0 && leituraAtual > 0);
+
+      if (!parecePoco) return;
+
+      const consumo =
+        quantidade > 0
+          ? quantidade
+          : leituraAtual >= leituraAnterior
+            ? leituraAtual - leituraAnterior
+            : 0;
+
+      if (!consumo && !leituraAnterior && !leituraAtual) return;
+
+      candidatos.push({
+        nome: candidatos.length === 0 ? "Poço 1" : `Poço ${candidatos.length + 1}`,
+        tipo: tipo || "Potável/Poço",
+        dataAnterior: formatarDataPlanilha(valorCelula(row, dataAnteriorCol)),
+        leituraAnterior,
+        dataAtual: formatarDataPlanilha(valorCelula(row, dataAtualCol)),
+        leituraAtual,
+        consumo,
+        origem: `Excel - ${sheetName}`,
+      });
+    });
+  });
+
+  const pocos = candidatos.slice(0, 10);
+  const total = pocos.reduce((soma, item) => soma + Number(item.consumo || 0), 0);
+
+  return {
+    pocos,
+    total,
+    encontrado: pocos.length > 0 && total > 0,
+    precisaConferencia: true,
+  };
+}
+
 function extrairSabesp(textoOriginal) {
   const texto = normalizarTexto(textoOriginal);
 
@@ -381,129 +506,6 @@ function extrairSabesp(textoOriginal) {
     blocoIdentificado: Boolean(blocoPrincipal),
   };
 }
-
-
-function calcularGas(consumoM3 = 0, fator = 0.78) {
-  const m3 = Number(consumoM3 || 0);
-  const fatorConversao = Number(fator || 0);
-  const totalKg = m3 * fatorConversao;
-
-  return {
-    consumoM3: m3,
-    fatorConversao,
-    totalKg,
-    areaComumKg: totalKg * 0.05,
-    areaPrivativaKg: totalKg * 0.95,
-    encontrado: m3 > 0,
-  };
-}
-
-function extrairGasDoPdf(textoOriginal) {
-  const texto = normalizarTexto(textoOriginal);
-  const numero = "[0-9]{1,3}(?:\\.[0-9]{3})*,[0-9]{1,3}|[0-9]+,[0-9]{1,3}|[0-9]+";
-
-  /*
-    Busca padrões comuns de conta de gás:
-    - Consumo medido / Consumo faturado em m³
-    - Total em m³
-    - Volume em m³
-    Mantém conservador para evitar pegar valores em R$.
-  */
-  const padroes = [
-    new RegExp(`consumo\\s+(?:medido|faturado|do\\s+m[eê]s).*?(${numero})\\s*m[³3]`, "i"),
-    new RegExp(`volume\\s+(?:medido|consumido).*?(${numero})\\s*m[³3]`, "i"),
-    new RegExp(`total\\s+(?:consumido|medido).*?(${numero})\\s*m[³3]`, "i"),
-    new RegExp(`\\b(${numero})\\s*m[³3]\\b`, "i"),
-  ];
-
-  for (const padrao of padroes) {
-    const match = texto.match(padrao);
-    if (match) {
-      const consumoM3 = parseNumeroBR(match[1]);
-      if (consumoM3 > 0) return calcularGas(consumoM3, 0.78);
-    }
-  }
-
-  return calcularGas(0, 0.78);
-}
-
-function horasParaDecimal(valor) {
-  if (valor === null || valor === undefined) return 0;
-
-  const texto = String(valor).trim().toLowerCase();
-
-  if (!texto) return 0;
-
-  const decimal = texto.match(/^([0-9]+)(?:[,.]([0-9]+))?$/);
-  if (decimal) return Number(texto.replace(",", ".")) || 0;
-
-  const horaCompleta = texto.match(/(\d{1,4}):(\d{1,2})(?::(\d{1,2}))?/);
-  if (horaCompleta) {
-    const h = Number(horaCompleta[1] || 0);
-    const m = Number(horaCompleta[2] || 0);
-    const s = Number(horaCompleta[3] || 0);
-    return h + m / 60 + s / 3600;
-  }
-
-  const hMatch = texto.match(/([0-9]+(?:[,.][0-9]+)?)\s*h/);
-  const minMatch = texto.match(/([0-9]+)\s*min/);
-  const segMatch = texto.match(/([0-9]+)\s*s/);
-
-  const h = hMatch ? Number(String(hMatch[1]).replace(",", ".")) : 0;
-  const m = minMatch ? Number(minMatch[1]) : 0;
-  const s = segMatch ? Number(segMatch[1]) : 0;
-
-  return h + m / 60 + s / 3600;
-}
-
-function calcularDiesel({ horasG01 = 0, horasG02 = 0, consumoLitrosHora = 145.8 }) {
-  const h01 = Number(horasG01 || 0);
-  const h02 = Number(horasG02 || 0);
-  const lHora = Number(consumoLitrosHora || 0);
-  const horasTotais = h01 + h02;
-  const litros = horasTotais * lHora;
-
-  return {
-    horasG01: h01,
-    horasG02: h02,
-    horasTotais,
-    consumoLitrosHora: lHora,
-    litros,
-    encontrado: horasTotais > 0 && lHora > 0,
-  };
-}
-
-function extrairHorasInterpower(textoOriginal) {
-  const texto = normalizarTexto(textoOriginal);
-  const matchAcumulado = texto.match(/Acumulado\s+sem\s+energia:\s*\(?\s*([0-9]+(?:[,.][0-9]+)?)\s*horas?/i);
-
-  if (matchAcumulado) {
-    return Number(String(matchAcumulado[1]).replace(",", ".")) || 0;
-  }
-
-  const matchDuracao = texto.match(/(\d{1,4}):(\d{1,2})(?::(\d{1,2}))?/);
-  if (matchDuracao) {
-    return horasParaDecimal(matchDuracao[0]);
-  }
-
-  return 0;
-}
-
-async function lerArquivoComoTexto(file) {
-  if (!file) return "";
-
-  if (file.type === "application/pdf" || String(file.name || "").toLowerCase().endsWith(".pdf")) {
-    return extrairTextoPDF(file);
-  }
-
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => resolve("");
-    reader.readAsText(file);
-  });
-}
-
 
 function valorCelula(row, index) {
   if (index === -1 || index === undefined || index === null) return "";
@@ -1214,141 +1216,7 @@ function gerarRelatorioPluvial(pluvial) {
 }
 
 
-
-function gerarRelatorioGas(gas) {
-  if (!gas) return;
-
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.width;
-
-  doc.setFillColor(6, 23, 55);
-  doc.rect(0, 0, pageWidth, 34, "F");
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("Sistema Técnico Predial", 14, 14);
-
-  doc.setTextColor(125, 211, 252);
-  doc.setFontSize(10);
-  doc.text(EDIFICIO, 14, 23);
-
-  doc.setTextColor(15, 42, 90);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.text("Relatório de Gás", 14, 52);
-
-  doc.setDrawColor(249, 115, 22);
-  doc.setLineWidth(0.8);
-  doc.line(14, 57, 58, 57);
-
-  autoTable(doc, {
-    startY: 76,
-    margin: { left: 14, right: 14, bottom: 24 },
-    head: [["Indicador", "Valor"]],
-    body: [
-      ["Consumo informado / extraído", `${formatarNumeroBR(gas.consumoM3, 3)} m³`],
-      ["Fator de conversão", String(gas.fatorConversao).replace(".", ",")],
-      ["Total convertido", `${formatarNumeroBR(gas.totalKg)} kg`],
-      ["Área comum — 5%", `${formatarNumeroBR(gas.areaComumKg)} kg`],
-      ["Área privativa — 95%", `${formatarNumeroBR(gas.areaPrivativaKg)} kg`],
-    ],
-    styles: {
-      fontSize: 9,
-      cellPadding: 2.8,
-      textColor: [15, 23, 42],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.15,
-    },
-    headStyles: {
-      fillColor: [249, 115, 22],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-    },
-    alternateRowStyles: {
-      fillColor: [248, 250, 252],
-    },
-  });
-
-  const pageHeight = doc.internal.pageSize.height;
-  doc.setFillColor(6, 23, 55);
-  doc.rect(0, pageHeight - 9, pageWidth, 9, "F");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(203, 213, 225);
-  doc.text(`Relatório gerado pelo Sistema Técnico Predial • ${hojeBR()}`, 14, pageHeight - 3.5);
-
-  doc.save("relatorio-gas.pdf");
-}
-
-function gerarRelatorioDiesel(diesel) {
-  if (!diesel) return;
-
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.width;
-
-  doc.setFillColor(6, 23, 55);
-  doc.rect(0, 0, pageWidth, 34, "F");
-
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("Sistema Técnico Predial", 14, 14);
-
-  doc.setTextColor(125, 211, 252);
-  doc.setFontSize(10);
-  doc.text(EDIFICIO, 14, 23);
-
-  doc.setTextColor(15, 42, 90);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(20);
-  doc.text("Relatório de Diesel — Geradores", 14, 52);
-
-  doc.setDrawColor(37, 99, 235);
-  doc.setLineWidth(0.8);
-  doc.line(14, 57, 105, 57);
-
-  autoTable(doc, {
-    startY: 76,
-    margin: { left: 14, right: 14, bottom: 24 },
-    head: [["Indicador", "Valor"]],
-    body: [
-      ["GMG G01 — horas sem energia", `${formatarNumeroBR(diesel.horasG01, 4)} h`],
-      ["GMG G02 — horas sem energia", `${formatarNumeroBR(diesel.horasG02, 4)} h`],
-      ["Horas totais", `${formatarNumeroBR(diesel.horasTotais, 4)} h`],
-      ["Consumo médio informado", `${formatarNumeroBR(diesel.consumoLitrosHora)} L/h`],
-      ["Diesel consumido estimado", `${formatarNumeroBR(diesel.litros)} L`],
-    ],
-    styles: {
-      fontSize: 9,
-      cellPadding: 2.8,
-      textColor: [15, 23, 42],
-      lineColor: [226, 232, 240],
-      lineWidth: 0.15,
-    },
-    headStyles: {
-      fillColor: [37, 99, 235],
-      textColor: [255, 255, 255],
-      fontStyle: "bold",
-    },
-    alternateRowStyles: {
-      fillColor: [248, 250, 252],
-    },
-  });
-
-  const pageHeight = doc.internal.pageSize.height;
-  doc.setFillColor(6, 23, 55);
-  doc.rect(0, pageHeight - 9, pageWidth, 9, "F");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(203, 213, 225);
-  doc.text(`Relatório gerado pelo Sistema Técnico Predial • ${hojeBR()}`, 14, pageHeight - 3.5);
-
-  doc.save("relatorio-diesel-geradores.pdf");
-}
-
-
-function gerarRelatorioHidrico({ energia, pocos, sabesp, pluvial, gas, diesel }) {
+function gerarRelatorioHidrico({ energia, pocos, sabesp, pluvial }) {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
   const hoje = hojeBR();
@@ -1452,8 +1320,6 @@ function gerarRelatorioHidrico({ energia, pocos, sabesp, pluvial, gas, diesel })
       ["Volume de efluente para rede pública", `${formatarNumeroBR(sabesp?.volumeEfluente || totalSabesp)} m³`, "Conforme consumo da concessionária"],
       ["Volume de água captada da chuva para reuso", `${formatarNumeroBR(totalPluvial)} m³`, "Planilha de águas pluviais"],
       ["Total de água controlada", `${formatarNumeroBR(totalControlado)} m³`, "Consolidado ESG"],
-      ["Gás convertido", `${formatarNumeroBR(gas?.totalKg || 0)} kg`, "m³ × fator de conversão"],
-      ["Diesel consumido estimado", `${formatarNumeroBR(diesel?.litros || 0)} L`, "Horas dos GMGs × L/h"],
     ],
     styles: {
       fontSize: 8.5,
@@ -1664,49 +1530,28 @@ export default function Climas() {
   const [arquivoPocos, setArquivoPocos] = useState(null);
   const [arquivoSabesp, setArquivoSabesp] = useState(null);
   const [arquivoPluvial, setArquivoPluvial] = useState(null);
-  const [arquivoGas, setArquivoGas] = useState(null);
-  const [arquivoDieselG01, setArquivoDieselG01] = useState(null);
-  const [arquivoDieselG02, setArquivoDieselG02] = useState(null);
 
   const [carregandoEnergia, setCarregandoEnergia] = useState(false);
   const [carregandoPocos, setCarregandoPocos] = useState(false);
   const [carregandoSabesp, setCarregandoSabesp] = useState(false);
   const [carregandoPluvial, setCarregandoPluvial] = useState(false);
-  const [carregandoGas, setCarregandoGas] = useState(false);
-  const [carregandoDiesel, setCarregandoDiesel] = useState(false);
 
   const [energia, setEnergia] = useState(null);
   const [pocos, setPocos] = useState(null);
   const [sabesp, setSabesp] = useState(null);
   const [pluvial, setPluvial] = useState(null);
-  const [gas, setGas] = useState(calcularGas(4085.414, 0.78));
-  const [diesel, setDiesel] = useState(calcularDiesel({
-    horasG01: 44.16,
-    horasG02: 43.29,
-    consumoLitrosHora: 145.8,
-  }));
   const [pluvialBase, setPluvialBase] = useState(null);
   const [mesPluvial, setMesPluvial] = useState(mesAtualNome());
   const [anoPluvial, setAnoPluvial] = useState(anoAtualNumero());
-  const [gasManualM3, setGasManualM3] = useState("4085,414");
-  const [gasFator, setGasFator] = useState("0,78");
-  const [dieselHorasG01, setDieselHorasG01] = useState("44,16");
-  const [dieselHorasG02, setDieselHorasG02] = useState("43,29");
-  const [dieselConsumoHora, setDieselConsumoHora] = useState("145,8");
 
   const [erroEnergia, setErroEnergia] = useState("");
   const [erroPocos, setErroPocos] = useState("");
   const [erroSabesp, setErroSabesp] = useState("");
   const [erroPluvial, setErroPluvial] = useState("");
-  const [erroGas, setErroGas] = useState("");
-  const [erroDiesel, setErroDiesel] = useState("");
 
   const [textoEnergia, setTextoEnergia] = useState("");
   const [textoPocos, setTextoPocos] = useState("");
   const [textoSabesp, setTextoSabesp] = useState("");
-  const [textoGas, setTextoGas] = useState("");
-  const [textoDieselG01, setTextoDieselG01] = useState("");
-  const [textoDieselG02, setTextoDieselG02] = useState("");
   const [mostrarTexto, setMostrarTexto] = useState("");
 
   const consolidado = useMemo(() => {
@@ -1714,8 +1559,6 @@ export default function Climas() {
     const totalSabesp = Number(sabesp?.consumo || 0);
     const totalPluvial = Number(pluvial?.totalPluvial || 0);
     const total = totalPocos + totalSabesp + totalPluvial;
-    const totalGasKg = Number(gas?.totalKg || 0);
-    const totalDieselLitros = Number(diesel?.litros || 0);
 
     return {
       totalPocos,
@@ -1725,10 +1568,8 @@ export default function Climas() {
       pctPocos: total ? (totalPocos / total) * 100 : 0,
       pctSabesp: total ? (totalSabesp / total) * 100 : 0,
       pctPluvial: total ? (totalPluvial / total) * 100 : 0,
-      totalGasKg,
-      totalDieselLitros,
     };
-  }, [pocos, sabesp, pluvial, gas, diesel]);
+  }, [pocos, sabesp, pluvial]);
 
   async function analisarEnergia() {
     if (!arquivoEnergia) {
@@ -1765,7 +1606,7 @@ export default function Climas() {
 
   async function analisarPocos() {
     if (!arquivoPocos) {
-      setErroPocos("Selecione o demonstrativo dos poços em PDF.");
+      setErroPocos("Selecione o demonstrativo dos poços em PDF ou Excel.");
       return;
     }
 
@@ -1775,14 +1616,29 @@ export default function Climas() {
     setTextoPocos("");
 
     try {
-      const texto = await extrairTextoPDF(arquivoPocos);
-      setTextoPocos(texto);
+      const nome = String(arquivoPocos?.name || "").toLowerCase();
+      const isExcel = nome.endsWith(".xlsx") || nome.endsWith(".xls") || nome.endsWith(".csv");
+      const isPdf = nome.endsWith(".pdf") || arquivoPocos?.type === "application/pdf";
 
-      const dados = extrairPocosDoDemonstrativo(texto);
+      let dados;
+
+      if (isExcel) {
+        dados = await extrairPocosPlanilha(arquivoPocos);
+        setTextoPocos("");
+      } else if (isPdf) {
+        const texto = await extrairTextoPDF(arquivoPocos);
+        setTextoPocos(texto);
+        dados = extrairPocosDoDemonstrativo(texto);
+      } else {
+        setErroPocos("Formato não reconhecido. Envie PDF, XLSX, XLS ou CSV.");
+        return;
+      }
 
       if (!dados.encontrado) {
         setErroPocos(
-          "Não consegui ler automaticamente o PDF dos poços. Como esse demonstrativo costuma ser escaneado, preencha os valores manualmente nos campos abaixo."
+          isExcel
+            ? "Li a planilha, mas não encontrei as colunas/linhas dos poços. Confira se a aba tem leitura anterior, leitura atual e quantidade medida em m³."
+            : "Não consegui ler automaticamente o PDF dos poços. Como esse demonstrativo costuma ser escaneado, preencha os valores manualmente nos campos abaixo."
         );
 
         setPocos({
@@ -1819,7 +1675,7 @@ export default function Climas() {
       setPocos(dados);
     } catch (err) {
       console.error(err);
-      setErroPocos("Não foi possível ler o PDF dos poços.");
+      setErroPocos("Não foi possível ler o arquivo dos poços.");
     } finally {
       setCarregandoPocos(false);
     }
@@ -1902,9 +1758,6 @@ export default function Climas() {
     setErroSabesp("");
     setSabesp(null);
     setTextoSabesp("");
-    setTextoGas("");
-    setTextoDieselG01("");
-    setTextoDieselG02("");
 
     try {
       const texto = await extrairTextoPDF(arquivoSabesp);
@@ -1934,15 +1787,7 @@ export default function Climas() {
 
     setCarregandoPluvial(true);
     setErroPluvial("");
-    setErroGas("");
-    setErroDiesel("");
     setPluvial(null);
-    setGas(calcularGas(4085.414, 0.78));
-    setDiesel(calcularDiesel({
-      horasG01: 44.16,
-      horasG02: 43.29,
-      consumoLitrosHora: 145.8,
-    }));
 
     try {
       const base = await extrairPlanilhaPluvial(arquivoPluvial);
@@ -1986,8 +1831,6 @@ export default function Climas() {
       );
     } else {
       setErroPluvial("");
-    setErroGas("");
-    setErroDiesel("");
     }
 
     setPluvial(filtrado);
@@ -2023,145 +1866,23 @@ export default function Climas() {
     });
   }
 
-
-  async function analisarGas() {
-    setCarregandoGas(true);
-    setErroGas("");
-
-    try {
-      let dadosExtraidos = null;
-
-      if (arquivoGas) {
-        const texto = await extrairTextoPDF(arquivoGas);
-        setTextoGas(texto);
-        dadosExtraidos = extrairGasDoPdf(texto);
-      }
-
-      const consumoM3 = dadosExtraidos?.encontrado
-        ? dadosExtraidos.consumoM3
-        : parseNumeroBR(gasManualM3);
-
-      const fatorConversao = parseNumeroBR(gasFator || "0,78") || 0.78;
-      const calculado = calcularGas(consumoM3, fatorConversao);
-
-      setGas(calculado);
-      setGasManualM3(String(consumoM3).replace(".", ","));
-      setGasFator(String(fatorConversao).replace(".", ","));
-
-      if (!calculado.encontrado) {
-        setErroGas("Não consegui localizar o consumo em m³ automaticamente. Preencha o consumo manualmente e clique em calcular.");
-      }
-    } catch (err) {
-      console.error(err);
-      setErroGas("Não foi possível ler o PDF de gás. Preencha o consumo manualmente e clique em calcular.");
-      setGas(calcularGas(parseNumeroBR(gasManualM3), parseNumeroBR(gasFator) || 0.78));
-    } finally {
-      setCarregandoGas(false);
-    }
-  }
-
-  function calcularGasManual() {
-    const calculado = calcularGas(parseNumeroBR(gasManualM3), parseNumeroBR(gasFator) || 0.78);
-    setGas(calculado);
-
-    if (!calculado.encontrado) {
-      setErroGas("Informe o consumo em m³ para calcular o gás.");
-    } else {
-      setErroGas("");
-    }
-  }
-
-  async function analisarDiesel() {
-    setCarregandoDiesel(true);
-    setErroDiesel("");
-
-    try {
-      let h01 = parseNumeroBR(dieselHorasG01);
-      let h02 = parseNumeroBR(dieselHorasG02);
-
-      if (arquivoDieselG01) {
-        const texto = await lerArquivoComoTexto(arquivoDieselG01);
-        setTextoDieselG01(texto);
-        const extraida = extrairHorasInterpower(texto);
-        if (extraida > 0) h01 = extraida;
-      }
-
-      if (arquivoDieselG02) {
-        const texto = await lerArquivoComoTexto(arquivoDieselG02);
-        setTextoDieselG02(texto);
-        const extraida = extrairHorasInterpower(texto);
-        if (extraida > 0) h02 = extraida;
-      }
-
-      const calculado = calcularDiesel({
-        horasG01: h01,
-        horasG02: h02,
-        consumoLitrosHora: parseNumeroBR(dieselConsumoHora) || 145.8,
-      });
-
-      setDiesel(calculado);
-      setDieselHorasG01(String(h01).replace(".", ","));
-      setDieselHorasG02(String(h02).replace(".", ","));
-      setDieselConsumoHora(String(calculado.consumoLitrosHora).replace(".", ","));
-
-      if (!calculado.encontrado) {
-        setErroDiesel("Informe as horas acumuladas de G01 e G02 para calcular o consumo de diesel.");
-      }
-    } catch (err) {
-      console.error(err);
-      setErroDiesel("Não foi possível analisar os anexos. Preencha as horas manualmente e clique em calcular.");
-    } finally {
-      setCarregandoDiesel(false);
-    }
-  }
-
-  function calcularDieselManual() {
-    const calculado = calcularDiesel({
-      horasG01: parseNumeroBR(dieselHorasG01),
-      horasG02: parseNumeroBR(dieselHorasG02),
-      consumoLitrosHora: parseNumeroBR(dieselConsumoHora) || 145.8,
-    });
-
-    setDiesel(calculado);
-
-    if (!calculado.encontrado) {
-      setErroDiesel("Informe as horas acumuladas de G01 e G02 para calcular o consumo de diesel.");
-    } else {
-      setErroDiesel("");
-    }
-  }
-
   function limparTudo() {
     setArquivoEnergia(null);
     setArquivoPocos(null);
     setArquivoSabesp(null);
     setArquivoPluvial(null);
-    setArquivoGas(null);
-    setArquivoDieselG01(null);
-    setArquivoDieselG02(null);
     setEnergia(null);
     setPocos(null);
     setSabesp(null);
     setPluvial(null);
-    setGas(calcularGas(4085.414, 0.78));
-    setDiesel(calcularDiesel({
-      horasG01: 44.16,
-      horasG02: 43.29,
-      consumoLitrosHora: 145.8,
-    }));
     setPluvialBase(null);
     setErroEnergia("");
     setErroPocos("");
     setErroSabesp("");
     setErroPluvial("");
-    setErroGas("");
-    setErroDiesel("");
     setTextoEnergia("");
     setTextoPocos("");
     setTextoSabesp("");
-    setTextoGas("");
-    setTextoDieselG01("");
-    setTextoDieselG02("");
     setMostrarTexto("");
   }
 
@@ -2177,7 +1898,7 @@ export default function Climas() {
             <div>
               <h2 className="text-2xl font-black text-slate-900">Climas</h2>
               <p className="text-sm text-slate-500">
-                Energia, água, poços, SABESP, pluvial, gás, diesel e consolidado ESG.
+                Energia, água, poços, SABESP, pluvial e consolidado ESG.
               </p>
             </div>
           </div>
@@ -2354,9 +2075,9 @@ export default function Climas() {
         <section className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6">
           <UploadBox
             titulo="Upload demonstrativo dos poços"
-            subtitulo="Envie o PDF dos dois poços artesianos."
+            subtitulo="Envie PDF ou Excel dos dois poços artesianos."
             arquivo={arquivoPocos}
-            accept="application/pdf,.pdf"
+            accept="application/pdf,.pdf,.xlsx,.xls,.csv"
             icon={Droplets}
             onArquivo={(file) => {
               setArquivoPocos(file);
@@ -2547,9 +2268,6 @@ export default function Climas() {
               setSabesp(null);
               setErroSabesp("");
               setTextoSabesp("");
-    setTextoGas("");
-    setTextoDieselG01("");
-    setTextoDieselG02("");
             }}
             onAnalisar={analisarSabesp}
             carregando={carregandoSabesp}
@@ -2668,16 +2386,8 @@ export default function Climas() {
               onArquivo={(file) => {
                 setArquivoPluvial(file);
                 setPluvial(null);
-    setGas(calcularGas(4085.414, 0.78));
-    setDiesel(calcularDiesel({
-      horasG01: 44.16,
-      horasG02: 43.29,
-      consumoLitrosHora: 145.8,
-    }));
                 setPluvialBase(null);
                 setErroPluvial("");
-    setErroGas("");
-    setErroDiesel("");
               }}
               onAnalisar={analisarPluvial}
               carregando={carregandoPluvial}
@@ -2867,392 +2577,9 @@ export default function Climas() {
         </section>
       )}
 
-
-      {aba === "gas" && (
-        <section className="grid grid-cols-1 2xl:grid-cols-[420px_1fr] gap-6">
-          <UploadBox
-            titulo="Upload da conta de gás"
-            subtitulo="Envie o PDF da conta. Se o PDF for escaneado, preencha o m³ manualmente."
-            arquivo={arquivoGas}
-            accept="application/pdf,.pdf"
-            icon={Flame}
-            onArquivo={(file) => {
-              setArquivoGas(file);
-              setErroGas("");
-              setTextoGas("");
-            }}
-            onAnalisar={analisarGas}
-            carregando={carregandoGas}
-            botao="Analisar gás"
-          />
-
-          <div className="space-y-6">
-            {erroGas && <Aviso>{erroGas}</Aviso>}
-
-            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-11 h-11 rounded-2xl bg-orange-50 text-orange-700 flex items-center justify-center">
-                  <Flame size={22} />
-                </div>
-
-                <div>
-                  <h3 className="font-black text-slate-900">
-                    Racional de Consumo Total — Gás
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Total em kg = consumo em m³ × fator. Área comum = 5% e área privativa = 95%.
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="text-sm font-bold text-slate-700">
-                    Consumo da conta em m³
-                  </label>
-                  <input
-                    value={gasManualM3}
-                    onChange={(e) => setGasManualM3(e.target.value)}
-                    placeholder="Ex: 4085,414"
-                    className="mt-2 w-full rounded-2xl border border-slate-200 p-3"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-bold text-slate-700">
-                    Fator de conversão
-                  </label>
-                  <input
-                    value={gasFator}
-                    onChange={(e) => setGasFator(e.target.value)}
-                    placeholder="Ex: 0,78"
-                    className="mt-2 w-full rounded-2xl border border-slate-200 p-3"
-                  />
-                </div>
-
-                <div className="flex items-end">
-                  <button
-                    onClick={calcularGasManual}
-                    className="w-full rounded-2xl bg-orange-500 text-white px-5 py-3 font-black hover:bg-orange-600"
-                  >
-                    Calcular gás
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
-              <CardResumo
-                titulo="Consumo em m³"
-                valor={`${formatarNumeroBR(gas?.consumoM3 || 0, 3)} m³`}
-                subtitulo="Extraído ou manual"
-                icon={Gauge}
-                cor="slate"
-              />
-
-              <CardResumo
-                titulo="Total convertido"
-                valor={`${formatarNumeroBR(gas?.totalKg || 0)} kg`}
-                subtitulo={`Fator ${String(gas?.fatorConversao || 0).replace(".", ",")}`}
-                icon={Flame}
-                cor="amber"
-              />
-
-              <CardResumo
-                titulo="Área comum"
-                valor={`${formatarNumeroBR(gas?.areaComumKg || 0)} kg`}
-                subtitulo="5% do total"
-                icon={Flame}
-                cor="blue"
-              />
-
-              <CardResumo
-                titulo="Área privativa"
-                valor={`${formatarNumeroBR(gas?.areaPrivativaKg || 0)} kg`}
-                subtitulo="95% do total"
-                icon={Flame}
-                cor="green"
-              />
-            </div>
-
-            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-              <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-4">
-                <div>
-                  <h3 className="font-black text-slate-900">
-                    Detalhamento do cálculo de gás
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Use estes dados para o relatório ESG e para o fechamento mensal.
-                  </p>
-                </div>
-
-                <button
-                  onClick={() => gerarRelatorioGas(gas)}
-                  className="rounded-2xl bg-slate-950 text-white px-5 py-3 font-black hover:bg-slate-800 flex items-center justify-center gap-2"
-                >
-                  <FileDown size={18} />
-                  Emitir relatório de gás
-                </button>
-              </div>
-
-              <TabelaSimples
-                columns={[
-                  { key: "indicador", label: "Indicador" },
-                  { key: "valor", label: "Valor" },
-                ]}
-                rows={[
-                  {
-                    indicador: "Consumo em m³",
-                    valor: `${formatarNumeroBR(gas?.consumoM3 || 0, 3)} m³`,
-                  },
-                  {
-                    indicador: "Fator de conversão",
-                    valor: String(gas?.fatorConversao || 0).replace(".", ","),
-                  },
-                  {
-                    indicador: "Total convertido",
-                    valor: `${formatarNumeroBR(gas?.totalKg || 0)} kg`,
-                  },
-                  {
-                    indicador: "Área comum — 5%",
-                    valor: `${formatarNumeroBR(gas?.areaComumKg || 0)} kg`,
-                  },
-                  {
-                    indicador: "Área privativa — 95%",
-                    valor: `${formatarNumeroBR(gas?.areaPrivativaKg || 0)} kg`,
-                  },
-                ]}
-              />
-            </div>
-
-            {textoGas && (
-              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-                <button
-                  onClick={() => setMostrarTexto(mostrarTexto === "gas" ? "" : "gas")}
-                  className="text-sm font-black text-blue-700 hover:text-blue-900"
-                >
-                  {mostrarTexto === "gas"
-                    ? "Ocultar texto extraído"
-                    : "Ver texto extraído do PDF"}
-                </button>
-
-                {mostrarTexto === "gas" && (
-                  <pre className="mt-4 max-h-72 overflow-auto rounded-2xl bg-slate-950 text-slate-100 p-4 text-xs whitespace-pre-wrap">
-                    {textoGas}
-                  </pre>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
-      {aba === "diesel" && (
-        <section className="space-y-6">
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="w-11 h-11 rounded-2xl bg-blue-50 text-blue-700 flex items-center justify-center">
-                <Fuel size={22} />
-              </div>
-
-              <div>
-                <h3 className="font-black text-slate-900">
-                  Diesel / Geradores — Interpower
-                </h3>
-                <p className="text-sm text-slate-500">
-                  Anexe os prints para registro e informe as horas acumuladas. Se o arquivo for PDF/texto digital, o sistema tenta extrair o acumulado automaticamente.
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              <div className="rounded-3xl border border-slate-100 p-4">
-                <label className="text-sm font-black text-slate-700 flex items-center gap-2">
-                  <ImageIcon size={18} />
-                  Print ou PDF Interpower — G01
-                </label>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf,.pdf,.txt"
-                  onChange={(e) => {
-                    setArquivoDieselG01(e.target.files?.[0] || null);
-                    setErroDiesel("");
-                  }}
-                  className="mt-3 block w-full text-sm"
-                />
-                <p className="text-xs text-slate-400 mt-2 break-words">
-                  {arquivoDieselG01?.name || "Nenhum arquivo anexado."}
-                </p>
-              </div>
-
-              <div className="rounded-3xl border border-slate-100 p-4">
-                <label className="text-sm font-black text-slate-700 flex items-center gap-2">
-                  <ImageIcon size={18} />
-                  Print ou PDF Interpower — G02
-                </label>
-                <input
-                  type="file"
-                  accept="image/*,application/pdf,.pdf,.txt"
-                  onChange={(e) => {
-                    setArquivoDieselG02(e.target.files?.[0] || null);
-                    setErroDiesel("");
-                  }}
-                  className="mt-3 block w-full text-sm"
-                />
-                <p className="text-xs text-slate-400 mt-2 break-words">
-                  {arquivoDieselG02?.name || "Nenhum arquivo anexado."}
-                </p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-5">
-              <div>
-                <label className="text-sm font-bold text-slate-700">
-                  Horas G01
-                </label>
-                <input
-                  value={dieselHorasG01}
-                  onChange={(e) => setDieselHorasG01(e.target.value)}
-                  placeholder="Ex: 44,16"
-                  className="mt-2 w-full rounded-2xl border border-slate-200 p-3"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-bold text-slate-700">
-                  Horas G02
-                </label>
-                <input
-                  value={dieselHorasG02}
-                  onChange={(e) => setDieselHorasG02(e.target.value)}
-                  placeholder="Ex: 43,29"
-                  className="mt-2 w-full rounded-2xl border border-slate-200 p-3"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-bold text-slate-700">
-                  Consumo L/h
-                </label>
-                <input
-                  value={dieselConsumoHora}
-                  onChange={(e) => setDieselConsumoHora(e.target.value)}
-                  placeholder="Ex: 145,8"
-                  className="mt-2 w-full rounded-2xl border border-slate-200 p-3"
-                />
-              </div>
-
-              <div className="flex items-end gap-2">
-                <button
-                  onClick={calcularDieselManual}
-                  className="w-full rounded-2xl bg-blue-600 text-white px-5 py-3 font-black hover:bg-blue-700"
-                >
-                  Calcular
-                </button>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3 mt-4">
-              <button
-                onClick={analisarDiesel}
-                disabled={carregandoDiesel}
-                className="rounded-2xl bg-slate-950 text-white px-5 py-3 font-black hover:bg-slate-800 disabled:opacity-60 flex items-center gap-2"
-              >
-                {carregandoDiesel ? <Loader2 size={18} className="animate-spin" /> : <BarChart3 size={18} />}
-                Analisar anexos e calcular
-              </button>
-
-              <button
-                onClick={() => gerarRelatorioDiesel(diesel)}
-                className="rounded-2xl border border-slate-200 text-slate-700 px-5 py-3 font-black hover:bg-slate-50 flex items-center gap-2"
-              >
-                <FileDown size={18} />
-                Emitir relatório diesel
-              </button>
-            </div>
-          </div>
-
-          {erroDiesel && <Aviso>{erroDiesel}</Aviso>}
-
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <CardResumo
-              titulo="Horas G01"
-              valor={`${formatarNumeroBR(diesel?.horasG01 || 0, 4)} h`}
-              subtitulo="Interpower"
-              icon={Clock3}
-              cor="blue"
-            />
-
-            <CardResumo
-              titulo="Horas G02"
-              valor={`${formatarNumeroBR(diesel?.horasG02 || 0, 4)} h`}
-              subtitulo="Interpower"
-              icon={Clock3}
-              cor="purple"
-            />
-
-            <CardResumo
-              titulo="Horas totais"
-              valor={`${formatarNumeroBR(diesel?.horasTotais || 0, 4)} h`}
-              subtitulo="G01 + G02"
-              icon={Gauge}
-              cor="slate"
-            />
-
-            <CardResumo
-              titulo="Diesel consumido"
-              valor={`${formatarNumeroBR(diesel?.litros || 0)} L`}
-              subtitulo={`${formatarNumeroBR(diesel?.consumoLitrosHora || 0)} L/h`}
-              icon={Fuel}
-              cor="green"
-            />
-          </div>
-
-          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-            <h3 className="font-black text-slate-900 mb-4">
-              Racional de cálculo de diesel mensal
-            </h3>
-
-            <TabelaSimples
-              columns={[
-                { key: "indicador", label: "Indicador" },
-                { key: "valor", label: "Valor" },
-              ]}
-              rows={[
-                {
-                  indicador: "GMG G01 — acumulado sem energia",
-                  valor: `${formatarNumeroBR(diesel?.horasG01 || 0, 4)} h`,
-                },
-                {
-                  indicador: "GMG G02 — acumulado sem energia",
-                  valor: `${formatarNumeroBR(diesel?.horasG02 || 0, 4)} h`,
-                },
-                {
-                  indicador: "Horas totais",
-                  valor: `${formatarNumeroBR(diesel?.horasTotais || 0, 4)} h`,
-                },
-                {
-                  indicador: "Consumo médio",
-                  valor: `${formatarNumeroBR(diesel?.consumoLitrosHora || 0)} L/h`,
-                },
-                {
-                  indicador: "Consumo total mensal de diesel",
-                  valor: `${formatarNumeroBR(diesel?.litros || 0)} L`,
-                },
-              ]}
-            />
-          </div>
-
-          <Aviso tipo="blue">
-            Prints em imagem servem como anexo/registro. A leitura automática só funciona se o arquivo tiver texto digital ou se você exportar o relatório em PDF/texto. Para prints puros, preencha as horas nos campos G01 e G02.
-          </Aviso>
-        </section>
-      )}
-
-
       {aba === "consolidado" && (
         <section className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
             <CardResumo
               titulo="Poços artesianos"
               valor={`${formatarNumeroBR(consolidado.totalPocos)} m³`}
@@ -3278,27 +2605,11 @@ export default function Climas() {
             />
 
             <CardResumo
-              titulo="Gás convertido"
-              valor={`${formatarNumeroBR(consolidado.totalGasKg)} kg`}
-              subtitulo="m³ × fator"
-              icon={Flame}
-              cor="amber"
-            />
-
-            <CardResumo
-              titulo="Diesel estimado"
-              valor={`${formatarNumeroBR(consolidado.totalDieselLitros)} L`}
-              subtitulo="GMGs G01 + G02"
-              icon={Fuel}
-              cor="slate"
-            />
-
-            <CardResumo
-              titulo="Total água"
+              titulo="Total controlado"
               valor={`${formatarNumeroBR(consolidado.total)} m³`}
               subtitulo="Poços + SABESP + Pluvial"
               icon={BarChart3}
-              cor="purple"
+              cor="amber"
             />
           </div>
 
@@ -3320,8 +2631,6 @@ export default function Climas() {
                     pocos,
                     sabesp,
                     pluvial,
-                    gas,
-                    diesel,
                   })
                 }
                 className="rounded-2xl bg-slate-950 text-white px-5 py-3 font-black hover:bg-slate-800 flex items-center justify-center gap-2"
@@ -3358,31 +2667,19 @@ export default function Climas() {
                   descricao: "Volume de água captada a partir da chuva para reuso.",
                 },
                 {
-                  fonte: "Total de água controlada",
+                  fonte: "Total controlado",
                   volume: `${formatarNumeroBR(consolidado.total)} m³`,
                   participacao: "100,00%",
                   descricao: "Soma de poços, concessionária e pluvial.",
-                },
-                {
-                  fonte: "Gás",
-                  volume: `${formatarNumeroBR(consolidado.totalGasKg)} kg`,
-                  participacao: "-",
-                  descricao: "Consumo em m³ convertido para kg e dividido entre área comum/privativa.",
-                },
-                {
-                  fonte: "Diesel / Geradores",
-                  volume: `${formatarNumeroBR(consolidado.totalDieselLitros)} L`,
-                  participacao: "-",
-                  descricao: "Horas acumuladas dos GMGs multiplicadas pelo consumo L/h.",
                 },
               ]}
             />
           </div>
 
           <Aviso tipo="blue">
-            Para o consolidado ficar completo, analise <strong>Poços artesianos</strong>,
-            <strong> SABESP</strong>, <strong>Águas pluviais</strong>,
-            <strong> Gás</strong> e <strong>Diesel/Geradores</strong>.
+            Para o consolidado ficar completo, analise pelo menos um arquivo em
+            <strong> Poços artesianos</strong>, um em <strong>SABESP</strong> e
+            a planilha em <strong>Águas pluviais</strong>.
           </Aviso>
         </section>
       )}
