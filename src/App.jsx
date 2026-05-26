@@ -9,6 +9,7 @@ import Historico from "./pages/Historico";
 import Locatarios from "./pages/Locatarios";
 import Login from "./pages/Login";
 import Malote from "./pages/Malote";
+import Mapa3D from "./pages/Mapa3D";
 import Pendencias from "./pages/Pendencias";
 import RelatoriosPDF from "./pages/RelatoriosPDF";
 import RateioAgua from "./pages/RateioAgua";
@@ -38,6 +39,7 @@ function primeiraPaginaPermitida(user) {
     "dashboard",
     "pendencias",
     "solicitacoes",
+    "mapa3d",
     "climas",
     "calculadora",
     "tecnicos",
@@ -88,6 +90,8 @@ export default function App() {
         return <Pendencias user={user} />;
       case "solicitacoes":
         return <SolicitacoesMaterial user={user} />;
+      case "mapa3d":
+        return <Mapa3D user={user} />;
       case "climas":
         return <Climas user={user} />;
       case "calculadora":
