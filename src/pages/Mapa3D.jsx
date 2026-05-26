@@ -160,7 +160,7 @@ function Predio3D({ andares, locais, andarSelecionado, setAndarSelecionado }) {
     : 0;
 
   return (
-    <group position={[0, -2.15, 0]}>
+    <group position={[0, -2.65, 0]}>
       <mesh position={[0, -0.16, 0]} receiveShadow>
         <boxGeometry args={[6.2, 0.18, 4.2]} />
         <meshStandardMaterial color="#0f172a" roughness={0.75} metalness={0.15} />
@@ -867,9 +867,9 @@ export default function Mapa3D({ user }) {
               </div>
             </div>
 
-            <div className="h-[620px] bg-gradient-to-b from-slate-100 via-blue-50 to-slate-200">
+            <div className="h-[760px] bg-gradient-to-b from-slate-100 via-blue-50 to-slate-200">
               <Canvas shadows dpr={[1, 1.6]}>
-                <PerspectiveCamera makeDefault position={[6.8, 7.2, 8.8]} fov={43} />
+                <PerspectiveCamera makeDefault position={[11, 13, 19]} fov={60} />
                 <ambientLight intensity={0.65} />
                 <directionalLight
                   position={[6, 9, 5]}
@@ -890,8 +890,9 @@ export default function Mapa3D({ user }) {
                   enablePan
                   enableZoom
                   enableRotate
-                  minDistance={5}
-                  maxDistance={16}
+                  minDistance={8}
+                  maxDistance={45}
+                  target={[0, 5, 0]}
                   maxPolarAngle={Math.PI / 2.02}
                 />
               </Canvas>
