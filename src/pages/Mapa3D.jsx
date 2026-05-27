@@ -1,9 +1,14 @@
 import {
   AlertTriangle,
   Building2,
-  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Edit3,
   Eye,
+  Filter,
+  Info,
+  Maximize2,
+  Minimize2,
   Layers3,
   Loader2,
   MapPin,
@@ -107,6 +112,32 @@ function locaisDoAndar(locais, andarId) {
   return locais.filter((local) => local.andarId === andarId);
 }
 
+function corBadgePorTipo(tipo = "") {
+  const t = String(tipo).toLowerCase();
+
+  if (t.includes("locat")) return "purple";
+  if (t.includes("hid")) return "blue";
+  if (t.includes("el")) return "amber";
+  if (t.includes("seg")) return "amber";
+  if (t.includes("técn") || t.includes("tecn") || t.includes("equip")) return "slate";
+  if (t.includes("op")) return "green";
+
+  return "blue";
+}
+
+function resumirLocais(locais = []) {
+  const grupos = {};
+
+  locais.forEach((local) => {
+    const tipo = local.tipo || "Local";
+    grupos[tipo] = (grupos[tipo] || 0) + 1;
+  });
+
+  return Object.entries(grupos)
+    .sort((a, b) => b[1] - a[1])
+    .map(([tipo, total]) => ({ tipo, total }));
+}
+
 function Badge({ children, color = "blue" }) {
   const cores = {
     blue: "bg-blue-50 text-blue-700 border-blue-100",
@@ -150,8 +181,8 @@ function CardInfo({ titulo, valor, subtitulo, icon: Icon, cor = "blue" }) {
 
 function Predio3D({ andares, locais, andarSelecionado, setAndarSelecionado }) {
   const ordenados = ordenarAndares(andares);
-  const largura = 4.6;
-  const profundidade = 3.1;
+  const largura = 4.35;
+  const profundidade = 2.95;
   const alturaAndar = 0.42;
   const gap = 0.035;
 
@@ -162,12 +193,12 @@ function Predio3D({ andares, locais, andarSelecionado, setAndarSelecionado }) {
   return (
     <group position={[0, -2.65, 0]}>
       <mesh position={[0, -0.16, 0]} receiveShadow>
-        <boxGeometry args={[6.2, 0.18, 4.2]} />
+        <boxGeometry args={[7.3, 0.2, 4.8]} />
         <meshStandardMaterial color="#0f172a" roughness={0.75} metalness={0.15} />
       </mesh>
 
       <mesh position={[0, 0.02, 0]} receiveShadow>
-        <boxGeometry args={[5.4, 0.22, 3.65]} />
+        <boxGeometry args={[6.55, 0.24, 4.22]} />
         <meshStandardMaterial color="#e2e8f0" roughness={0.65} metalness={0.05} />
       </mesh>
 
@@ -181,8 +212,8 @@ function Predio3D({ andares, locais, andarSelecionado, setAndarSelecionado }) {
           String(andar.nome || "").toLowerCase().includes("cobertura") ||
           index === ordenados.length - 1;
 
-        const corpoLargura = isSubsolo ? 5.0 : isTerreo ? 5.35 : largura;
-        const corpoProfundidade = isSubsolo ? 3.45 : isTerreo ? 3.55 : profundidade;
+        const corpoLargura = isSubsolo ? 5.8 : isTerreo ? 6.05 : isCobertura ? 4.65 : largura;
+        const corpoProfundidade = isSubsolo ? 3.8 : isTerreo ? 3.95 : isCobertura ? 3.18 : profundidade;
 
         return (
           <group key={andar.id}>
@@ -559,6 +590,9 @@ export default function Mapa3D({ user }) {
   const [andarEditando, setAndarEditando] = useState(null);
   const [localEditando, setLocalEditando] = useState(null);
   const [busca, setBusca] = useState("");
+  const [painelAberto, setPainelAberto] = useState(true);
+  const [listaGeralAberta, setListaGeralAberta] = useState(false);
+  const [filtroTipo, setFiltroTipo] = useState("Todos");
 
   const andaresOrdenados = useMemo(() => ordenarAndares(andares), [andares]);
 
@@ -567,11 +601,21 @@ export default function Mapa3D({ user }) {
     return locaisDoAndar(locais, andarSelecionado.id);
   }, [locais, andarSelecionado]);
 
+  const tiposDisponiveis = useMemo(() => {
+    const tipos = Array.from(new Set(locais.map((local) => local.tipo || "Local")));
+    return ["Todos", ...tipos.sort((a, b) => a.localeCompare(b))];
+  }, [locais]);
+
   const locaisFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    if (!termo) return locais;
 
-    return locais.filter((local) => {
+    const base = filtroTipo === "Todos"
+      ? locais
+      : locais.filter((local) => (local.tipo || "Local") === filtroTipo);
+
+    if (!termo) return base;
+
+    return base.filter((local) => {
       const texto = [
         local.nome,
         local.tipo,
@@ -585,7 +629,7 @@ export default function Mapa3D({ user }) {
 
       return texto.includes(termo);
     });
-  }, [locais, busca]);
+  }, [locais, busca, filtroTipo]);
 
   useEffect(() => {
     carregar();
@@ -596,6 +640,12 @@ export default function Mapa3D({ user }) {
       setAndarSelecionado(andaresOrdenados[0]);
     }
   }, [andaresOrdenados, andarSelecionado]);
+
+  useEffect(() => {
+    if (andarSelecionado) {
+      setPainelAberto(true);
+    }
+  }, [andarSelecionado?.id]);
 
   async function carregar() {
     setCarregando(true);
@@ -848,7 +898,7 @@ export default function Mapa3D({ user }) {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 2xl:grid-cols-[1.45fr_0.9fr] gap-6">
+        <div className={`grid grid-cols-1 ${painelAberto ? "2xl:grid-cols-[1.45fr_0.9fr]" : "2xl:grid-cols-1"} gap-6`}>
           <section className="bg-white rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-5 border-b border-slate-100 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
               <div>
@@ -860,10 +910,18 @@ export default function Mapa3D({ user }) {
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 items-center">
                 <Badge color="blue">Clique no andar</Badge>
                 <Badge color="green">Zoom liberado</Badge>
                 <Badge color="slate">Supabase</Badge>
+
+                <button
+                  onClick={() => setPainelAberto((v) => !v)}
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                >
+                  {painelAberto ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                  {painelAberto ? "Minimizar painel" : "Abrir painel"}
+                </button>
               </div>
             </div>
 
@@ -899,61 +957,144 @@ export default function Mapa3D({ user }) {
             </div>
           </section>
 
-          <section className="space-y-6">
-            <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black uppercase text-slate-400">Andar selecionado</p>
-                  <h2 className="text-2xl font-black text-slate-900 mt-1">
-                    {andarSelecionado?.nome || "-"}
-                  </h2>
-                  <p className="text-sm text-slate-500 mt-1">
-                    {andarSelecionado?.observacao || "Sem observação cadastrada."}
-                  </p>
-                </div>
+          {painelAberto && (
+            <section className="space-y-6">
+              <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-black uppercase text-slate-400">Andar selecionado</p>
+                    <h2 className="text-2xl font-black text-slate-900 mt-1">
+                      {andarSelecionado?.nome || "-"}
+                    </h2>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {andarSelecionado?.observacao || "Sem observação cadastrada."}
+                    </p>
+                  </div>
 
-                {andarSelecionado && (
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setAndarEditando(andarSelecionado)}
+                      onClick={() => setPainelAberto(false)}
                       className="p-2 rounded-xl hover:bg-slate-100 text-slate-600"
-                      title="Editar andar"
+                      title="Minimizar painel"
                     >
-                      <Edit3 size={18} />
+                      <Minimize2 size={18} />
                     </button>
 
-                    <button
-                      onClick={() => removerAndar(andarSelecionado)}
-                      className="p-2 rounded-xl hover:bg-rose-50 text-rose-600"
-                      title="Excluir andar"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {andarSelecionado && (
+                      <>
+                        <button
+                          onClick={() => setAndarEditando(andarSelecionado)}
+                          className="p-2 rounded-xl hover:bg-slate-100 text-slate-600"
+                          title="Editar andar"
+                        >
+                          <Edit3 size={18} />
+                        </button>
+
+                        <button
+                          onClick={() => removerAndar(andarSelecionado)}
+                          className="p-2 rounded-xl hover:bg-rose-50 text-rose-600"
+                          title="Excluir andar"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-slate-400 font-bold">Ordem</p>
+                    <p className="font-black text-slate-900">{andarSelecionado?.ordem ?? "-"}</p>
+                  </div>
+
+                  <div className="rounded-2xl bg-slate-50 p-3">
+                    <p className="text-slate-400 font-bold">Locais</p>
+                    <p className="font-black text-slate-900">{locaisSelecionados.length}</p>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-3xl border border-slate-100 overflow-hidden">
+                  <div className="bg-slate-50 px-4 py-3 flex items-center gap-2">
+                    <Info size={17} className="text-blue-600" />
+                    <p className="font-black text-slate-800">O que tem neste andar</p>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 max-h-[340px] overflow-auto">
+                    {locaisSelecionados.length === 0 && (
+                      <div className="p-5 text-center text-slate-400 text-sm">
+                        Nenhum local/equipamento cadastrado neste andar.
+                      </div>
+                    )}
+
+                    {locaisSelecionados.map((local) => (
+                      <div key={local.id} className="p-4 hover:bg-slate-50/70 transition">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-black text-slate-900">{local.nome}</p>
+                              <Badge color={corBadgePorTipo(local.tipo)}>{local.tipo || "Local"}</Badge>
+                            </div>
+
+                            {local.descricao && (
+                              <p className="text-sm text-slate-500 mt-1">{local.descricao}</p>
+                            )}
+
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {local.responsavel && (
+                                <span className="text-xs font-bold text-slate-500">
+                                  Resp.: {local.responsavel}
+                                </span>
+                              )}
+                              <Badge color={local.status === "Ativo" ? "green" : local.status === "Atenção" ? "amber" : "slate"}>
+                                {local.status || "Ativo"}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <div className="flex gap-1 shrink-0">
+                            <button
+                              onClick={() => setLocalEditando(local)}
+                              className="p-2 rounded-xl hover:bg-blue-50 text-blue-600"
+                              title="Editar"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+
+                            <button
+                              onClick={() => removerLocal(local)}
+                              className="p-2 rounded-xl hover:bg-rose-50 text-rose-600"
+                              title="Excluir"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {locaisSelecionados.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {resumirLocais(locaisSelecionados).map((grupo) => (
+                      <Badge key={grupo.tipo} color={corBadgePorTipo(grupo.tipo)}>
+                        {grupo.tipo}: {grupo.total}
+                      </Badge>
+                    ))}
                   </div>
                 )}
               </div>
 
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-2xl bg-slate-50 p-3">
-                  <p className="text-slate-400 font-bold">Ordem</p>
-                  <p className="font-black text-slate-900">{andarSelecionado?.ordem ?? "-"}</p>
-                </div>
-
-                <div className="rounded-2xl bg-slate-50 p-3">
-                  <p className="text-slate-400 font-bold">Locais</p>
-                  <p className="font-black text-slate-900">{locaisSelecionados.length}</p>
-                </div>
-              </div>
-            </div>
-
-            <FormLocal
-              andarSelecionado={andarSelecionado}
-              editando={localEditando}
-              setEditando={setLocalEditando}
-              onSalvar={salvarLocal}
-              salvando={salvando}
-            />
-          </section>
+              <FormLocal
+                andarSelecionado={andarSelecionado}
+                editando={localEditando}
+                setEditando={setLocalEditando}
+                onSalvar={salvarLocal}
+                salvando={salvando}
+              />
+            </section>
+          )}
         </div>
       )}
 
@@ -967,11 +1108,26 @@ export default function Mapa3D({ user }) {
       />
 
       {andares.length > 0 && (
-        <section className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
+        <section className="space-y-4">
           <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5">
-            <h3 className="font-black text-slate-900 mb-3">Andares</h3>
+            <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 mb-4">
+              <div>
+                <h3 className="font-black text-slate-900">Navegação e lista geral</h3>
+                <p className="text-sm text-slate-500">
+                  A lista geral fica recolhida para evitar poluição visual.
+                </p>
+              </div>
 
-            <div className="space-y-2 max-h-[520px] overflow-auto pr-1">
+              <button
+                onClick={() => setListaGeralAberta((v) => !v)}
+                className="rounded-2xl bg-slate-950 text-white px-4 py-3 font-black hover:bg-slate-800 flex items-center gap-2 w-fit"
+              >
+                {listaGeralAberta ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                {listaGeralAberta ? "Ocultar lista geral" : "Ver lista geral"}
+              </button>
+            </div>
+
+            <div className="flex gap-2 overflow-x-auto pb-1">
               {andaresOrdenados.map((andar) => {
                 const ativo = andarSelecionado?.id === andar.id;
                 const qtd = locaisDoAndar(locais, andar.id).length;
@@ -980,7 +1136,7 @@ export default function Mapa3D({ user }) {
                   <button
                     key={andar.id}
                     onClick={() => setAndarSelecionado(andar)}
-                    className={`w-full text-left rounded-2xl border p-3 transition ${
+                    className={`shrink-0 min-w-[155px] text-left rounded-2xl border p-3 transition ${
                       ativo
                         ? "bg-blue-50 border-blue-200 text-blue-800"
                         : "bg-white border-slate-100 hover:bg-slate-50 text-slate-700"
@@ -1008,6 +1164,7 @@ export default function Mapa3D({ user }) {
             </div>
           </div>
 
+          {listaGeralAberta && (
           <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
               <div>
@@ -1019,12 +1176,27 @@ export default function Mapa3D({ user }) {
                 </p>
               </div>
 
-              <input
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar local, tipo, responsável..."
-                className="rounded-2xl border border-slate-200 p-3 text-sm w-full lg:w-80"
-              />
+              <div className="flex flex-col md:flex-row gap-2 w-full lg:w-auto">
+                <div className="relative">
+                  <Filter size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <select
+                    value={filtroTipo}
+                    onChange={(e) => setFiltroTipo(e.target.value)}
+                    className="rounded-2xl border border-slate-200 py-3 pl-9 pr-4 text-sm bg-white w-full md:w-56"
+                  >
+                    {tiposDisponiveis.map((tipo) => (
+                      <option key={tipo} value={tipo}>{tipo}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <input
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar local, tipo, responsável..."
+                  className="rounded-2xl border border-slate-200 p-3 text-sm w-full md:w-96"
+                />
+              </div>
             </div>
 
             <div className="overflow-x-auto rounded-3xl border border-slate-100">
@@ -1068,7 +1240,7 @@ export default function Mapa3D({ user }) {
                         </td>
 
                         <td className="px-4 py-3">
-                          <Badge color="blue">{local.tipo || "Local"}</Badge>
+                          <Badge color={corBadgePorTipo(local.tipo)}>{local.tipo || "Local"}</Badge>
                         </td>
 
                         <td className="px-4 py-3 text-slate-700">
@@ -1119,6 +1291,7 @@ export default function Mapa3D({ user }) {
               </table>
             </div>
           </div>
+          )}
         </section>
       )}
     </div>
