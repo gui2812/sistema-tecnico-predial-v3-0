@@ -700,4 +700,4 @@ export default function Usuarios({ currentUser, onUserUpdated }) {
       </div>
     </div>
   );
-
+}
