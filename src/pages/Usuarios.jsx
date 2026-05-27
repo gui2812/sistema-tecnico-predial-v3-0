@@ -19,13 +19,16 @@ import {
 
 const PERMISSIONS = [
   { id: "dashboard", label: "Dashboard" },
+  { id: "pendencias", label: "Pendências" },
+  { id: "solicitacoes", label: "Solicitação de Material" },
+  { id: "mapa3d", label: "Mapa 3D" },
+  { id: "climas", label: "Climas" },
   { id: "calculadora", label: "Calculadora Elétrica" },
   { id: "tecnicos", label: "Cálculos Técnicos" },
   { id: "geradores", label: "Geradores" },
   { id: "locatarios", label: "Energia dos Locatários" },
   { id: "malote", label: "Malote" },
   { id: "rateioAgua", label: "Rateio de Água" },
-  { id: "solicitacoes", label: "Solicitação de Material" },
   { id: "historico", label: "Histórico" },
   { id: "relatorios", label: "Relatórios PDF" },
   { id: "usuarios", label: "Usuários e Permissões" },
@@ -84,8 +87,19 @@ const PROFILE_PRESETS = {
   admin: PERMISSIONS.map((p) => p.id),
   administrador: PERMISSIONS.map((p) => p.id),
   lider: ["solicitacoes"],
-  tecnico: ["dashboard", "calculadora", "tecnicos", "geradores", "historico", "relatorios"],
-  consulta: ["dashboard", "historico", "relatorios"],
+  tecnico: [
+    "dashboard",
+    "pendencias",
+    "mapa3d",
+    "climas",
+    "calculadora",
+    "tecnicos",
+    "geradores",
+    "locatarios",
+    "historico",
+    "relatorios",
+  ],
+  consulta: ["dashboard", "mapa3d", "historico", "relatorios"],
 };
 
 const USUARIO_VAZIO = {
@@ -114,6 +128,10 @@ function normalizarUsuario(u) {
           if (p === "energia") return "locatarios";
           if (p === "calculos_tecnicos") return "tecnicos";
           if (p === "rateio_agua") return "rateioAgua";
+          if (p === "mapa_3d") return "mapa3d";
+          if (p === "mapa") return "mapa3d";
+          if (p === "clima") return "climas";
+          if (p === "pendencia") return "pendencias";
           return p;
         })
       : PROFILE_PRESETS[perfil] || ["solicitacoes"],
@@ -682,4 +700,4 @@ export default function Usuarios({ currentUser, onUserUpdated }) {
       </div>
     </div>
   );
-}
+
