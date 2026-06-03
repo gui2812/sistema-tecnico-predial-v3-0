@@ -1,237 +1,171 @@
-import { supabase } from "./supabaseClient";
+begin;
 
-function normalizarAndar(row) {
-  if (!row) return null;
+alter table public.mapa3d_andares
+  add column if not exists codigo_projeto text default '',
+  add column if not exists planta_url text default '',
+  add column if not exists categoria text default '',
+  add column if not exists destaque text default '',
+  add column if not exists altura_visual numeric default 1;
 
-  return {
-    id: row.id,
-    nome: row.nome || "",
-    ordem: Number(row.ordem || 0),
-    altura: Number(row.altura || 1),
-    cor: row.cor || "#2563eb",
-    observacao: row.observacao || "",
-    ativo: row.ativo !== false,
-    criadoEm: row.criado_em,
-    atualizadoEm: row.atualizado_em,
-  };
-}
+create index if not exists mapa3d_andares_ordem_idx
+  on public.mapa3d_andares (ordem);
 
-function normalizarLocal(row) {
-  if (!row) return null;
+create index if not exists mapa3d_locais_andar_id_idx
+  on public.mapa3d_locais (andar_id);
 
-  return {
-    id: row.id,
-    andarId: row.andar_id || "",
-    nome: row.nome || "",
-    tipo: row.tipo || "Local",
-    descricao: row.descricao || "",
-    observacao: row.observacao || "",
-    responsavel: row.responsavel || "",
-    status: row.status || "Ativo",
-    ativo: row.ativo !== false,
-    criadoEm: row.criado_em,
-    atualizadoEm: row.atualizado_em,
-  };
-}
+update public.mapa3d_andares
+set
+  nome = '1º Pav. Técnico',
+  categoria = 'tecnico',
+  codigo_projeto = '2446-AR-PE-007-R04',
+  destaque = 'Primeiro pavimento técnico.',
+  observacao = 'Áreas técnicas e apoio operacional.',
+  altura_visual = 0.95,
+  cor = '#0369a1',
+  atualizado_em = now()
+where ordem = 1;
 
-export async function listarAndaresMapa3D() {
-  const { data, error } = await supabase
-    .from("mapa3d_andares")
-    .select("*")
-    .eq("ativo", true)
-    .order("ordem", { ascending: true });
+update public.mapa3d_andares
+set
+  nome = '2º Pav. Técnico',
+  categoria = 'tecnico',
+  codigo_projeto = '2446-AR-PE-008-R02',
+  destaque = 'Segundo pavimento técnico.',
+  observacao = 'Geradores, elétrica, automação e áreas técnicas.',
+  altura_visual = 0.95,
+  cor = '#0369a1',
+  atualizado_em = now()
+where ordem = 2;
 
-  if (error) {
-    console.error("Erro ao listar andares do mapa 3D:", error);
-    throw new Error(error.message);
-  }
-
-  return (data || []).map(normalizarAndar).filter(Boolean);
-}
-
-export async function criarAndarMapa3D({
+with estrutura (
   nome,
-  ordem = 0,
-  altura = 1,
-  cor = "#2563eb",
-  observacao = "",
-}) {
-  const payload = {
-    nome,
-    ordem: Number(ordem || 0),
-    altura: Number(altura || 1),
-    cor,
-    observacao,
-    ativo: true,
-    atualizado_em: new Date().toISOString(),
-  };
-
-  const { data, error } = await supabase
-    .from("mapa3d_andares")
-    .insert(payload)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Erro ao criar andar do mapa 3D:", error);
-    throw new Error(error.message);
-  }
-
-  return normalizarAndar(data);
-}
-
-export async function atualizarAndarMapa3D(id, dados = {}) {
-  const payload = {
-    atualizado_em: new Date().toISOString(),
-  };
-
-  if (dados.nome !== undefined) payload.nome = dados.nome;
-  if (dados.ordem !== undefined) payload.ordem = Number(dados.ordem || 0);
-  if (dados.altura !== undefined) payload.altura = Number(dados.altura || 1);
-  if (dados.cor !== undefined) payload.cor = dados.cor;
-  if (dados.observacao !== undefined) payload.observacao = dados.observacao;
-  if (dados.ativo !== undefined) payload.ativo = Boolean(dados.ativo);
-
-  const { data, error } = await supabase
-    .from("mapa3d_andares")
-    .update(payload)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Erro ao atualizar andar do mapa 3D:", error);
-    throw new Error(error.message);
-  }
-
-  return normalizarAndar(data);
-}
-
-export async function excluirAndarMapa3D(id) {
-  const { error } = await supabase
-    .from("mapa3d_andares")
-    .update({
-      ativo: false,
-      atualizado_em: new Date().toISOString(),
-    })
-    .eq("id", id);
-
-  if (error) {
-    console.error("Erro ao excluir andar do mapa 3D:", error);
-    throw new Error(error.message);
-  }
-
-  return true;
-}
-
-export async function listarLocaisMapa3D() {
-  const { data, error } = await supabase
-    .from("mapa3d_locais")
-    .select("*")
-    .eq("ativo", true)
-    .order("criado_em", { ascending: false });
-
-  if (error) {
-    console.error("Erro ao listar locais do mapa 3D:", error);
-    throw new Error(error.message);
-  }
-
-  return (data || []).map(normalizarLocal).filter(Boolean);
-}
-
-export async function listarLocaisPorAndarMapa3D(andarId) {
-  const { data, error } = await supabase
-    .from("mapa3d_locais")
-    .select("*")
-    .eq("andar_id", andarId)
-    .eq("ativo", true)
-    .order("nome", { ascending: true });
-
-  if (error) {
-    console.error("Erro ao listar locais do andar no mapa 3D:", error);
-    throw new Error(error.message);
-  }
-
-  return (data || []).map(normalizarLocal).filter(Boolean);
-}
-
-export async function criarLocalMapa3D({
-  andarId,
+  ordem,
+  altura,
+  altura_visual,
+  cor,
+  categoria,
+  codigo_projeto,
+  observacao,
+  destaque
+) as (
+  values
+    ('5º Subsolo', -5, 1, 0.78, '#334155', 'subsolo', '2446-AR-PE-001-R04', 'Estacionamento e áreas técnicas.', 'Planta arquitetônica do 5º subsolo.'),
+    ('4º Subsolo', -4, 1, 0.78, '#334155', 'subsolo', '2446-AR-PE-002-R03', 'Estacionamento e áreas técnicas.', 'Planta arquitetônica do 4º subsolo.'),
+    ('3º Subsolo', -3, 1, 0.78, '#334155', 'subsolo', '2446-AR-PE-003-R03', 'Estacionamento e áreas técnicas.', 'Planta arquitetônica do 3º subsolo.'),
+    ('2º Subsolo', -2, 1, 0.78, '#334155', 'subsolo', '2446-AR-PE-004-R04', 'Estacionamento e áreas técnicas.', 'Planta arquitetônica do 2º subsolo.'),
+    ('1º Subsolo', -1, 1, 0.82, '#334155', 'subsolo', '2446-AR-PE-005-R05', 'Estacionamento e áreas técnicas.', 'Planta arquitetônica do 1º subsolo.'),
+    ('Térreo', 0, 1, 1.38, '#0f766e', 'terreo', '2446-AR-PE-006-R18', 'Implantação, lobby, recepção, auditório e acessos.', 'Embasamento alto com pórtico principal.'),
+    ('1º Pav. Técnico', 1, 1, 0.95, '#0369a1', 'tecnico', '2446-AR-PE-007-R04', 'Áreas técnicas e apoio operacional.', 'Primeiro pavimento técnico.'),
+    ('2º Pav. Técnico', 2, 1, 0.95, '#0369a1', 'tecnico', '2446-AR-PE-008-R02', 'Geradores, elétrica, automação e áreas técnicas.', 'Segundo pavimento técnico.'),
+    ('3º Andar', 3, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('4º Andar', 4, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('5º Andar', 5, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('6º Andar', 6, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('7º Andar', 7, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('8º Andar', 8, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('9º Andar', 9, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('10º Andar', 10, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('11º Andar', 11, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('12º Andar', 12, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('13º Andar', 13, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-009-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('14º Andar', 14, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-010-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('15º Andar', 15, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-010-R01', 'Pavimento comercial.', 'Torre corporativa envidraçada.'),
+    ('16º Andar', 16, 1, 0.82, '#2563eb', 'comercial', '2446-AR-PE-011-R01', 'Último pavimento comercial.', 'Fechamento superior da torre corporativa.'),
+    ('Cobertura', 17, 1, 0.78, '#7c3aed', 'cobertura', '2446-AR-PE-012-R06', 'Cobertura e áreas técnicas.', 'Laje de cobertura.'),
+    ('Casa de Máquinas', 18, 1, 1.08, '#7c3aed', 'maquinas', '2446-AR-PE-013-R06', 'Casa de máquinas.', 'Volume técnico superior.'),
+    ('Heliponto', 19, 1, 0.38, '#ea580c', 'heliponto', '2446-AR-PE-013-R06', 'Heliponto.', 'Topo do edifício.')
+)
+insert into public.mapa3d_andares (
   nome,
-  tipo = "Local",
-  descricao = "",
-  observacao = "",
-  responsavel = "",
-  status = "Ativo",
-}) {
-  const payload = {
-    andar_id: andarId,
-    nome,
-    tipo,
-    descricao,
-    observacao,
-    responsavel,
-    status,
-    ativo: true,
-    atualizado_em: new Date().toISOString(),
-  };
+  ordem,
+  altura,
+  altura_visual,
+  cor,
+  categoria,
+  codigo_projeto,
+  observacao,
+  destaque,
+  ativo,
+  atualizado_em
+)
+select
+  estrutura.nome,
+  estrutura.ordem,
+  estrutura.altura,
+  estrutura.altura_visual,
+  estrutura.cor,
+  estrutura.categoria,
+  estrutura.codigo_projeto,
+  estrutura.observacao,
+  estrutura.destaque,
+  true,
+  now()
+from estrutura
+where not exists (
+  select 1
+  from public.mapa3d_andares existente
+  where existente.ordem = estrutura.ordem
+    and existente.ativo = true
+);
 
-  const { data, error } = await supabase
-    .from("mapa3d_locais")
-    .insert(payload)
-    .select()
-    .single();
+commit;
 
-  if (error) {
-    console.error("Erro ao criar local do mapa 3D:", error);
-    throw new Error(error.message);
-  }
+insert into storage.buckets (
+  id,
+  name,
+  public
+)
+values (
+  'mapa3d-plantas',
+  'mapa3d-plantas',
+  true
+)
+on conflict (id)
+do update set public = excluded.public;
 
-  return normalizarLocal(data);
-}
+drop policy if exists "mapa3d_plantas_public_select"
+on storage.objects;
 
-export async function atualizarLocalMapa3D(id, dados = {}) {
-  const payload = {
-    atualizado_em: new Date().toISOString(),
-  };
+create policy "mapa3d_plantas_public_select"
+on storage.objects
+for select
+to public
+using (
+  bucket_id = 'mapa3d-plantas'
+);
 
-  if (dados.andarId !== undefined) payload.andar_id = dados.andarId;
-  if (dados.nome !== undefined) payload.nome = dados.nome;
-  if (dados.tipo !== undefined) payload.tipo = dados.tipo;
-  if (dados.descricao !== undefined) payload.descricao = dados.descricao;
-  if (dados.observacao !== undefined) payload.observacao = dados.observacao;
-  if (dados.responsavel !== undefined) payload.responsavel = dados.responsavel;
-  if (dados.status !== undefined) payload.status = dados.status;
-  if (dados.ativo !== undefined) payload.ativo = Boolean(dados.ativo);
+drop policy if exists "mapa3d_plantas_public_insert"
+on storage.objects;
 
-  const { data, error } = await supabase
-    .from("mapa3d_locais")
-    .update(payload)
-    .eq("id", id)
-    .select()
-    .single();
+create policy "mapa3d_plantas_public_insert"
+on storage.objects
+for insert
+to public
+with check (
+  bucket_id = 'mapa3d-plantas'
+);
 
-  if (error) {
-    console.error("Erro ao atualizar local do mapa 3D:", error);
-    throw new Error(error.message);
-  }
+drop policy if exists "mapa3d_plantas_public_update"
+on storage.objects;
 
-  return normalizarLocal(data);
-}
+create policy "mapa3d_plantas_public_update"
+on storage.objects
+for update
+to public
+using (
+  bucket_id = 'mapa3d-plantas'
+)
+with check (
+  bucket_id = 'mapa3d-plantas'
+);
 
-export async function excluirLocalMapa3D(id) {
-  const { error } = await supabase
-    .from("mapa3d_locais")
-    .update({
-      ativo: false,
-      atualizado_em: new Date().toISOString(),
-    })
-    .eq("id", id);
+drop policy if exists "mapa3d_plantas_public_delete"
+on storage.objects;
 
-  if (error) {
-    console.error("Erro ao excluir local do mapa 3D:", error);
-    throw new Error(error.message);
-  }
-
-  return true;
-}
+create policy "mapa3d_plantas_public_delete"
+on storage.objects
+for delete
+to public
+using (
+  bucket_id = 'mapa3d-plantas'
+);
