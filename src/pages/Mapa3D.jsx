@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Save,
   Trash2,
+  X,
 } from "lucide-react";
 import { Canvas } from "@react-three/fiber";
 import {
@@ -26,11 +27,17 @@ import {
   OrbitControls,
   PerspectiveCamera,
 } from "@react-three/drei";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   atualizarItemExternoMapa3D,
   criarArquivoMapa3D,
   criarItemExternoMapa3D,
+  excluirArquivoProtegidoMapa3D,
   excluirItemExternoMapa3D,
   listarAndaresMapa3D,
   listarArquivosMapa3DPorEntidade,
@@ -39,17 +46,20 @@ import {
 } from "../services/mapa3dSupabaseService";
 
 /**
- * MAPA 3D JK 1455 — V9
+ * MAPA 3D JK 1455 — V11
  *
- * Melhorias:
- * - 1º subsolo totalmente visível;
- * - último pavimento comercial Ferrero com vidro e pilastras claras;
- * - três pavimentos técnicos superiores em pedra;
+ * Estrutura visual:
+ * - térreo em pedra;
+ * - 1º e 2º pavimentos técnicos em pedra;
+ * - fachada espelhada somente do 3º andar em diante;
+ * - ausência intencional do 13º andar;
+ * - último pavimento comercial Ferrero em vidro com pilastras;
+ * - três áreas técnicas superiores em pedra;
  * - heliponto separado;
- * - informações do andar no painel lateral;
- * - prédio permanece visível enquanto o usuário consulta fotos e plantas;
- * - fotos, PDFs e plantas associados ao pavimento;
- * - itens externos preservados.
+ * - cinco subsolos visíveis;
+ * - painéis laterais minimizáveis;
+ * - layout adaptado para celular;
+ * - exclusão de fotos e plantas protegida por senha.
  */
 
 const CAMADAS = [
@@ -159,14 +169,19 @@ function ordenarItens(itens = []) {
   );
 }
 
-function locaisDoAndar(locais, andarId) {
+function locaisDoAndar(
+  locais,
+  andarId
+) {
   return locais.filter(
     (local) =>
       local.andarId === andarId
   );
 }
 
-function itemEhEstacionamento(item) {
+function itemEhEstacionamento(
+  item
+) {
   return (
     item?.nome
       ?.trim()
@@ -217,7 +232,9 @@ function Box({
 
       <meshStandardMaterial
         color={color}
-        transparent={opacity < 1}
+        transparent={
+          opacity < 1
+        }
         opacity={opacity}
         roughness={roughness}
         metalness={metalness}
@@ -857,7 +874,8 @@ function offsetsPorClique(
       )
     );
 
-  const y = 0.1;
+  const y =
+    0.1;
 
   const z =
     Number(
@@ -1362,17 +1380,16 @@ function TorreEspelhada({
   const profundidade =
     7.1;
 
-  const altura =
-    9.95;
-
   const baseY =
     1.65;
 
-  const topoY =
-    baseY +
-    altura;
+  const alturaTecnicoBase =
+    0.82;
 
-  const pavimentosCorporativos =
+  const espacamentoTecnico =
+    0.9;
+
+  const tecnicosBase =
     andares.filter(
       (andar) =>
         Number(
@@ -1382,7 +1399,37 @@ function TorreEspelhada({
         Number(
           andar.ordem
         ) <=
-          15
+          2
+    );
+
+  const baseVidroY =
+    baseY +
+    tecnicosBase.length *
+      espacamentoTecnico +
+    0.08;
+
+  const alturaVidro =
+    8.15;
+
+  const topoVidroY =
+    baseVidroY +
+    alturaVidro;
+
+  const pavimentosCorporativos =
+    andares.filter(
+      (andar) =>
+        Number(
+          andar.ordem
+        ) >=
+          3 &&
+        Number(
+          andar.ordem
+        ) <=
+          15 &&
+        Number(
+          andar.ordem
+        ) !==
+          13
     );
 
   const ferrero =
@@ -1395,14 +1442,14 @@ function TorreEspelhada({
     );
 
   const alturaPiso =
-    altura /
+    alturaVidro /
     Math.max(
       1,
       pavimentosCorporativos.length
     );
 
   const ferreroY =
-    topoY +
+    topoVidroY +
     0.68;
 
   const alturaFerrero =
@@ -1434,17 +1481,185 @@ function TorreEspelhada({
 
   return (
     <group>
+      {tecnicosBase.map(
+        (
+          andar,
+          index
+        ) => {
+          const y =
+            baseY +
+            index *
+              espacamentoTecnico +
+            alturaTecnicoBase /
+              2;
+
+          const selecionado =
+            andarSelecionado?.id ===
+            andar.id;
+
+          return (
+            <group
+              key={
+                andar.id
+              }
+            >
+              <Box
+                position={[
+                  0,
+                  y,
+                  0,
+                ]}
+                size={[
+                  largura +
+                    0.45,
+                  alturaTecnicoBase,
+                  profundidade +
+                    0.42,
+                ]}
+                color={
+                  selecionado
+                    ? "#eee4d5"
+                    : "#d8ccb6"
+                }
+                roughness={
+                  0.86
+                }
+                onClick={
+                  clicarAndar(
+                    andar
+                  )
+                }
+              />
+
+              <Linha
+                position={[
+                  0,
+                  y -
+                    alturaTecnicoBase /
+                      2 -
+                    0.055,
+                  0,
+                ]}
+                size={[
+                  largura +
+                    0.78,
+                  0.11,
+                  profundidade +
+                    0.7,
+                ]}
+                color="#c6b79f"
+              />
+
+              <Linha
+                position={[
+                  0,
+                  y +
+                    alturaTecnicoBase /
+                      2 +
+                    0.055,
+                  0,
+                ]}
+                size={[
+                  largura +
+                    0.78,
+                  0.11,
+                  profundidade +
+                    0.7,
+                ]}
+                color="#c6b79f"
+              />
+
+              {[
+                -3.6,
+                -2.4,
+                -1.2,
+                0,
+                1.2,
+                2.4,
+                3.6,
+              ].map(
+                (
+                  x
+                ) => (
+                  <Box
+                    key={`${andar.id}-junta-${x}`}
+                    position={[
+                      x,
+                      y,
+                      profundidade /
+                        2 +
+                        0.24,
+                    ]}
+                    size={[
+                      0.03,
+                      0.5,
+                      0.03,
+                    ]}
+                    color="#b9aa92"
+                    roughness={
+                      0.9
+                    }
+                    onClick={
+                      clicarAndar(
+                        andar
+                      )
+                    }
+                  />
+                )
+              )}
+
+              {selecionado && (
+                <Label
+                  position={[
+                    5.85,
+                    y,
+                    0.4,
+                  ]}
+                  titulo={
+                    andar.nome
+                  }
+                  subtitulo="Pavimento técnico em pedra"
+                  ativo
+                  onClick={() =>
+                    onSelect(
+                      andar
+                    )
+                  }
+                />
+              )}
+            </group>
+          );
+        }
+      )}
+
+      <Linha
+        position={[
+          0,
+          baseVidroY -
+            0.1,
+          0,
+        ]}
+        size={[
+          largura +
+            0.9,
+          0.16,
+          profundidade +
+            0.82,
+        ]}
+        color="#c8baa2"
+      />
+
       <GlassBox
         position={[
           0,
-          baseY +
-            altura /
+          baseVidroY +
+            alturaVidro /
               2,
           0,
         ]}
         size={[
           largura,
-          altura,
+          alturaVidro,
           profundidade,
         ]}
         color="#0f4f62"
@@ -1461,8 +1676,10 @@ function TorreEspelhada({
           const x =
             -largura /
               2 +
-            (index *
-              largura) /
+            (
+              index *
+              largura
+            ) /
               13;
 
           return (
@@ -1470,8 +1687,8 @@ function TorreEspelhada({
               key={`torre-frente-${index}`}
               position={[
                 x,
-                baseY +
-                  altura /
+                baseVidroY +
+                  alturaVidro /
                     2,
                 profundidade /
                   2 +
@@ -1479,7 +1696,7 @@ function TorreEspelhada({
               ]}
               size={[
                 0.025,
-                altura,
+                alturaVidro,
                 0.03,
               ]}
               color="#7996a0"
@@ -1499,8 +1716,10 @@ function TorreEspelhada({
           const z =
             -profundidade /
               2 +
-            (index *
-              profundidade) /
+            (
+              index *
+              profundidade
+            ) /
               9;
 
           return (
@@ -1510,14 +1729,14 @@ function TorreEspelhada({
                 largura /
                   2 +
                   0.012,
-                baseY +
-                  altura /
+                baseVidroY +
+                  alturaVidro /
                     2,
                 z,
               ]}
               size={[
                 0.03,
-                altura,
+                alturaVidro,
                 0.025,
               ]}
               color="#7996a0"
@@ -1532,7 +1751,7 @@ function TorreEspelhada({
           index
         ) => {
           const y =
-            baseY +
+            baseVidroY +
             index *
               alturaPiso +
             alturaPiso /
@@ -1588,7 +1807,7 @@ function TorreEspelhada({
               <Linha
                 position={[
                   0,
-                  baseY +
+                  baseVidroY +
                     index *
                       alturaPiso,
                   profundidade /
@@ -1610,7 +1829,7 @@ function TorreEspelhada({
       <Linha
         position={[
           0,
-          topoY +
+          topoVidroY +
             0.08,
           0,
         ]}
@@ -1884,8 +2103,10 @@ function AreasTecnicasSuperiores({
     {
       andar:
         torres,
-      y: baseY,
-      nome: "Torres de resfriamento",
+      y:
+        baseY,
+      nome:
+        "Torres de resfriamento",
     },
     {
       andar:
@@ -1893,7 +2114,8 @@ function AreasTecnicasSuperiores({
       y:
         baseY +
         distanciaNivel,
-      nome: "Poço dos elevadores",
+      nome:
+        "Poço dos elevadores",
     },
     {
       andar:
@@ -1902,10 +2124,13 @@ function AreasTecnicasSuperiores({
         baseY +
         distanciaNivel *
           2,
-      nome: "Casa de máquinas",
+      nome:
+        "Casa de máquinas",
     },
   ].filter(
-    (nivel) =>
+    (
+      nivel
+    ) =>
       Boolean(
         nivel.andar
       )
@@ -2215,14 +2440,18 @@ function Subsolos({
     camada ===
       "subsolos";
 
-  if (!mostrar) {
+  if (
+    !mostrar
+  ) {
     return null;
   }
 
   const lista =
     ordenarAndares(
       andares.filter(
-        (andar) =>
+        (
+          andar
+        ) =>
           Number(
             andar.ordem
           ) <
@@ -2252,7 +2481,7 @@ function Subsolos({
           const y =
             -(
               index +
-              0.98
+              1.55
             ) *
             espacamento;
 
@@ -2467,7 +2696,9 @@ function ModeloJK1455({
 }) {
   const terreo =
     andares.find(
-      (andar) =>
+      (
+        andar
+      ) =>
         Number(
           andar.ordem
         ) ===
@@ -2599,293 +2830,33 @@ function ModeloJK1455({
   );
 }
 
-function ArquivosEntidade({
-  entidade,
+function PainelAndarLateral({
+  andar,
+  locais,
   arquivos,
-  salvando,
-  onUpload,
+  aberto,
+  onAlternar,
 }) {
-  const cameraInput =
-    useRef(null);
-
-  const fotoInput =
-    useRef(null);
-
-  const plantaInput =
-    useRef(null);
-
-  if (!entidade) {
+  if (
+    !andar
+  ) {
     return null;
   }
 
   const fotos =
     arquivos.filter(
-      (arquivo) =>
+      (
+        arquivo
+      ) =>
         arquivo.tipoArquivo ===
         "foto"
     );
 
   const plantas =
     arquivos.filter(
-      (arquivo) =>
-        arquivo.tipoArquivo !==
-        "foto"
-    );
-
-  return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-      <p className="text-xs font-black uppercase text-slate-400">
-        Arquivos associados
-      </p>
-
-      <h3 className="mt-1 font-black text-slate-900">
-        {
-          entidade
-            .dados
-            .nome
-        }
-      </h3>
-
-      <div className="mt-4 grid gap-2">
-        <button
-          type="button"
-          onClick={() =>
-            cameraInput.current?.click()
-          }
-          className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
-        >
-          <Camera
-            size={
-              17
-            }
-          />
-
-          Abrir câmera
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            fotoInput.current?.click()
-          }
-          className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
-        >
-          <ImagePlus
-            size={
-              17
-            }
-          />
-
-          Adicionar foto
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            plantaInput.current?.click()
-          }
-          className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
-        >
-          <FileText
-            size={
-              17
-            }
-          />
-
-          Adicionar planta ou PDF
-        </button>
-
-        <input
-          ref={
-            cameraInput
-          }
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={(
-            event
-          ) =>
-            onUpload(
-              event.target.files?.[0],
-              "foto"
-            )
-          }
-        />
-
-        <input
-          ref={
-            fotoInput
-          }
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(
-            event
-          ) =>
-            onUpload(
-              event.target.files?.[0],
-              "foto"
-            )
-          }
-        />
-
-        <input
-          ref={
-            plantaInput
-          }
-          type="file"
-          accept=".pdf,image/*"
-          className="hidden"
-          onChange={(
-            event
-          ) =>
-            onUpload(
-              event.target.files?.[0],
-              "planta"
-            )
-          }
-        />
-      </div>
-
-      {salvando && (
-        <div className="mt-3 flex items-center gap-2 text-sm font-bold text-blue-700">
-          <Loader2
-            size={
-              15
-            }
-            className="animate-spin"
-          />
-
-          Enviando arquivo...
-        </div>
-      )}
-
-      <div className="mt-5">
-        <p className="text-sm font-black text-slate-800">
-          Fotos
-        </p>
-
-        {fotos.length ? (
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {fotos.map(
-              (
-                arquivo
-              ) => (
-                <button
-                  type="button"
-                  key={
-                    arquivo.id
-                  }
-                  onClick={() =>
-                    window.open(
-                      arquivo.urlPublica,
-                      "_blank",
-                      "noopener,noreferrer"
-                    )
-                  }
-                  className="overflow-hidden rounded-2xl border border-slate-100 bg-slate-50"
-                >
-                  <img
-                    src={
-                      arquivo.urlPublica
-                    }
-                    alt={
-                      arquivo.nome
-                    }
-                    className="h-24 w-full object-cover"
-                  />
-                </button>
-              )
-            )}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-slate-400">
-            Nenhuma foto adicionada.
-          </p>
-        )}
-      </div>
-
-      <div className="mt-5">
-        <p className="text-sm font-black text-slate-800">
-          Plantas e PDFs
-        </p>
-
-        {plantas.length ? (
-          <div className="mt-2 space-y-2">
-            {plantas.map(
-              (
-                arquivo
-              ) => (
-                <button
-                  type="button"
-                  key={
-                    arquivo.id
-                  }
-                  onClick={() =>
-                    window.open(
-                      arquivo.urlPublica,
-                      "_blank",
-                      "noopener,noreferrer"
-                    )
-                  }
-                  className="flex w-full items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3 text-left hover:bg-slate-100"
-                >
-                  <FileText
-                    size={
-                      18
-                    }
-                    className="shrink-0 text-rose-500"
-                  />
-
-                  <span className="min-w-0 flex-1 truncate text-xs font-black text-slate-700">
-                    {
-                      arquivo.nome
-                    }
-                  </span>
-
-                  <span className="text-xs font-black text-blue-600">
-                    Abrir
-                  </span>
-                </button>
-              )
-            )}
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-slate-400">
-            Nenhuma planta adicionada.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PainelAndarLateral({
-  andar,
-  locais,
-  arquivos,
-}) {
-  if (!andar) {
-    return (
-      <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-        <p className="text-sm text-slate-500">
-          Selecione um pavimento para visualizar as informações.
-        </p>
-      </div>
-    );
-  }
-
-  const fotos =
-    arquivos.filter(
-      (arquivo) =>
-        arquivo.tipoArquivo ===
-        "foto"
-    );
-
-  const plantas =
-    arquivos.filter(
-      (arquivo) =>
+      (
+        arquivo
+      ) =>
         arquivo.tipoArquivo !==
         "foto"
     );
@@ -2894,130 +2865,511 @@ function PainelAndarLateral({
     plantas[0];
 
   return (
-    <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-      <p className="text-xs font-black uppercase text-blue-600">
-        Pavimento selecionado
-      </p>
-
-      <h2 className="mt-1 text-xl font-black text-slate-900">
-        {
-          andar.nome
-        }
-      </h2>
-
-      <p className="mt-1 text-sm text-slate-500">
-        {andar.observacao ||
-          "Sem observações cadastradas."}
-      </p>
-
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <p className="text-[10px] font-bold text-slate-400">
-            Locais
-          </p>
-
-          <p className="mt-1 text-lg font-black text-slate-900">
-            {
-              locais.length
-            }
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <p className="text-[10px] font-bold text-slate-400">
-            Fotos
-          </p>
-
-          <p className="mt-1 text-lg font-black text-slate-900">
-            {
-              fotos.length
-            }
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-slate-50 p-3">
-          <p className="text-[10px] font-bold text-slate-400">
-            Plantas
-          </p>
-
-          <p className="mt-1 text-lg font-black text-slate-900">
-            {
-              plantas.length
-            }
-          </p>
-        </div>
-      </div>
-
+    <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
       <button
         type="button"
-        onClick={() =>
-          primeiraPlanta &&
-          window.open(
-            primeiraPlanta.urlPublica,
-            "_blank",
-            "noopener,noreferrer"
-          )
+        onClick={
+          onAlternar
         }
-        disabled={
-          !primeiraPlanta
-        }
-        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+        className="flex w-full items-center justify-between gap-3 text-left"
       >
-        <FileText
-          size={
-            17
-          }
-        />
+        <div>
+          <p className="text-xs font-black uppercase text-blue-600">
+            Pavimento selecionado
+          </p>
 
-        Abrir planta
+          <h2 className="mt-1 text-xl font-black text-slate-900">
+            {
+              andar.nome
+            }
+          </h2>
+        </div>
+
+        {aberto ? (
+          <ChevronUp
+            size={
+              18
+            }
+          />
+        ) : (
+          <ChevronDown
+            size={
+              18
+            }
+          />
+        )}
       </button>
 
-      <div className="mt-5">
-        <p className="text-sm font-black text-slate-800">
-          Locais e equipamentos
-        </p>
+      {aberto && (
+        <>
+          <p className="mt-2 text-sm text-slate-500">
+            {andar.observacao ||
+              "Sem observações cadastradas."}
+          </p>
 
-        {locais.length ? (
-          <div className="mt-2 max-h-[250px] space-y-2 overflow-auto">
-            {locais.map(
-              (
-                local
-              ) => (
-                <div
-                  key={
-                    local.id
-                  }
-                  className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
-                >
-                  <p className="text-sm font-black text-slate-800">
-                    {
-                      local.nome
-                    }
-                  </p>
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-[10px] font-bold text-slate-400">
+                Locais
+              </p>
 
-                  <p className="mt-1 text-xs font-bold text-blue-700">
-                    {
-                      local.tipo
-                    }
-                  </p>
+              <p className="mt-1 text-lg font-black text-slate-900">
+                {
+                  locais.length
+                }
+              </p>
+            </div>
 
-                  {local.descricao && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      {
-                        local.descricao
-                      }
-                    </p>
-                  )}
-                </div>
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-[10px] font-bold text-slate-400">
+                Fotos
+              </p>
+
+              <p className="mt-1 text-lg font-black text-slate-900">
+                {
+                  fotos.length
+                }
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-[10px] font-bold text-slate-400">
+                Plantas
+              </p>
+
+              <p className="mt-1 text-lg font-black text-slate-900">
+                {
+                  plantas.length
+                }
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() =>
+              primeiraPlanta &&
+              window.open(
+                primeiraPlanta.urlPublica,
+                "_blank",
+                "noopener,noreferrer"
               )
+            }
+            disabled={
+              !primeiraPlanta
+            }
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <FileText
+              size={
+                17
+              }
+            />
+
+            Abrir planta
+          </button>
+
+          <div className="mt-5">
+            <p className="text-sm font-black text-slate-800">
+              Locais e equipamentos
+            </p>
+
+            {locais.length ? (
+              <div className="mt-2 max-h-[250px] space-y-2 overflow-auto">
+                {locais.map(
+                  (
+                    local
+                  ) => (
+                    <div
+                      key={
+                        local.id
+                      }
+                      className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
+                    >
+                      <p className="text-sm font-black text-slate-800">
+                        {
+                          local.nome
+                        }
+                      </p>
+
+                      <p className="mt-1 text-xs font-bold text-blue-700">
+                        {
+                          local.tipo
+                        }
+                      </p>
+
+                      {local.descricao && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {
+                            local.descricao
+                          }
+                        </p>
+                      )}
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-400">
+                Nenhum local cadastrado.
+              </p>
             )}
           </div>
-        ) : (
-          <p className="mt-2 text-sm text-slate-400">
-            Nenhum local cadastrado.
+        </>
+      )}
+    </div>
+  );
+}
+
+function ArquivosEntidade({
+  entidade,
+  arquivos,
+  salvando,
+  aberto,
+  onAlternar,
+  onUpload,
+  onExcluir,
+}) {
+  const cameraInput =
+    useRef(
+      null
+    );
+
+  const fotoInput =
+    useRef(
+      null
+    );
+
+  const plantaInput =
+    useRef(
+      null
+    );
+
+  if (
+    !entidade
+  ) {
+    return null;
+  }
+
+  const fotos =
+    arquivos.filter(
+      (
+        arquivo
+      ) =>
+        arquivo.tipoArquivo ===
+        "foto"
+    );
+
+  const plantas =
+    arquivos.filter(
+      (
+        arquivo
+      ) =>
+        arquivo.tipoArquivo !==
+        "foto"
+    );
+
+  return (
+    <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+      <button
+        type="button"
+        onClick={
+          onAlternar
+        }
+        className="flex w-full items-center justify-between gap-3 text-left"
+      >
+        <div>
+          <p className="text-xs font-black uppercase text-slate-400">
+            Arquivos associados
           </p>
+
+          <h3 className="mt-1 font-black text-slate-900">
+            {
+              entidade
+                .dados
+                .nome
+            }
+          </h3>
+        </div>
+
+        {aberto ? (
+          <ChevronUp
+            size={
+              18
+            }
+          />
+        ) : (
+          <ChevronDown
+            size={
+              18
+            }
+          />
         )}
-      </div>
+      </button>
+
+      {aberto && (
+        <>
+          <div className="mt-4 grid gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                cameraInput
+                  .current
+                  ?.click()
+              }
+              className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
+            >
+              <Camera
+                size={
+                  17
+                }
+              />
+
+              Abrir câmera
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                fotoInput
+                  .current
+                  ?.click()
+              }
+              className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
+            >
+              <ImagePlus
+                size={
+                  17
+                }
+              />
+
+              Adicionar foto
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                plantaInput
+                  .current
+                  ?.click()
+              }
+              className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
+            >
+              <FileText
+                size={
+                  17
+                }
+              />
+
+              Adicionar planta ou PDF
+            </button>
+
+            <input
+              ref={
+                cameraInput
+              }
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(
+                event
+              ) =>
+                onUpload(
+                  event.target.files?.[0],
+                  "foto"
+                )
+              }
+            />
+
+            <input
+              ref={
+                fotoInput
+              }
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(
+                event
+              ) =>
+                onUpload(
+                  event.target.files?.[0],
+                  "foto"
+                )
+              }
+            />
+
+            <input
+              ref={
+                plantaInput
+              }
+              type="file"
+              accept=".pdf,image/*"
+              className="hidden"
+              onChange={(
+                event
+              ) =>
+                onUpload(
+                  event.target.files?.[0],
+                  "planta"
+                )
+              }
+            />
+          </div>
+
+          {salvando && (
+            <div className="mt-3 flex items-center gap-2 text-sm font-bold text-blue-700">
+              <Loader2
+                size={
+                  15
+                }
+                className="animate-spin"
+              />
+
+              Enviando arquivo...
+            </div>
+          )}
+
+          <div className="mt-5">
+            <p className="text-sm font-black text-slate-800">
+              Fotos
+            </p>
+
+            {fotos.length ? (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {fotos.map(
+                  (
+                    arquivo
+                  ) => (
+                    <div
+                      key={
+                        arquivo.id
+                      }
+                      className="group relative overflow-hidden rounded-2xl border border-slate-100 bg-slate-50"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.open(
+                            arquivo.urlPublica,
+                            "_blank",
+                            "noopener,noreferrer"
+                          )
+                        }
+                        className="block w-full"
+                      >
+                        <img
+                          src={
+                            arquivo.urlPublica
+                          }
+                          alt={
+                            arquivo.nome
+                          }
+                          className="h-24 w-full object-cover"
+                        />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onExcluir(
+                            arquivo
+                          )
+                        }
+                        className="absolute right-1 top-1 rounded-lg bg-rose-600 p-1.5 text-white shadow"
+                        title="Excluir foto"
+                      >
+                        <Trash2
+                          size={
+                            13
+                          }
+                        />
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-400">
+                Nenhuma foto adicionada.
+              </p>
+            )}
+          </div>
+
+          <div className="mt-5">
+            <p className="text-sm font-black text-slate-800">
+              Plantas e PDFs
+            </p>
+
+            {plantas.length ? (
+              <div className="mt-2 space-y-2">
+                {plantas.map(
+                  (
+                    arquivo
+                  ) => (
+                    <div
+                      key={
+                        arquivo.id
+                      }
+                      className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3"
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          window.open(
+                            arquivo.urlPublica,
+                            "_blank",
+                            "noopener,noreferrer"
+                          )
+                        }
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <FileText
+                          size={
+                            18
+                          }
+                          className="shrink-0 text-rose-500"
+                        />
+
+                        <span className="min-w-0 flex-1 truncate text-xs font-black text-slate-700">
+                          {
+                            arquivo.nome
+                          }
+                        </span>
+
+                        <span className="text-xs font-black text-blue-600">
+                          Abrir
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onExcluir(
+                            arquivo
+                          )
+                        }
+                        className="rounded-lg bg-rose-50 p-1.5 text-rose-700"
+                        title="Excluir planta ou PDF"
+                      >
+                        <Trash2
+                          size={
+                            14
+                          }
+                        />
+                      </button>
+                    </div>
+                  )
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-slate-400">
+                Nenhuma planta adicionada.
+              </p>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -3113,7 +3465,8 @@ function CadastroItemExterno({
                 valor
               ) => ({
                 ...valor,
-                nome: event.target.value,
+                nome:
+                  event.target.value,
               })
             )
           }
@@ -3133,7 +3486,8 @@ function CadastroItemExterno({
                 valor
               ) => ({
                 ...valor,
-                categoria: event.target.value,
+                categoria:
+                  event.target.value,
               })
             )
           }
@@ -3168,7 +3522,8 @@ function CadastroItemExterno({
                 valor
               ) => ({
                 ...valor,
-                lado: event.target.value,
+                lado:
+                  event.target.value,
               })
             )
           }
@@ -3206,7 +3561,8 @@ function CadastroItemExterno({
                 valor
               ) => ({
                 ...valor,
-                tipoVisual: event.target.value,
+                tipoVisual:
+                  event.target.value,
               })
             )
           }
@@ -3244,7 +3600,8 @@ function CadastroItemExterno({
                 valor
               ) => ({
                 ...valor,
-                modoImplantacao: event.target.value,
+                modoImplantacao:
+                  event.target.value,
               })
             )
           }
@@ -3282,7 +3639,8 @@ function CadastroItemExterno({
                 valor
               ) => ({
                 ...valor,
-                cor: event.target.value,
+                cor:
+                  event.target.value,
               })
             )
           }
@@ -3353,9 +3711,10 @@ function CadastroItemExterno({
                         valor
                       ) => ({
                         ...valor,
-                        [campo]: Number(
-                          event.target.value
-                        ),
+                        [campo]:
+                          Number(
+                            event.target.value
+                          ),
                       })
                     )
                   }
@@ -3411,9 +3770,10 @@ function CadastroItemExterno({
                         valor
                       ) => ({
                         ...valor,
-                        [campo]: Number(
-                          event.target.value
-                        ),
+                        [campo]:
+                          Number(
+                            event.target.value
+                          ),
                       })
                     )
                   }
@@ -3438,7 +3798,8 @@ function CadastroItemExterno({
                 valor
               ) => ({
                 ...valor,
-                descricao: event.target.value,
+                descricao:
+                  event.target.value,
               })
             )
           }
@@ -3510,55 +3871,101 @@ export default function Mapa3D() {
     andares,
     setAndares,
   ] =
-    useState([]);
+    useState(
+      []
+    );
 
   const [
     locais,
     setLocais,
   ] =
-    useState([]);
+    useState(
+      []
+    );
 
   const [
     itensExternos,
     setItensExternos,
   ] =
-    useState([]);
+    useState(
+      []
+    );
 
   const [
     arquivos,
     setArquivos,
   ] =
-    useState([]);
+    useState(
+      []
+    );
 
   const [
     andarSelecionado,
     setAndarSelecionado,
   ] =
-    useState(null);
+    useState(
+      null
+    );
 
   const [
     itemSelecionado,
     setItemSelecionado,
   ] =
-    useState(null);
+    useState(
+      null
+    );
 
   const [
     entidadeSelecionada,
     setEntidadeSelecionada,
   ] =
-    useState(null);
+    useState(
+      null
+    );
 
   const [
     cadastroExternoAberto,
     setCadastroExternoAberto,
   ] =
-    useState(false);
+    useState(
+      false
+    );
 
   const [
     painelAberto,
     setPainelAberto,
   ] =
-    useState(true);
+    useState(
+      () =>
+        typeof window !==
+          "undefined" &&
+        window.innerWidth >=
+          1280
+    );
+
+  const [
+    painelLocaisAberto,
+    setPainelLocaisAberto,
+  ] =
+    useState(
+      true
+    );
+
+  const [
+    painelArquivosAberto,
+    setPainelArquivosAberto,
+  ] =
+    useState(
+      true
+    );
+
+  const [
+    menuMobileAberto,
+    setMenuMobileAberto,
+  ] =
+    useState(
+      false
+    );
 
   const [
     camada,
@@ -3581,9 +3988,12 @@ export default function Mapa3D() {
     setPosicionamento,
   ] =
     useState({
-      ativo: false,
-      lado: "frente",
-      coordenadas: null,
+      ativo:
+        false,
+      lado:
+        "frente",
+      coordenadas:
+        null,
     });
 
   const [
@@ -3674,7 +4084,9 @@ export default function Mapa3D() {
       const lista =
         await listarArquivosMapa3DPorEntidade(
           entidade.tipo,
-          entidade.dados.id
+          entidade
+            .dados
+            .id
         );
 
       setArquivos(
@@ -3714,8 +4126,19 @@ export default function Mapa3D() {
           listarItensExternosMapa3D(),
         ]);
 
+      const listaAndaresSem13 =
+        listaAndares.filter(
+          (
+            andar
+          ) =>
+            Number(
+              andar.ordem
+            ) !==
+            13
+        );
+
       setAndares(
-        listaAndares
+        listaAndaresSem13
       );
 
       setLocais(
@@ -3727,8 +4150,10 @@ export default function Mapa3D() {
       );
 
       const terreo =
-        listaAndares.find(
-          (andar) =>
+        listaAndaresSem13.find(
+          (
+            andar
+          ) =>
             Number(
               andar.ordem
             ) ===
@@ -3739,8 +4164,10 @@ export default function Mapa3D() {
         terreo
       ) {
         const entidade = {
-          tipo: "andar",
-          dados: terreo,
+          tipo:
+            "andar",
+          dados:
+            terreo,
         };
 
         setAndarSelecionado(
@@ -3780,8 +4207,10 @@ export default function Mapa3D() {
     andar
   ) {
     const entidade = {
-      tipo: "andar",
-      dados: andar,
+      tipo:
+        "andar",
+      dados:
+        andar,
     };
 
     setAndarSelecionado(
@@ -3800,10 +4229,6 @@ export default function Mapa3D() {
       false
     );
 
-    setPainelAberto(
-      true
-    );
-
     await carregarArquivos(
       entidade
     );
@@ -3813,8 +4238,10 @@ export default function Mapa3D() {
     item
   ) {
     const entidade = {
-      tipo: "item_externo",
-      dados: item,
+      tipo:
+        "item_externo",
+      dados:
+        item,
     };
 
     setItemSelecionado(
@@ -3921,10 +4348,13 @@ export default function Mapa3D() {
   async function excluirItemExterno(
     item
   ) {
-    if (
-      !window.confirm(
+    const confirmar =
+      window.confirm(
         `Remover "${item.nome}"?`
-      )
+      );
+
+    if (
+      !confirmar
     ) {
       return;
     }
@@ -3996,7 +4426,9 @@ export default function Mapa3D() {
           entidadeTipo:
             entidadeSelecionada.tipo,
           entidadeId:
-            entidadeSelecionada.dados.id,
+            entidadeSelecionada
+              .dados
+              .id,
           tipoArquivo,
           arquivo,
         });
@@ -4026,13 +4458,93 @@ export default function Mapa3D() {
     }
   }
 
+  async function excluirArquivoProtegido(
+    arquivo
+  ) {
+    const senha =
+      window.prompt(
+        "Digite a senha para excluir este arquivo:"
+      );
+
+    if (
+      !senha
+    ) {
+      return;
+    }
+
+    const confirmar =
+      window.confirm(
+        `Excluir "${arquivo.nome}" definitivamente?`
+      );
+
+    if (
+      !confirmar
+    ) {
+      return;
+    }
+
+    setSalvando(
+      true
+    );
+
+    setErro(
+      ""
+    );
+
+    try {
+      await excluirArquivoProtegidoMapa3D(
+        arquivo.id,
+        arquivo.caminhoStorage,
+        senha
+      );
+
+      setArquivos(
+        (
+          anteriores
+        ) =>
+          anteriores.filter(
+            (
+              item
+            ) =>
+              item.id !==
+              arquivo.id
+          )
+      );
+    } catch (
+      error
+    ) {
+      console.error(
+        error
+      );
+
+      if (
+        error.message ===
+        "Senha incorreta."
+      ) {
+        window.alert(
+          "Senha incorreta. O arquivo não foi excluído."
+        );
+      } else {
+        setErro(
+          "Não foi possível excluir o arquivo."
+        );
+      }
+    } finally {
+      setSalvando(
+        false
+      );
+    }
+  }
+
   function ativarPosicionamento(
     lado
   ) {
     setPosicionamento({
-      ativo: true,
+      ativo:
+        true,
       lado,
-      coordenadas: null,
+      coordenadas:
+        null,
     });
   }
 
@@ -4044,7 +4556,8 @@ export default function Mapa3D() {
         valor
       ) => ({
         ...valor,
-        ativo: false,
+        ativo:
+          false,
         coordenadas,
       })
     );
@@ -4102,7 +4615,7 @@ export default function Mapa3D() {
               </h1>
 
               <p className="text-sm text-slate-500">
-                Torre espelhada, pavimento Ferrero, topo técnico, áreas externas e subsolos.
+                Torre espelhada, pavimentos técnicos em pedra, Ferrero, áreas externas e subsolos.
               </p>
             </div>
 
@@ -4214,8 +4727,8 @@ export default function Mapa3D() {
             </div>
           </div>
 
-          <div className="grid min-h-[900px] grid-cols-[200px_175px_minmax(0,1fr)]">
-            <aside className="border-r border-slate-100 bg-slate-50/80 p-4">
+          <div className="grid min-h-[calc(100vh-190px)] grid-cols-1 xl:min-h-[900px] xl:grid-cols-[200px_175px_minmax(0,1fr)]">
+            <aside className="hidden border-r border-slate-100 bg-slate-50/80 p-4 xl:block">
               <div className="rounded-3xl bg-white p-4 shadow-sm">
                 <Building2
                   size={
@@ -4347,7 +4860,7 @@ export default function Mapa3D() {
               </div>
             </aside>
 
-            <aside className="border-r border-slate-100 bg-white p-3">
+            <aside className="hidden border-r border-slate-100 bg-white p-3 xl:block">
               <p className="px-2 text-xs font-black uppercase text-slate-400">
                 Pavimentos
               </p>
@@ -4396,7 +4909,7 @@ export default function Mapa3D() {
               </div>
             </aside>
 
-            <div className="bg-gradient-to-b from-slate-50 via-blue-50 to-slate-100">
+            <div className="min-h-[calc(100vh-190px)] bg-gradient-to-b from-slate-50 via-blue-50 to-slate-100 xl:min-h-[900px]">
               <Canvas
                 shadows
                 dpr={[
@@ -4485,7 +4998,7 @@ export default function Mapa3D() {
                   }
                   position={[
                     0,
-                    -7.4,
+                    -7.8,
                     0,
                   ]}
                 />
@@ -4523,74 +5036,267 @@ export default function Mapa3D() {
         </section>
 
         {painelAberto && (
-          <section className="space-y-5">
-            {andarSelecionado && (
-              <PainelAndarLateral
-                andar={
-                  andarSelecionado
+          <section className="fixed inset-x-3 bottom-3 top-20 z-[80] overflow-y-auto rounded-3xl bg-slate-100/95 p-3 shadow-2xl backdrop-blur xl:static xl:inset-auto xl:z-auto xl:overflow-visible xl:rounded-none xl:bg-transparent xl:p-0 xl:shadow-none">
+            <button
+              type="button"
+              onClick={() =>
+                setPainelAberto(
+                  false
+                )
+              }
+              className="mb-3 ml-auto flex rounded-xl bg-white p-2 text-slate-700 shadow xl:hidden"
+              title="Fechar painel"
+            >
+              <X
+                size={
+                  18
                 }
-                locais={
-                  locaisSelecionados
+              />
+            </button>
+
+            <div className="space-y-5">
+              {andarSelecionado && (
+                <PainelAndarLateral
+                  andar={
+                    andarSelecionado
+                  }
+                  locais={
+                    locaisSelecionados
+                  }
+                  arquivos={
+                    arquivos
+                  }
+                  aberto={
+                    painelLocaisAberto
+                  }
+                  onAlternar={() =>
+                    setPainelLocaisAberto(
+                      (
+                        valor
+                      ) =>
+                        !valor
+                    )
+                  }
+                />
+              )}
+
+              <ArquivosEntidade
+                entidade={
+                  entidadeSelecionada
                 }
                 arquivos={
                   arquivos
                 }
-              />
-            )}
-
-            <ArquivosEntidade
-              entidade={
-                entidadeSelecionada
-              }
-              arquivos={
-                arquivos
-              }
-              salvando={
-                salvando
-              }
-              onUpload={
-                enviarArquivo
-              }
-            />
-
-            {cadastroExternoAberto && (
-              <CadastroItemExterno
-                itemSelecionado={
-                  itemSelecionado
-                }
                 salvando={
                   salvando
                 }
-                posicionamento={
-                  posicionamento
+                aberto={
+                  painelArquivosAberto
                 }
-                onAtivarPosicionamento={
-                  ativarPosicionamento
+                onAlternar={() =>
+                  setPainelArquivosAberto(
+                    (
+                      valor
+                    ) =>
+                      !valor
+                  )
                 }
-                onSalvar={
-                  salvarItemExterno
+                onUpload={
+                  enviarArquivo
                 }
                 onExcluir={
-                  excluirItemExterno
+                  excluirArquivoProtegido
                 }
-                onNovo={() => {
-                  setItemSelecionado(
-                    null
-                  );
-
-                  setEntidadeSelecionada(
-                    null
-                  );
-
-                  setArquivos(
-                    []
-                  );
-                }}
               />
-            )}
+
+              {cadastroExternoAberto && (
+                <CadastroItemExterno
+                  itemSelecionado={
+                    itemSelecionado
+                  }
+                  salvando={
+                    salvando
+                  }
+                  posicionamento={
+                    posicionamento
+                  }
+                  onAtivarPosicionamento={
+                    ativarPosicionamento
+                  }
+                  onSalvar={
+                    salvarItemExterno
+                  }
+                  onExcluir={
+                    excluirItemExterno
+                  }
+                  onNovo={() => {
+                    setItemSelecionado(
+                      null
+                    );
+
+                    setEntidadeSelecionada(
+                      null
+                    );
+
+                    setArquivos(
+                      []
+                    );
+                  }}
+                />
+              )}
+            </div>
           </section>
         )}
       </div>
+
+      <div className="fixed bottom-5 left-5 z-[70] flex gap-2 xl:hidden">
+        <button
+          type="button"
+          onClick={() =>
+            setMenuMobileAberto(
+              true
+            )
+          }
+          className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-xl"
+        >
+          Pavimentos
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            setPainelAberto(
+              (
+                valor
+              ) =>
+                !valor
+            )
+          }
+          className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-xl"
+        >
+          {painelAberto
+            ? "Fechar painel"
+            : "Informações"}
+        </button>
+      </div>
+
+      {menuMobileAberto && (
+        <div className="fixed inset-0 z-[90] bg-slate-950/45 p-3 xl:hidden">
+          <div className="ml-auto h-full w-full max-w-sm overflow-y-auto rounded-3xl bg-white p-4 shadow-2xl">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-black text-slate-900">
+                Pavimentos
+              </h2>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setMenuMobileAberto(
+                    false
+                  )
+                }
+                className="rounded-xl p-2 hover:bg-slate-100"
+              >
+                <X
+                  size={
+                    18
+                  }
+                />
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-1">
+              {andaresOrdenados
+                .slice()
+                .reverse()
+                .map(
+                  (
+                    andar
+                  ) => (
+                    <button
+                      type="button"
+                      key={
+                        andar.id
+                      }
+                      onClick={async () => {
+                        await selecionarAndar(
+                          andar
+                        );
+
+                        setMenuMobileAberto(
+                          false
+                        );
+                      }}
+                      className={`flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-bold ${
+                        andarSelecionado?.id ===
+                        andar.id
+                          ? "bg-cyan-100 text-cyan-950"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor:
+                            andar.cor,
+                        }}
+                      />
+
+                      <span className="flex-1 truncate">
+                        {
+                          andar.nome
+                        }
+                      </span>
+                    </button>
+                  )
+                )}
+            </div>
+
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <p className="text-xs font-black uppercase text-slate-400">
+                Itens externos
+              </p>
+
+              <div className="mt-2 space-y-1">
+                {itensOrdenados.map(
+                  (
+                    item
+                  ) => (
+                    <button
+                      type="button"
+                      key={
+                        item.id
+                      }
+                      onClick={async () => {
+                        await selecionarItem(
+                          item
+                        );
+
+                        setMenuMobileAberto(
+                          false
+                        );
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl px-3 py-3 text-left text-sm font-bold hover:bg-slate-50"
+                    >
+                      <MapPin
+                        size={
+                          14
+                        }
+                      />
+
+                      <span className="truncate">
+                        {
+                          item.nome
+                        }
+                      </span>
+                    </button>
+                  )
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
