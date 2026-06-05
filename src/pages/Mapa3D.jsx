@@ -49,68 +49,29 @@ import {
 } from "../services/mapa3dSupabaseService";
 
 /**
- * MAPA 3D JK 1455 — V6 FINAL MESCLADA
+ * MAPA 3D JK 1455 — V7
  *
- * Preserva a modelagem visual da versão anterior e integra:
- * - torre contínua espelhada;
+ * Estrutura visual:
+ * - fachada corporativa espelhada;
  * - embasamento em pedra clara;
- * - heliponto;
- * - cobertura e casa de máquinas clicáveis;
- * - cinco subsolos abaixo do nível da rua;
+ * - térreo;
+ * - pavimentos corporativos;
+ * - três pavimentos técnicos superiores clicáveis;
+ * - heliponto separado acima da área técnica;
+ * - cinco subsolos com visualização em corte técnico;
  * - estacionamento externo nos fundos;
  * - três fontes e paisagismo frontal;
- * - itens externos editáveis vindos do Supabase;
- * - upload de foto, câmera e planta/PDF;
- * - CRUD de andares, locais e itens externos;
- * - posicionamento de item externo clicando diretamente no terreno;
- * - opção de superfície ou subterrâneo.
+ * - equipamentos externos carregados pelo Supabase;
+ * - itens aparentes e subterrâneos;
+ * - fotos, câmera, plantas e PDFs associados aos registros.
  */
 
-const CONFIG_IMPLANTACAO = {
-  lote: {
-    largura: 18,
-    profundidade: 16,
-  },
-
-  predio: {
-    largura: 8.7,
-    profundidade: 7.1,
-    podiumAltura: 1.55,
-    torreAltura: 10.7,
-    torreBaseY: 1.55,
-    corVidro: "#0f4f62",
-    corPedra: "#ded3bd",
-  },
-
-  subsolos: {
-    quantidade: 5,
-    altura: 0.78,
-    largura: 12.4,
-    profundidade: 10.6,
-  },
-};
-
 const CAMADAS = [
-  {
-    id: "geral",
-    nome: "Visão geral",
-  },
-  {
-    id: "andares",
-    nome: "Pavimentos",
-  },
-  {
-    id: "subsolos",
-    nome: "Subsolos",
-  },
-  {
-    id: "externas",
-    nome: "Áreas externas",
-  },
-  {
-    id: "sistemas",
-    nome: "Sistemas prediais",
-  },
+  { id: "geral", nome: "Visão geral" },
+  { id: "andares", nome: "Pavimentos" },
+  { id: "subsolos", nome: "Subsolos" },
+  { id: "externas", nome: "Áreas externas" },
+  { id: "sistemas", nome: "Sistemas prediais" },
 ];
 
 const TIPOS_LOCAL = [
@@ -138,60 +99,24 @@ const CATEGORIAS_ITEM = [
 ];
 
 const LADOS_EXTERNOS = [
-  {
-    value: "frente",
-    label: "Frente",
-  },
-  {
-    value: "fundos",
-    label: "Fundos",
-  },
-  {
-    value: "esquerda",
-    label: "Lateral esquerda",
-  },
-  {
-    value: "direita",
-    label: "Lateral direita",
-  },
-  {
-    value: "centro",
-    label: "Centro do lote",
-  },
+  { value: "frente", label: "Frente" },
+  { value: "fundos", label: "Fundos" },
+  { value: "esquerda", label: "Lateral esquerda" },
+  { value: "direita", label: "Lateral direita" },
+  { value: "centro", label: "Centro do lote" },
 ];
 
 const TIPOS_VISUAIS = [
-  {
-    value: "casinha",
-    label: "Casinha / cubículo",
-  },
-  {
-    value: "redondo",
-    label: "Redondo / tampa",
-  },
-  {
-    value: "retangular",
-    label: "Retangular / caixa",
-  },
-  {
-    value: "poste",
-    label: "Poste",
-  },
-  {
-    value: "equipamento",
-    label: "Equipamento técnico",
-  },
+  { value: "casinha", label: "Casinha / cubículo" },
+  { value: "redondo", label: "Redondo / tampa" },
+  { value: "retangular", label: "Retangular / caixa" },
+  { value: "poste", label: "Poste" },
+  { value: "equipamento", label: "Equipamento técnico" },
 ];
 
 const MODOS_IMPLANTACAO = [
-  {
-    value: "superficie",
-    label: "Construção para fora",
-  },
-  {
-    value: "subterraneo",
-    label: "Dentro da terra / subterrâneo",
-  },
+  { value: "superficie", label: "Construção para fora" },
+  { value: "subterraneo", label: "Dentro da terra / subterrâneo" },
 ];
 
 const ANDARES_BASE = [
@@ -267,86 +192,71 @@ const ANDARES_BASE = [
     categoria: "tecnico",
     tituloCurto: "2º Técnico",
   },
-
-  ...Array.from(
-    {
-      length: 14,
-    },
-    (_, index) => ({
-      nome: `${index + 3}º Andar`,
-      ordem: index + 3,
-      altura: 1,
-      cor: "#2563eb",
-      observacao: "Pavimento corporativo",
-      categoria: "comercial",
-      tituloCurto: `${index + 3}º`,
-    })
-  ),
-
+  ...Array.from({ length: 14 }, (_, index) => ({
+    nome: `${index + 3}º Andar`,
+    ordem: index + 3,
+    altura: 1,
+    cor: "#2563eb",
+    observacao: "Pavimento corporativo",
+    categoria: "comercial",
+    tituloCurto: `${index + 3}º`,
+  })),
   {
-    nome: "Cobertura",
+    nome: "Torres de resfriamento",
     ordem: 17,
     altura: 1,
-    cor: "#7c3aed",
-    observacao: "Cobertura técnica",
-    categoria: "cobertura",
-    tituloCurto: "Cobertura",
+    cor: "#0369a1",
+    observacao: "Pavimento técnico destinado às torres de resfriamento.",
+    categoria: "tecnico",
+    tituloCurto: "Torres de resfriamento",
   },
   {
-    nome: "Casa de Máquinas",
+    nome: "Poço dos elevadores",
     ordem: 18,
     altura: 1,
-    cor: "#7c3aed",
-    observacao: "Casa de máquinas",
+    cor: "#475569",
+    observacao: "Pavimento técnico correspondente ao poço dos elevadores.",
     categoria: "tecnico",
-    tituloCurto: "Casa de Máquinas",
+    tituloCurto: "Poço dos elevadores",
+  },
+  {
+    nome: "Casa de máquinas dos elevadores",
+    ordem: 19,
+    altura: 1,
+    cor: "#7c3aed",
+    observacao: "Pavimento técnico destinado à casa de máquinas dos elevadores.",
+    categoria: "tecnico",
+    tituloCurto: "Casa de máquinas",
   },
   {
     nome: "Heliponto",
-    ordem: 19,
+    ordem: 20,
     altura: 1,
     cor: "#ea580c",
-    observacao: "Heliponto",
-    categoria: "cobertura",
+    observacao: "Heliponto localizado acima dos pavimentos técnicos superiores.",
+    categoria: "heliponto",
     tituloCurto: "Heliponto",
   },
 ];
 
 function ordenarAndares(andares = []) {
   return [...andares].sort(
-    (a, b) =>
-      Number(a.ordem || 0) -
-      Number(b.ordem || 0)
+    (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)
   );
 }
 
 function ordenarItens(itens = []) {
   return [...itens].sort(
-    (a, b) =>
-      Number(a.ordem || 0) -
-      Number(b.ordem || 0)
+    (a, b) => Number(a.ordem || 0) - Number(b.ordem || 0)
   );
 }
 
-function locaisDoAndar(
-  locais,
-  andarId
-) {
-  return locais.filter(
-    (local) =>
-      local.andarId === andarId
-  );
+function locaisDoAndar(locais, andarId) {
+  return locais.filter((local) => local.andarId === andarId);
 }
 
-function itemEhEstacionamento(
-  item
-) {
-  return (
-    item.nome
-      ?.trim()
-      .toLowerCase() ===
-    "estacionamento externo"
-  );
+function itemEhEstacionamento(item) {
+  return item?.nome?.trim().toLowerCase() === "estacionamento externo";
 }
 
 function campoLocalVazio() {
@@ -366,7 +276,7 @@ function campoAndarVazio() {
   return {
     id: "",
     nome: "",
-    ordem: 20,
+    ordem: 21,
     altura: 1,
     cor: "#2563eb",
     observacao: "",
@@ -408,9 +318,7 @@ function Box({
   onClick,
   visible = true,
 }) {
-  if (!visible) {
-    return null;
-  }
+  if (!visible) return null;
 
   return (
     <mesh
@@ -420,7 +328,6 @@ function Box({
       onClick={onClick}
     >
       <boxGeometry args={size} />
-
       <meshStandardMaterial
         color={color}
         transparent={opacity < 1}
@@ -432,19 +339,10 @@ function Box({
   );
 }
 
-function GlassBox({
-  position,
-  size,
-  color,
-}) {
+function GlassBox({ position, size, color }) {
   return (
-    <mesh
-      position={position}
-      castShadow
-      receiveShadow
-    >
+    <mesh position={position} castShadow receiveShadow>
       <boxGeometry args={size} />
-
       <meshPhysicalMaterial
         color={color}
         roughness={0.08}
@@ -459,11 +357,7 @@ function GlassBox({
   );
 }
 
-function Linha({
-  position,
-  size,
-  color = "#d6c7aa",
-}) {
+function Linha({ position, size, color = "#d6c7aa" }) {
   return (
     <Box
       position={position}
@@ -482,12 +376,7 @@ function Label({
   onClick,
 }) {
   return (
-    <Html
-      position={position}
-      center
-      distanceFactor={18}
-      zIndexRange={[100, 0]}
-    >
+    <Html position={position} center distanceFactor={18} zIndexRange={[100, 0]}>
       <button
         type="button"
         onClick={onClick}
@@ -504,9 +393,7 @@ function Label({
         {subtitulo && (
           <span
             className={`mt-0.5 block text-[9px] font-bold ${
-              ativo
-                ? "text-cyan-50"
-                : "text-slate-400"
+              ativo ? "text-cyan-50" : "text-slate-400"
             }`}
           >
             {subtitulo}
@@ -517,12 +404,8 @@ function Label({
   );
 }
 
-function GradeRua({
-  camada,
-}) {
-  const destacar =
-    camada === "geral" ||
-    camada === "externas";
+function GradeRua({ camada }) {
+  const destacar = camada === "geral" || camada === "externas";
 
   return (
     <group>
@@ -550,22 +433,14 @@ function GradeRua({
       <Box
         position={[6.05, 0.05, -0.25]}
         size={[2.2, 0.07, 11]}
-        color={
-          destacar
-            ? "#64748b"
-            : "#7c8796"
-        }
+        color={destacar ? "#64748b" : "#7c8796"}
         roughness={0.95}
       />
 
       <Box
         position={[3.65, 0.055, -5.4]}
         size={[7.2, 0.075, 3.6]}
-        color={
-          destacar
-            ? "#64748b"
-            : "#7c8796"
-        }
+        color={destacar ? "#64748b" : "#7c8796"}
         roughness={0.95}
       />
 
@@ -592,10 +467,7 @@ function Carro({
   color = "#1e293b",
 }) {
   return (
-    <group
-      position={position}
-      rotation={rotation}
-    >
+    <group position={position} rotation={rotation}>
       <Box
         position={[0, 0.15, 0]}
         size={[0.56, 0.2, 1.02]}
@@ -615,11 +487,7 @@ function Carro({
   );
 }
 
-function Vaga({
-  x,
-  z,
-  ocupada = false,
-}) {
+function Vaga({ x, z, ocupada = false }) {
   return (
     <group position={[x, 0.11, z]}>
       <Box
@@ -634,11 +502,7 @@ function Vaga({
         color="#f8fafc"
       />
 
-      {ocupada && (
-        <Carro
-          position={[0.4, 0.02, 0]}
-        />
-      )}
+      {ocupada && <Carro position={[0.4, 0.02, 0]} />}
     </group>
   );
 }
@@ -649,113 +513,51 @@ function EstacionamentoFundos({
   selecionado,
   onSelect,
 }) {
-  const mostrar =
-    camada === "geral" ||
-    camada === "externas";
+  const mostrar = camada === "geral" || camada === "externas";
 
-  if (!mostrar) {
-    return null;
-  }
+  if (!mostrar) return null;
 
   return (
     <group>
-      {Array.from(
-        {
-          length: 7,
-        },
-        (_, index) => (
-          <Vaga
-            key={`linha-a-${index}`}
-            x={
-              1.1 +
-              index * 0.83
-            }
-            z={-6.08}
-            ocupada={
-              index % 3 === 0
-            }
-          />
-        )
-      )}
+      {Array.from({ length: 7 }, (_, index) => (
+        <Vaga
+          key={`linha-a-${index}`}
+          x={1.1 + index * 0.83}
+          z={-6.08}
+          ocupada={index % 3 === 0}
+        />
+      ))}
 
-      {Array.from(
-        {
-          length: 7,
-        },
-        (_, index) => (
-          <Vaga
-            key={`linha-b-${index}`}
-            x={
-              1.1 +
-              index * 0.83
-            }
-            z={-4.82}
-            ocupada={
-              index % 4 === 1
-            }
-          />
-        )
-      )}
+      {Array.from({ length: 7 }, (_, index) => (
+        <Vaga
+          key={`linha-b-${index}`}
+          x={1.1 + index * 0.83}
+          z={-4.82}
+          ocupada={index % 4 === 1}
+        />
+      ))}
 
       <Label
         position={[4.8, 0.55, -6.9]}
         titulo="Estacionamento externo"
         subtitulo="Fundos do edifício"
         ativo={selecionado}
-        onClick={() =>
-          item &&
-          onSelect(item)
-        }
+        onClick={() => item && onSelect(item)}
       />
     </group>
   );
 }
 
-function Fonte({
-  position,
-  escala = 1,
-}) {
+function Fonte({ position, escala = 1 }) {
   return (
-    <group
-      position={position}
-      scale={[
-        escala,
-        escala,
-        escala,
-      ]}
-    >
-      <mesh
-        position={[0, 0.04, 0]}
-        castShadow
-        receiveShadow
-      >
-        <cylinderGeometry
-          args={[
-            0.62,
-            0.7,
-            0.16,
-            36,
-          ]}
-        />
-
-        <meshStandardMaterial
-          color="#d7c8ae"
-          roughness={0.78}
-        />
+    <group position={position} scale={[escala, escala, escala]}>
+      <mesh position={[0, 0.04, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.62, 0.7, 0.16, 36]} />
+        <meshStandardMaterial color="#d7c8ae" roughness={0.78} />
       </mesh>
 
-      <mesh
-        position={[0, 0.14, 0]}
-      >
-        <cylinderGeometry
-          args={[
-            0.49,
-            0.52,
-            0.08,
-            36,
-          ]}
-        />
-
+      <mesh position={[0, 0.14, 0]}>
+        <cylinderGeometry args={[0.49, 0.52, 0.08, 36]} />
         <meshStandardMaterial
           color="#7dd3fc"
           roughness={0.28}
@@ -763,77 +565,31 @@ function Fonte({
         />
       </mesh>
 
-      <mesh
-        position={[0, 0.45, 0]}
-      >
-        <cylinderGeometry
-          args={[
-            0.07,
-            0.09,
-            0.62,
-            18,
-          ]}
-        />
-
-        <meshStandardMaterial
-          color="#d7c8ae"
-        />
+      <mesh position={[0, 0.45, 0]}>
+        <cylinderGeometry args={[0.07, 0.09, 0.62, 18]} />
+        <meshStandardMaterial color="#d7c8ae" />
       </mesh>
 
-      <mesh
-        position={[0, 0.78, 0]}
-      >
-        <sphereGeometry
-          args={[
-            0.1,
-            16,
-            16,
-          ]}
-        />
-
-        <meshStandardMaterial
-          color="#d7c8ae"
-        />
+      <mesh position={[0, 0.78, 0]}>
+        <sphereGeometry args={[0.1, 16, 16]} />
+        <meshStandardMaterial color="#d7c8ae" />
       </mesh>
     </group>
   );
 }
 
-function Arvore({
-  position,
-  escala = 1,
-}) {
+function Arvore({ position, escala = 1 }) {
   return (
-    <group
-      position={position}
-      scale={[
-        escala,
-        escala,
-        escala,
-      ]}
-    >
+    <group position={position} scale={[escala, escala, escala]}>
       <Box
         position={[0, 0.26, 0]}
         size={[0.1, 0.52, 0.1]}
         color="#7c5a3c"
       />
 
-      <mesh
-        position={[0, 0.72, 0]}
-        castShadow
-      >
-        <sphereGeometry
-          args={[
-            0.32,
-            16,
-            16,
-          ]}
-        />
-
-        <meshStandardMaterial
-          color="#2f6f45"
-          roughness={0.9}
-        />
+      <mesh position={[0, 0.72, 0]} castShadow>
+        <sphereGeometry args={[0.32, 16, 16]} />
+        <meshStandardMaterial color="#2f6f45" roughness={0.9} />
       </mesh>
     </group>
   );
@@ -842,55 +598,22 @@ function Arvore({
 function Paisagismo() {
   return (
     <group>
-      <Fonte
-        position={[-2.85, 0.14, 4.95]}
-        escala={0.78}
-      />
+      <Fonte position={[-2.85, 0.14, 4.95]} escala={0.78} />
+      <Fonte position={[0, 0.14, 5.12]} escala={0.9} />
+      <Fonte position={[2.85, 0.14, 4.95]} escala={0.78} />
 
-      <Fonte
-        position={[0, 0.14, 5.12]}
-        escala={0.9}
-      />
-
-      <Fonte
-        position={[2.85, 0.14, 4.95]}
-        escala={0.78}
-      />
-
-      {[
-        -4.8,
-        -4.1,
-        -3.4,
-        -2.7,
-        2.7,
-        3.4,
-        4.1,
-        4.8,
-      ].map((x) => (
+      {[-4.8, -4.1, -3.4, -2.7, 2.7, 3.4, 4.1, 4.8].map((x) => (
         <Arvore
           key={`arvore-frente-${x}`}
-          position={[
-            x,
-            0.12,
-            5.3,
-          ]}
+          position={[x, 0.12, 5.3]}
           escala={0.76}
         />
       ))}
 
-      {[
-        -2.8,
-        -1.05,
-        0.7,
-        2.45,
-      ].map((z) => (
+      {[-2.8, -1.05, 0.7, 2.45].map((z) => (
         <Arvore
           key={`arvore-esquerda-${z}`}
-          position={[
-            -5.55,
-            0.12,
-            z,
-          ]}
+          position={[-5.55, 0.12, z]}
           escala={0.7}
         />
       ))}
@@ -898,151 +621,56 @@ function Paisagismo() {
   );
 }
 
-function posicaoItem(
-  item
-) {
-  const x =
-    Number(
-      item.x || 0
-    );
+function posicaoItem(item) {
+  const x = Number(item.x || 0);
+  const y = Number(item.y || 0);
+  const z = Number(item.z || 0);
 
-  const y =
-    Number(
-      item.y || 0
-    );
+  if (item.lado === "fundos") return [x, y, -4.6 + z];
+  if (item.lado === "esquerda") return [-5.7 + x, y, z];
+  if (item.lado === "direita") return [7.1 + x, y, z];
+  if (item.lado === "centro") return [x, y, z];
 
-  const z =
-    Number(
-      item.z || 0
-    );
-
-  if (
-    item.lado === "fundos"
-  ) {
-    return [
-      x,
-      y,
-      -4.6 + z,
-    ];
-  }
-
-  if (
-    item.lado === "esquerda"
-  ) {
-    return [
-      -5.7 + x,
-      y,
-      z,
-    ];
-  }
-
-  if (
-    item.lado === "direita"
-  ) {
-    return [
-      7.1 + x,
-      y,
-      z,
-    ];
-  }
-
-  if (
-    item.lado === "centro"
-  ) {
-    return [
-      x,
-      y,
-      z,
-    ];
-  }
-
-  return [
-    x,
-    y,
-    5.25 + z,
-  ];
+  return [x, y, 5.25 + z];
 }
 
-function offsetsPorClique(
-  lado,
-  ponto
-) {
-  const x =
-    Number(
-      ponto.x.toFixed(2)
-    );
-
+function offsetsPorClique(lado, ponto) {
+  const x = Number(ponto.x.toFixed(2));
   const y = 0.1;
+  const z = Number(ponto.z.toFixed(2));
 
-  const z =
-    Number(
-      ponto.z.toFixed(2)
-    );
-
-  if (
-    lado === "fundos"
-  ) {
+  if (lado === "fundos") {
     return {
       x,
       y,
-      z: Number(
-        (
-          z +
-          4.6
-        ).toFixed(2)
-      ),
+      z: Number((z + 4.6).toFixed(2)),
     };
   }
 
-  if (
-    lado === "esquerda"
-  ) {
+  if (lado === "esquerda") {
     return {
-      x: Number(
-        (
-          x +
-          5.7
-        ).toFixed(2)
-      ),
+      x: Number((x + 5.7).toFixed(2)),
       y,
       z,
     };
   }
 
-  if (
-    lado === "direita"
-  ) {
+  if (lado === "direita") {
     return {
-      x: Number(
-        (
-          x -
-          7.1
-        ).toFixed(2)
-      ),
+      x: Number((x - 7.1).toFixed(2)),
       y,
       z,
     };
   }
 
-  if (
-    lado === "centro"
-  ) {
-    return {
-      x,
-      y,
-      z,
-    };
+  if (lado === "centro") {
+    return { x, y, z };
   }
 
   return {
     x,
     y,
-    z: Number(
-      (
-        z -
-        5.25
-      ).toFixed(2)
-    ),
+    z: Number((z - 5.25).toFixed(2)),
   };
 }
 
@@ -1051,199 +679,85 @@ function ItemExternoVisual({
   selecionado,
   onSelect,
 }) {
-  if (
-    itemEhEstacionamento(
-      item
-    )
-  ) {
-    return null;
-  }
+  if (itemEhEstacionamento(item)) return null;
 
-  const [
-    x,
-    yBase,
-    z,
-  ] =
-    posicaoItem(
-      item
-    );
+  const [x, yBase, z] = posicaoItem(item);
 
-  const subterraneo =
-    item.modoImplantacao ===
-    "subterraneo";
+  const subterraneo = item.modoImplantacao === "subterraneo";
 
-  const largura =
-    Math.max(
-      0.18,
-      Number(
-        item.largura || 0.8
-      )
-    );
+  const largura = Math.max(0.18, Number(item.largura || 0.8));
+  const altura = Math.max(0.12, Number(item.altura || 0.6));
+  const profundidade = Math.max(0.18, Number(item.profundidade || 0.8));
 
-  const altura =
-    Math.max(
-      0.12,
-      Number(
-        item.altura || 0.6
-      )
-    );
+  const y = subterraneo
+    ? -Math.max(0.03, altura * 0.22)
+    : yBase + altura / 2;
 
-  const profundidade =
-    Math.max(
-      0.18,
-      Number(
-        item.profundidade ||
-          0.8
-      )
-    );
-
-  const y =
-    subterraneo
-      ? -Math.max(
-          0.03,
-          altura * 0.22
-        )
-      : yBase +
-        altura / 2;
-
-  function clicar(
-    event
-  ) {
+  function clicar(event) {
     event.stopPropagation();
-
-    onSelect(
-      item
-    );
+    onSelect(item);
   }
 
   return (
-    <group
-      position={[
-        x,
-        y,
-        z,
-      ]}
-    >
-      {item.tipoVisual ===
-      "redondo" ? (
-        <mesh
-          onClick={clicar}
-          castShadow
-          receiveShadow
-        >
+    <group position={[x, y, z]}>
+      {item.tipoVisual === "redondo" ? (
+        <mesh onClick={clicar} castShadow receiveShadow>
           <cylinderGeometry
             args={[
               largura / 2,
               largura / 2,
-              subterraneo
-                ? 0.08
-                : altura,
+              subterraneo ? 0.08 : altura,
               32,
             ]}
           />
 
           <meshStandardMaterial
-            color={
-              item.cor ||
-              "#64748b"
-            }
+            color={item.cor || "#64748b"}
             roughness={0.68}
           />
         </mesh>
-      ) : item.tipoVisual ===
-        "poste" ? (
+      ) : item.tipoVisual === "poste" ? (
         <group>
           <mesh
             onClick={clicar}
-            position={[
-              0,
-              altura / 2,
-              0,
-            ]}
+            position={[0, altura / 2, 0]}
             castShadow
           >
             <cylinderGeometry
               args={[
-                Math.max(
-                  0.05,
-                  largura / 7
-                ),
-                Math.max(
-                  0.05,
-                  largura / 7
-                ),
+                Math.max(0.05, largura / 7),
+                Math.max(0.05, largura / 7),
                 altura,
                 20,
               ]}
             />
 
-            <meshStandardMaterial
-              color={
-                item.cor ||
-                "#64748b"
-              }
-            />
+            <meshStandardMaterial color={item.cor || "#64748b"} />
           </mesh>
 
-          <mesh
-            position={[
-              0,
-              altura + 0.12,
-              0,
-            ]}
-          >
-            <sphereGeometry
-              args={[
-                Math.max(
-                  0.1,
-                  largura / 3.4
-                ),
-                18,
-                18,
-              ]}
-            />
+          <mesh position={[0, altura + 0.12, 0]}>
+            <sphereGeometry args={[Math.max(0.1, largura / 3.4), 18, 18]} />
 
             <meshStandardMaterial
               color="#fde68a"
               emissive="#fde68a"
-              emissiveIntensity={
-                0.35
-              }
+              emissiveIntensity={0.35}
             />
           </mesh>
         </group>
-      ) : item.tipoVisual ===
-        "equipamento" ? (
+      ) : item.tipoVisual === "equipamento" ? (
         <group>
           <Box
             position={[0, 0, 0]}
-            size={[
-              largura,
-              altura,
-              profundidade,
-            ]}
-            color={
-              item.cor ||
-              "#64748b"
-            }
+            size={[largura, altura, profundidade]}
+            color={item.cor || "#64748b"}
             roughness={0.72}
             onClick={clicar}
           />
 
           <Box
-            position={[
-              0,
-              altura / 2 +
-                0.08,
-              0,
-            ]}
-            size={[
-              largura *
-                0.7,
-              0.12,
-              profundidade *
-                0.7,
-            ]}
+            position={[0, altura / 2 + 0.08, 0]}
+            size={[largura * 0.7, 0.12, profundidade * 0.7]}
             color="#94a3b8"
           />
         </group>
@@ -1252,45 +766,23 @@ function ItemExternoVisual({
           position={[0, 0, 0]}
           size={[
             largura,
-            subterraneo
-              ? 0.09
-              : altura,
+            subterraneo ? 0.09 : altura,
             profundidade,
           ]}
-          color={
-            item.cor ||
-            "#64748b"
-          }
+          color={item.cor || "#64748b"}
           roughness={0.74}
           onClick={clicar}
         />
       )}
 
       <Label
-        position={[
-          0,
-          subterraneo
-            ? 0.42
-            : altura / 2 +
-              0.55,
-          0,
-        ]}
-        titulo={
-          item.nome
-        }
+        position={[0, subterraneo ? 0.42 : altura / 2 + 0.55, 0]}
+        titulo={item.nome}
         subtitulo={`${item.lado} • ${
-          subterraneo
-            ? "subterrâneo"
-            : "superfície"
+          subterraneo ? "subterrâneo" : "superfície"
         }`}
-        ativo={
-          selecionado
-        }
-        onClick={() =>
-          onSelect(
-            item
-          )
-        }
+        ativo={selecionado}
+        onClick={() => onSelect(item)}
       />
     </group>
   );
@@ -1307,25 +799,16 @@ function ItensExternos({
     camada === "externas" ||
     camada === "sistemas";
 
-  if (!mostrar) {
-    return null;
-  }
+  if (!mostrar) return null;
 
   return (
     <group>
-      {ordenarItens(
-        itens
-      ).map((item) => (
+      {ordenarItens(itens).map((item) => (
         <ItemExternoVisual
           key={item.id}
           item={item}
-          selecionado={
-            itemSelecionado?.id ===
-            item.id
-          }
-          onSelect={
-            onSelect
-          }
+          selecionado={itemSelecionado?.id === item.id}
+          onSelect={onSelect}
         />
       ))}
     </group>
@@ -1337,37 +820,19 @@ function PlanoPosicionamento({
   lado,
   onEscolher,
 }) {
-  if (!ativo) {
-    return null;
-  }
+  if (!ativo) return null;
 
   return (
     <group>
       <mesh
         position={[0, 0.13, 0]}
-        rotation={[
-          -Math.PI / 2,
-          0,
-          0,
-        ]}
+        rotation={[-Math.PI / 2, 0, 0]}
         onClick={(event) => {
           event.stopPropagation();
-
-          onEscolher(
-            offsetsPorClique(
-              lado,
-              event.point
-            )
-          );
+          onEscolher(offsetsPorClique(lado, event.point));
         }}
       >
-        <planeGeometry
-          args={[
-            17.2,
-            15.2,
-          ]}
-        />
-
+        <planeGeometry args={[17.2, 15.2]} />
         <meshStandardMaterial
           color="#38bdf8"
           transparent
@@ -1375,14 +840,7 @@ function PlanoPosicionamento({
         />
       </mesh>
 
-      <Html
-        position={[
-          0,
-          2.4,
-          5.8,
-        ]}
-        center
-      >
+      <Html position={[0, 2.4, 5.8]} center>
         <div className="rounded-2xl border border-cyan-200 bg-white/95 px-4 py-3 text-center shadow-xl">
           <p className="text-xs font-black text-cyan-800">
             Modo posicionamento ativo
@@ -1397,17 +855,9 @@ function PlanoPosicionamento({
   );
 }
 
-function ArcoFrontal({
-  x,
-}) {
+function ArcoFrontal({ x }) {
   return (
-    <group
-      position={[
-        x,
-        0.78,
-        3.58,
-      ]}
-    >
+    <group position={[x, 0.78, 3.58]}>
       <Box
         position={[0, 0, 0]}
         size={[0.7, 0.92, 0.12]}
@@ -1440,26 +890,17 @@ function Embasamento({
   selecionado,
   selecionarTerreo,
 }) {
-  if (
-    camada === "subsolos"
-  ) {
-    return null;
-  }
+  if (camada === "subsolos") return null;
 
   return (
     <group>
       <Box
         position={[0, 0.775, 0]}
         size={[9.4, 1.55, 7.7]}
-        color={
-          selecionado
-            ? "#67e8f9"
-            : "#ded3bd"
-        }
+        color={selecionado ? "#67e8f9" : "#ded3bd"}
         roughness={0.72}
         onClick={(event) => {
           event.stopPropagation();
-
           selecionarTerreo();
         }}
       />
@@ -1491,18 +932,8 @@ function Embasamento({
         size={[3.12, 0.18, 0.82]}
       />
 
-      {[
-        -3.45,
-        -2.25,
-        -1.05,
-        1.05,
-        2.25,
-        3.45,
-      ].map((x) => (
-        <ArcoFrontal
-          key={x}
-          x={x}
-        />
+      {[-3.45, -2.25, -1.05, 1.05, 2.25, 3.45].map((x) => (
+        <ArcoFrontal key={x} x={x} />
       ))}
 
       <Label
@@ -1510,9 +941,7 @@ function Embasamento({
         titulo="Térreo"
         subtitulo="Acesso principal"
         ativo={selecionado}
-        onClick={
-          selecionarTerreo
-        }
+        onClick={selecionarTerreo}
       />
     </group>
   );
@@ -1524,294 +953,138 @@ function TorreEspelhada({
   onSelect,
   camada,
 }) {
-  if (
-    camada === "subsolos"
-  ) {
-    return null;
-  }
+  if (camada === "subsolos") return null;
 
   const largura = 8.7;
   const profundidade = 7.1;
   const altura = 10.7;
   const baseY = 1.65;
-  const topoY =
-    baseY +
-    altura;
+  const topoY = baseY + altura;
 
-  const pavimentos =
-    andares.filter(
-      (andar) =>
-        Number(
-          andar.ordem
-        ) >= 1 &&
-        Number(
-          andar.ordem
-        ) <= 16
-    );
+  const pavimentos = andares.filter(
+    (andar) =>
+      Number(andar.ordem) >= 1 &&
+      Number(andar.ordem) <= 16
+  );
 
-  const alturaPiso =
-    altura /
-    Math.max(
-      1,
-      pavimentos.length
-    );
+  const alturaPiso = altura / Math.max(1, pavimentos.length);
 
   return (
     <group>
       <GlassBox
-        position={[
-          0,
-          baseY +
-            altura / 2,
-          0,
-        ]}
-        size={[
-          largura,
-          altura,
-          profundidade,
-        ]}
+        position={[0, baseY + altura / 2, 0]}
+        size={[largura, altura, profundidade]}
         color="#0f4f62"
       />
 
-      {Array.from(
-        {
-          length: 14,
-        },
-        (_, index) => {
-          const x =
-            -largura / 2 +
-            (index *
-              largura) /
-              13;
+      {Array.from({ length: 14 }, (_, index) => {
+        const x =
+          -largura / 2 +
+          (index * largura) / 13;
 
-          return (
-            <Linha
-              key={`vertical-frente-${index}`}
-              position={[
-                x,
-                baseY +
-                  altura / 2,
-                profundidade /
-                  2 +
-                  0.012,
-              ]}
+        return (
+          <Linha
+            key={`vertical-frente-${index}`}
+            position={[x, baseY + altura / 2, profundidade / 2 + 0.012]}
+            size={[0.025, altura, 0.03]}
+            color="#7996a0"
+          />
+        );
+      })}
+
+      {Array.from({ length: 10 }, (_, index) => {
+        const z =
+          -profundidade / 2 +
+          (index * profundidade) / 9;
+
+        return (
+          <Linha
+            key={`vertical-lateral-${index}`}
+            position={[largura / 2 + 0.012, baseY + altura / 2, z]}
+            size={[0.03, altura, 0.025]}
+            color="#7996a0"
+          />
+        );
+      })}
+
+      {pavimentos.map((andar, index) => {
+        const y =
+          baseY +
+          index * alturaPiso +
+          alturaPiso / 2;
+
+        const selecionado =
+          andarSelecionado?.id === andar.id;
+
+        return (
+          <group key={andar.id}>
+            <Box
+              position={[0, y, 0]}
               size={[
-                0.025,
-                altura,
-                0.03,
+                largura + 0.05,
+                alturaPiso * 0.94,
+                profundidade + 0.05,
               ]}
-              color="#7996a0"
+              color={selecionado ? "#22d3ee" : "#0f4f62"}
+              opacity={selecionado ? 0.52 : 0.025}
+              metalness={0.7}
+              roughness={0.1}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect(andar);
+              }}
             />
-          );
-        }
-      )}
 
-      {Array.from(
-        {
-          length: 10,
-        },
-        (_, index) => {
-          const z =
-            -profundidade /
-              2 +
-            (index *
-              profundidade) /
-              9;
-
-          return (
             <Linha
-              key={`vertical-lateral-${index}`}
               position={[
-                largura /
-                  2 +
-                  0.012,
-                baseY +
-                  altura / 2,
-                z,
+                0,
+                baseY + index * alturaPiso,
+                profundidade / 2 + 0.035,
               ]}
-              size={[
-                0.03,
-                altura,
-                0.025,
-              ]}
-              color="#7996a0"
+              size={[largura, 0.018, 0.035]}
+              color="#9db7be"
             />
-          );
-        }
-      )}
-
-      {pavimentos.map(
-        (
-          andar,
-          index
-        ) => {
-          const y =
-            baseY +
-            index *
-              alturaPiso +
-            alturaPiso / 2;
-
-          const selecionado =
-            andarSelecionado?.id ===
-            andar.id;
-
-          return (
-            <group
-              key={
-                andar.id
-              }
-            >
-              <Box
-                position={[
-                  0,
-                  y,
-                  0,
-                ]}
-                size={[
-                  largura +
-                    0.05,
-                  alturaPiso *
-                    0.94,
-                  profundidade +
-                    0.05,
-                ]}
-                color={
-                  selecionado
-                    ? "#22d3ee"
-                    : "#0f4f62"
-                }
-                opacity={
-                  selecionado
-                    ? 0.52
-                    : 0.025
-                }
-                metalness={
-                  0.7
-                }
-                roughness={
-                  0.1
-                }
-                onClick={(event) => {
-                  event.stopPropagation();
-
-                  onSelect(
-                    andar
-                  );
-                }}
-              />
-
-              <Linha
-                position={[
-                  0,
-                  baseY +
-                    index *
-                      alturaPiso,
-                  profundidade /
-                    2 +
-                    0.035,
-                ]}
-                size={[
-                  largura,
-                  0.018,
-                  0.035,
-                ]}
-                color="#9db7be"
-              />
-            </group>
-          );
-        }
-      )}
+          </group>
+        );
+      })}
 
       <Label
-        position={[
-          -5.5,
-          baseY +
-            altura *
-              0.64,
-          1.3,
-        ]}
+        position={[-5.5, baseY + altura * 0.64, 1.3]}
         titulo="Pavimentos corporativos"
         subtitulo="Torre espelhada"
       />
 
       <Box
-        position={[
-          0,
-          topoY +
-            0.36,
-          0,
-        ]}
-        size={[
-          largura +
-            0.85,
-          0.72,
-          profundidade +
-            0.78,
-        ]}
+        position={[0, topoY + 0.36, 0]}
+        size={[largura + 0.85, 0.72, profundidade + 0.78]}
         color="#d8ccb6"
         roughness={0.68}
       />
 
       <Linha
-        position={[
-          0,
-          topoY +
-            0.02,
-          0,
-        ]}
-        size={[
-          largura +
-            1.05,
-          0.14,
-          profundidade +
-            0.98,
-        ]}
+        position={[0, topoY + 0.02, 0]}
+        size={[largura + 1.05, 0.14, profundidade + 0.98]}
       />
 
       <Linha
-        position={[
-          0,
-          topoY +
-            0.76,
-          0,
-        ]}
-        size={[
-          largura +
-            1.1,
-          0.16,
-          profundidade +
-            1,
-        ]}
+        position={[0, topoY + 0.76, 0]}
+        size={[largura + 1.1, 0.16, profundidade + 1]}
       />
 
-      {Array.from(
-        {
-          length: 10,
-        },
-        (_, index) => (
-          <Box
-            key={`coroamento-${index}`}
-            position={[
-              -3.75 +
-                index *
-                  0.84,
-              topoY +
-                0.37,
-              profundidade /
-                2 +
-                0.42,
-            ]}
-            size={[
-              0.42,
-              0.28,
-              0.04,
-            ]}
-            color="#184e5c"
-            roughness={0.18}
-            metalness={0.55}
-          />
-        )
-      )}
+      {Array.from({ length: 10 }, (_, index) => (
+        <Box
+          key={`coroamento-${index}`}
+          position={[
+            -3.75 + index * 0.84,
+            topoY + 0.37,
+            profundidade / 2 + 0.42,
+          ]}
+          size={[0.42, 0.28, 0.04]}
+          color="#184e5c"
+          roughness={0.18}
+          metalness={0.55}
+        />
+      ))}
     </group>
   );
 }
@@ -1822,211 +1095,202 @@ function AreasTecnicasSuperiores({
   onSelect,
   camada,
 }) {
-  if (
-    camada === "subsolos"
-  ) {
-    return null;
-  }
+  if (camada === "subsolos") return null;
 
-  const cobertura =
-    andares.find(
-      (andar) =>
-        Number(
-          andar.ordem
-        ) === 17
-    );
+  const torres =
+    andares.find((andar) => Number(andar.ordem) === 17);
 
-  const maquinas =
-    andares.find(
-      (andar) =>
-        Number(
-          andar.ordem
-        ) === 18
-    );
+  const pocoElevadores =
+    andares.find((andar) => Number(andar.ordem) === 18);
+
+  const casaMaquinas =
+    andares.find((andar) => Number(andar.ordem) === 19);
 
   const heliponto =
-    andares.find(
-      (andar) =>
-        Number(
-          andar.ordem
-        ) === 19
-    );
+    andares.find((andar) => Number(andar.ordem) === 20);
 
-  const topoY = 12.35;
+  const baseY = 13.08;
+  const alturaNivel = 0.78;
+  const distanciaNivel = 0.86;
+  const largura = 9.18;
+  const profundidade = 7.62;
 
-  function clicar(
-    andar
-  ) {
-    return (
-      event
-    ) => {
+  const niveis = [
+    {
+      andar: torres,
+      y: baseY,
+      subtitulo: "Torres de resfriamento",
+    },
+    {
+      andar: pocoElevadores,
+      y: baseY + distanciaNivel,
+      subtitulo: "Poço dos elevadores",
+    },
+    {
+      andar: casaMaquinas,
+      y: baseY + distanciaNivel * 2,
+      subtitulo: "Casa de máquinas dos elevadores",
+    },
+  ].filter((nivel) => Boolean(nivel.andar));
+
+  function clicar(andar) {
+    return (event) => {
       event.stopPropagation();
 
-      if (
-        andar
-      ) {
-        onSelect(
-          andar
-        );
+      if (andar) {
+        onSelect(andar);
       }
     };
   }
 
+  const topoHeliponto =
+    baseY +
+    distanciaNivel * 3 +
+    0.18;
+
   return (
     <group>
       <Box
-        position={[
-          0,
-          topoY +
-            1.02,
-          0,
-        ]}
-        size={[
-          7.1,
-          0.18,
-          5.75,
-        ]}
-        color={
-          selecionado?.id ===
-          cobertura?.id
-            ? "#c4b5fd"
-            : "#c8bda9"
-        }
-        roughness={0.8}
-        onClick={
-          clicar(
-            cobertura
-          )
-        }
+        position={[0, baseY - 0.5, 0]}
+        size={[9.76, 0.18, 8.18]}
+        color="#d8ccb6"
+        roughness={0.72}
+      />
+
+      {niveis.map(({ andar, y, subtitulo }, nivelIndex) => {
+        const ativo = selecionado?.id === andar.id;
+
+        return (
+          <group key={andar.id}>
+            <Box
+              position={[0, y, 0]}
+              size={[largura, alturaNivel, profundidade]}
+              color={ativo ? "#67e8f9" : "#d8ccb6"}
+              roughness={0.74}
+              onClick={clicar(andar)}
+            />
+
+            <Linha
+              position={[
+                0,
+                y - alturaNivel / 2 - 0.07,
+                0,
+              ]}
+              size={[
+                largura + 0.48,
+                0.14,
+                profundidade + 0.42,
+              ]}
+              color="#cbbda4"
+            />
+
+            <Linha
+              position={[
+                0,
+                y + alturaNivel / 2 + 0.07,
+                0,
+              ]}
+              size={[
+                largura + 0.48,
+                0.14,
+                profundidade + 0.42,
+              ]}
+              color="#cbbda4"
+            />
+
+            {Array.from({ length: 10 }, (_, index) => (
+              <Box
+                key={`${andar.id}-janela-frente-${index}`}
+                position={[
+                  -3.78 + index * 0.84,
+                  y,
+                  profundidade / 2 + 0.012,
+                ]}
+                size={[0.5, 0.34, 0.04]}
+                color={ativo ? "#0891b2" : "#0f4f62"}
+                roughness={0.16}
+                metalness={0.48}
+                onClick={clicar(andar)}
+              />
+            ))}
+
+            {Array.from({ length: 7 }, (_, index) => (
+              <Box
+                key={`${andar.id}-janela-lateral-${index}`}
+                position={[
+                  largura / 2 + 0.012,
+                  y,
+                  -2.7 + index * 0.88,
+                ]}
+                size={[0.04, 0.34, 0.5]}
+                color={ativo ? "#0891b2" : "#0f4f62"}
+                roughness={0.16}
+                metalness={0.48}
+                onClick={clicar(andar)}
+              />
+            ))}
+
+            <Label
+              position={[
+                6.08,
+                y,
+                1.85 - nivelIndex * 0.48,
+              ]}
+              titulo={andar.tituloCurto || andar.nome}
+              subtitulo={subtitulo}
+              ativo={ativo}
+              onClick={() => onSelect(andar)}
+            />
+          </group>
+        );
+      })}
+
+      <Linha
+        position={[0, topoHeliponto - 0.18, 0]}
+        size={[9.9, 0.2, 8.28]}
+        color="#cbbda4"
       />
 
       <Box
-        position={[
-          1.3,
-          topoY +
-            1.42,
-          0.55,
-        ]}
-        size={[
-          2.2,
-          0.72,
-          1.85,
-        ]}
+        position={[0, topoHeliponto, 0]}
+        size={[8.7, 0.16, 7.18]}
         color={
-          selecionado?.id ===
-          maquinas?.id
-            ? "#c4b5fd"
-            : "#a8a29e"
-        }
-        roughness={0.76}
-        onClick={
-          clicar(
-            maquinas
-          )
-        }
-      />
-
-      <Box
-        position={[
-          -0.85,
-          topoY +
-            1.17,
-          -0.35,
-        ]}
-        size={[
-          4.6,
-          0.12,
-          3.95,
-        ]}
-        color={
-          selecionado?.id ===
-          heliponto?.id
+          selecionado?.id === heliponto?.id
             ? "#fdba74"
             : "#3b82a0"
         }
         roughness={0.58}
-        onClick={
-          clicar(
-            heliponto
-          )
-        }
+        onClick={clicar(heliponto)}
       />
 
       <mesh
-        position={[
-          -0.85,
-          topoY +
-            1.26,
-          -0.35,
-        ]}
-        rotation={[
-          -Math.PI / 2,
-          0,
-          0,
-        ]}
+        position={[0, topoHeliponto + 0.1, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        onClick={clicar(heliponto)}
       >
-        <ringGeometry
-          args={[
-            1,
-            1.08,
-            64,
-          ]}
-        />
-
-        <meshStandardMaterial
-          color="#f8fafc"
-        />
+        <ringGeometry args={[1.28, 1.4, 64]} />
+        <meshStandardMaterial color="#f8fafc" />
       </mesh>
 
       <Linha
-        position={[
-          -0.85,
-          topoY +
-            1.28,
-          -0.35,
-        ]}
-        size={[
-          1.32,
-          0.025,
-          0.12,
-        ]}
+        position={[0, topoHeliponto + 0.12, 0]}
+        size={[1.62, 0.03, 0.14]}
         color="#f8fafc"
       />
 
       <Linha
-        position={[
-          -0.85,
-          topoY +
-            1.28,
-          -0.35,
-        ]}
-        size={[
-          0.12,
-          0.025,
-          1.32,
-        ]}
+        position={[0, topoHeliponto + 0.12, 0]}
+        size={[0.14, 0.03, 1.62]}
         color="#f8fafc"
       />
 
       {heliponto && (
         <Label
-          position={[
-            -0.85,
-            topoY +
-              2.05,
-            -0.35,
-          ]}
+          position={[5.85, topoHeliponto + 0.32, -0.35]}
           titulo="Heliponto"
-          subtitulo="Área técnica superior"
-          ativo={
-            selecionado?.id ===
-            heliponto.id
-          }
-          onClick={() =>
-            onSelect(
-              heliponto
-            )
-          }
+          subtitulo="Acima dos níveis técnicos"
+          ativo={selecionado?.id === heliponto.id}
+          onClick={() => onSelect(heliponto)}
         />
       )}
     </group>
@@ -2044,197 +1308,184 @@ function Subsolos({
     camada === "geral" ||
     camada === "subsolos";
 
-  if (!mostrar) {
-    return null;
-  }
+  if (!mostrar) return null;
 
   const lista =
     ordenarAndares(
       andares.filter(
         (andar) =>
-          Number(
-            andar.ordem
-          ) < 0
+          Number(andar.ordem) < 0
       )
     ).reverse();
+
+  const espacamento = 1.14;
+  const alturaLivre = 0.94;
+  const largura = 12.75;
+  const profundidade = 10.82;
+
+  const centroVertical =
+    -(
+      lista.length -
+      0.2
+    ) *
+    espacamento /
+    2;
 
   return (
     <group>
       <Box
-        position={[
-          0,
-          -2.05,
-          0,
-        ]}
+        position={[0, centroVertical, -5.34]}
         size={[
-          15.8,
-          4.35,
-          12.85,
+          largura + 0.3,
+          lista.length * espacamento + 0.72,
+          0.16,
         ]}
-        color="#765844"
-        opacity={
-          camada ===
-          "subsolos"
-            ? 0.14
-            : 0.06
-        }
-        roughness={1}
+        color="#94a3b8"
+        opacity={camada === "subsolos" ? 0.42 : 0.22}
+        roughness={0.88}
       />
 
-      {lista.map(
-        (
-          andar,
-          index
-        ) => {
-          const y =
-            -(
-              index +
-              0.58
-            ) *
-            CONFIG_IMPLANTACAO
-              .subsolos
-              .altura;
+      <Box
+        position={[-6.46, centroVertical, 0]}
+        size={[
+          0.16,
+          lista.length * espacamento + 0.72,
+          profundidade + 0.3,
+        ]}
+        color="#94a3b8"
+        opacity={camada === "subsolos" ? 0.34 : 0.16}
+        roughness={0.88}
+      />
 
-          const selecionado =
-            andarSelecionado?.id ===
-            andar.id;
+      <Box
+        position={[6.46, centroVertical, 0]}
+        size={[
+          0.16,
+          lista.length * espacamento + 0.72,
+          profundidade + 0.3,
+        ]}
+        color="#94a3b8"
+        opacity={camada === "subsolos" ? 0.18 : 0.08}
+        roughness={0.88}
+      />
 
-          const quantidade =
-            locaisDoAndar(
-              locais,
-              andar.id
-            ).length;
+      {lista.map((andar, index) => {
+        const y =
+          -(
+            index +
+            0.62
+          ) *
+          espacamento;
 
-          return (
-            <group
-              key={
-                andar.id
-              }
-            >
-              <Box
-                position={[
-                  0,
-                  y,
-                  0,
-                ]}
-                size={[
-                  CONFIG_IMPLANTACAO
-                    .subsolos
-                    .largura,
-                  0.62,
-                  CONFIG_IMPLANTACAO
-                    .subsolos
-                    .profundidade,
-                ]}
-                color={
-                  selecionado
-                    ? "#22d3ee"
-                    : "#475569"
-                }
-                opacity={
-                  camada ===
-                  "subsolos"
-                    ? 0.98
-                    : 0.76
-                }
-                roughness={
-                  0.72
-                }
-                onClick={(event) => {
-                  event.stopPropagation();
+        const selecionado =
+          andarSelecionado?.id === andar.id;
 
-                  onSelect(
-                    andar
-                  );
-                }}
-              />
+        const quantidade =
+          locaisDoAndar(
+            locais,
+            andar.id
+          ).length;
 
-              {[
-                -4.5,
-                -1.5,
-                1.5,
-                4.5,
-              ].map((x) => (
+        return (
+          <group key={andar.id}>
+            <Box
+              position={[0, y, 0]}
+              size={[largura, 0.18, profundidade]}
+              color={selecionado ? "#22d3ee" : "#334155"}
+              opacity={1}
+              roughness={0.72}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelect(andar);
+              }}
+            />
+
+            <Linha
+              position={[0, y + alturaLivre, -5.28]}
+              size={[largura, 0.08, 0.12]}
+              color="#e2e8f0"
+            />
+
+            {[-4.65, -1.55, 1.55, 4.65].map((x) => (
+              <group key={`${andar.id}-estrutura-${x}`}>
                 <Box
-                  key={`${andar.id}-pillar-${x}`}
-                  position={[
-                    x,
-                    y,
-                    -2,
-                  ]}
-                  size={[
-                    0.18,
-                    0.72,
-                    0.18,
-                  ]}
+                  position={[x, y + alturaLivre / 2, -2.55]}
+                  size={[0.2, alturaLivre, 0.2]}
                   color="#cbd5e1"
                 />
-              ))}
 
-              {[
-                -4.4,
-                -2.7,
-                -1,
-                0.7,
-                2.4,
-                4.1,
-              ].map(
-                (
-                  x,
-                  carIndex
-                ) => (
-                  <Carro
-                    key={`${andar.id}-car-${x}`}
-                    position={[
-                      x,
-                      y +
-                        0.1,
-                      0.85,
-                    ]}
-                    color={
-                      carIndex %
-                      2
-                        ? "#cbd5e1"
-                        : "#1e293b"
-                    }
-                  />
-                )
-              )}
+                <Box
+                  position={[x, y + alturaLivre / 2, 2.55]}
+                  size={[0.2, alturaLivre, 0.2]}
+                  color="#cbd5e1"
+                />
+              </group>
+            ))}
 
-              <Label
-                position={[
-                  -7.05,
-                  y,
-                  0,
-                ]}
-                titulo={
-                  andar.tituloCurto ||
-                  andar.nome.replace(
-                    "º Subsolo",
-                    "SS"
-                  )
-                }
-                subtitulo={`${quantidade} local(is)`}
-                ativo={
-                  selecionado
-                }
-                onClick={() =>
-                  onSelect(
-                    andar
-                  )
-                }
+            {[-4.7, -3.1, -1.5, 0.1, 1.7, 3.3].map((x) => (
+              <group key={`${andar.id}-vaga-${x}`}>
+                <Box
+                  position={[x, y + 0.11, 1.52]}
+                  size={[0.05, 0.02, 2.05]}
+                  color="#f8fafc"
+                />
+
+                <Box
+                  position={[x + 1.18, y + 0.11, 1.52]}
+                  size={[0.05, 0.02, 2.05]}
+                  color="#f8fafc"
+                />
+              </group>
+            ))}
+
+            {[-4.1, -2.35, -0.6, 1.15, 2.9, 4.3].map(
+              (x, carIndex) => (
+                <Carro
+                  key={`${andar.id}-carro-${x}`}
+                  position={[x, y + 0.13, 1.55]}
+                  color={
+                    carIndex % 2
+                      ? "#cbd5e1"
+                      : "#1e293b"
+                  }
+                />
+              )
+            )}
+
+            {[-3.9, 0, 3.9].map((x) => (
+              <Box
+                key={`${andar.id}-luz-${x}`}
+                position={[x, y + alturaLivre - 0.08, -0.8]}
+                size={[1.5, 0.04, 0.14]}
+                color="#f8fafc"
               />
-            </group>
-          );
-        }
-      )}
+            ))}
+
+            <Label
+              position={[-7.32, y + 0.18, 0]}
+              titulo={
+                andar.tituloCurto ||
+                andar.nome.replace(
+                  "º Subsolo",
+                  "SS"
+                )
+              }
+              subtitulo={`${quantidade} local(is)`}
+              ativo={selecionado}
+              onClick={() => onSelect(andar)}
+            />
+          </group>
+        );
+      })}
+
+      <Linha
+        position={[0, 0.02, 0]}
+        size={[13.45, 0.16, 11.42]}
+        color="#64748b"
+      />
 
       <Label
-        position={[
-          -7.2,
-          0.05,
-          2,
-        ]}
+        position={[-7.36, 0.18, 2.2]}
         titulo="Nível da rua"
         subtitulo="0,00 m"
       />
@@ -2257,9 +1508,7 @@ function ModeloJK1455({
   const terreo =
     andares.find(
       (andar) =>
-        Number(
-          andar.ordem
-        ) === 0
+        Number(andar.ordem) === 0
     );
 
   const estacionamento =
@@ -2269,119 +1518,56 @@ function ModeloJK1455({
 
   return (
     <group>
-      <GradeRua
-        camada={
-          camada
-        }
-      />
+      <GradeRua camada={camada} />
 
       <EstacionamentoFundos
-        camada={
-          camada
-        }
-        item={
-          estacionamento
-        }
-        selecionado={
-          itemSelecionado?.id ===
-          estacionamento?.id
-        }
-        onSelect={
-          onSelectItem
-        }
+        camada={camada}
+        item={estacionamento}
+        selecionado={itemSelecionado?.id === estacionamento?.id}
+        onSelect={onSelectItem}
       />
 
       <Paisagismo />
 
       <ItensExternos
-        itens={
-          itensExternos
-        }
-        camada={
-          camada
-        }
-        itemSelecionado={
-          itemSelecionado
-        }
-        onSelect={
-          onSelectItem
-        }
+        itens={itensExternos}
+        camada={camada}
+        itemSelecionado={itemSelecionado}
+        onSelect={onSelectItem}
       />
 
       <Embasamento
-        camada={
-          camada
-        }
-        selecionado={
-          andarSelecionado?.id ===
-          terreo?.id
-        }
-        selecionarTerreo={() =>
-          terreo &&
-          onSelectAndar(
-            terreo
-          )
-        }
+        camada={camada}
+        selecionado={andarSelecionado?.id === terreo?.id}
+        selecionarTerreo={() => terreo && onSelectAndar(terreo)}
       />
 
       <TorreEspelhada
-        andares={
-          andares
-        }
-        andarSelecionado={
-          andarSelecionado
-        }
-        onSelect={
-          onSelectAndar
-        }
-        camada={
-          camada
-        }
+        andares={andares}
+        andarSelecionado={andarSelecionado}
+        onSelect={onSelectAndar}
+        camada={camada}
       />
 
       <AreasTecnicasSuperiores
-        andares={
-          andares
-        }
-        selecionado={
-          andarSelecionado
-        }
-        onSelect={
-          onSelectAndar
-        }
-        camada={
-          camada
-        }
+        andares={andares}
+        selecionado={andarSelecionado}
+        onSelect={onSelectAndar}
+        camada={camada}
       />
 
       <Subsolos
-        andares={
-          andares
-        }
-        locais={
-          locais
-        }
-        camada={
-          camada
-        }
-        andarSelecionado={
-          andarSelecionado
-        }
-        onSelect={
-          onSelectAndar
-        }
+        andares={andares}
+        locais={locais}
+        camada={camada}
+        andarSelecionado={andarSelecionado}
+        onSelect={onSelectAndar}
       />
 
       <PlanoPosicionamento
-        ativo={
-          posicionamento.ativo
-        }
-        lado={
-          posicionamento.lado
-        }
-        onEscolher={
-          onEscolherPosicao
-        }
+        ativo={posicionamento.ativo}
+        lado={posicionamento.lado}
+        onEscolher={onEscolherPosicao}
       />
     </group>
   );
@@ -2394,13 +1580,7 @@ function ModalAndares({
   onSalvar,
   onExcluir,
 }) {
-  const [
-    form,
-    setForm,
-  ] =
-    useState(
-      campoAndarVazio()
-    );
+  const [form, setForm] = useState(campoAndarVazio());
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-slate-950/50 p-4">
@@ -2412,84 +1592,51 @@ function ModalAndares({
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Adicione, edite ou remova pavimentos. Os arquivos associados continuam vinculados ao andar.
+              Adicione, edite ou remova pavimentos.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={
-              onFechar
-            }
+            onClick={onFechar}
             className="rounded-xl p-2 hover:bg-slate-100"
           >
-            <X
-              size={18}
-            />
+            <X size={18} />
           </button>
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
           <input
-            value={
-              form.nome
-            }
+            value={form.nome}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  nome:
-                    event
-                      .target
-                      .value,
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                nome: event.target.value,
+              }))
             }
             placeholder="Nome do andar"
             className="rounded-2xl border border-slate-200 p-3 text-sm"
           />
 
           <input
-            value={
-              form.tituloCurto
-            }
+            value={form.tituloCurto}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  tituloCurto:
-                    event
-                      .target
-                      .value,
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                tituloCurto: event.target.value,
+              }))
             }
-            placeholder="Título curto do rótulo"
+            placeholder="Título curto"
             className="rounded-2xl border border-slate-200 p-3 text-sm"
           />
 
           <input
-            value={
-              form.ordem
-            }
+            value={form.ordem}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  ordem:
-                    Number(
-                      event
-                        .target
-                        .value
-                    ),
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                ordem: Number(event.target.value),
+              }))
             }
             type="number"
             placeholder="Ordem"
@@ -2497,23 +1644,12 @@ function ModalAndares({
           />
 
           <input
-            value={
-              form.altura
-            }
+            value={form.altura}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  altura:
-                    Number(
-                      event
-                        .target
-                        .value
-                    ),
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                altura: Number(event.target.value),
+              }))
             }
             type="number"
             step="0.1"
@@ -2522,161 +1658,72 @@ function ModalAndares({
           />
 
           <select
-            value={
-              form.categoria
-            }
+            value={form.categoria}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  categoria:
-                    event
-                      .target
-                      .value,
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                categoria: event.target.value,
+              }))
             }
             className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
           >
-            <option value="subsolo">
-              Subsolo
-            </option>
-
-            <option value="terreo">
-              Térreo
-            </option>
-
-            <option value="comercial">
-              Comercial
-            </option>
-
-            <option value="tecnico">
-              Técnico
-            </option>
-
-            <option value="cobertura">
-              Cobertura
-            </option>
+            <option value="subsolo">Subsolo</option>
+            <option value="terreo">Térreo</option>
+            <option value="comercial">Comercial</option>
+            <option value="tecnico">Técnico</option>
+            <option value="heliponto">Heliponto</option>
           </select>
 
           <input
-            value={
-              form.cor
-            }
+            value={form.cor}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  cor:
-                    event
-                      .target
-                      .value,
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                cor: event.target.value,
+              }))
             }
             type="color"
             className="h-[46px] rounded-2xl border border-slate-200 p-2"
           />
 
           <textarea
-            value={
-              form.observacao
-            }
+            value={form.observacao}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  observacao:
-                    event
-                      .target
-                      .value,
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                observacao: event.target.value,
+              }))
             }
             placeholder="Observação"
             className="min-h-[64px] rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
           />
-
-          <label className="flex items-center gap-2 text-sm font-bold text-slate-600 md:col-span-2">
-            <input
-              type="checkbox"
-              checked={
-                form.mostrarRotulo !==
-                false
-              }
-              onChange={(event) =>
-                setForm(
-                  (
-                    valor
-                  ) => ({
-                    ...valor,
-                    mostrarRotulo:
-                      event
-                        .target
-                        .checked,
-                  })
-                )
-              }
-            />
-
-            Mostrar rótulo
-          </label>
         </div>
 
         <div className="mt-4 flex gap-2">
           <button
             type="button"
             onClick={async () => {
-              if (
-                !form.nome
-              ) {
-                return;
-              }
+              if (!form.nome) return;
 
-              await onSalvar(
-                form
-              );
-
-              setForm(
-                campoAndarVazio()
-              );
+              await onSalvar(form);
+              setForm(campoAndarVazio());
             }}
-            disabled={
-              salvando ||
-              !form.nome
-            }
+            disabled={salvando || !form.nome}
             className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 font-black text-white disabled:opacity-50"
           >
             {salvando ? (
-              <Loader2
-                size={17}
-                className="animate-spin"
-              />
+              <Loader2 size={17} className="animate-spin" />
             ) : (
-              <Save
-                size={17}
-              />
+              <Save size={17} />
             )}
 
-            {form.id
-              ? "Atualizar andar"
-              : "Adicionar andar"}
+            {form.id ? "Atualizar andar" : "Adicionar andar"}
           </button>
 
           {form.id && (
             <button
               type="button"
-              onClick={() =>
-                setForm(
-                  campoAndarVazio()
-                )
-              }
+              onClick={() => setForm(campoAndarVazio())}
               className="rounded-2xl border border-slate-200 px-4 py-3 font-black text-slate-700"
             >
               Limpar
@@ -2685,86 +1732,44 @@ function ModalAndares({
         </div>
 
         <div className="mt-5 divide-y rounded-2xl border border-slate-100">
-          {ordenarAndares(
-            andares
-          )
-            .reverse()
-            .map(
-              (
-                andar
-              ) => (
-                <div
-                  key={
-                    andar.id
-                  }
-                  className="flex items-center justify-between gap-3 p-3"
+          {ordenarAndares(andares).reverse().map((andar) => (
+            <div
+              key={andar.id}
+              className="flex items-center justify-between gap-3 p-3"
+            >
+              <button
+                type="button"
+                onClick={() => setForm({ ...andar })}
+                className="flex-1 text-left"
+              >
+                <p className="font-black text-slate-900">
+                  {andar.nome}
+                </p>
+
+                <p className="text-xs text-slate-400">
+                  Ordem {andar.ordem} · {andar.categoria || "-"}
+                </p>
+              </button>
+
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...andar })}
+                  className="rounded-xl p-2 text-blue-600 hover:bg-blue-50"
                 >
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setForm({
-                        ...andar,
-                      })
-                    }
-                    className="flex-1 text-left"
-                  >
-                    <p className="font-black text-slate-900">
-                      {
-                        andar.nome
-                      }
-                    </p>
+                  <Edit3 size={16} />
+                </button>
 
-                    <p className="text-xs text-slate-400">
-                      Ordem{" "}
-                      {
-                        andar.ordem
-                      }{" "}
-                      · categoria{" "}
-                      {
-                        andar.categoria ||
-                        "-"
-                      }{" "}
-                      · altura{" "}
-                      {
-                        andar.altura
-                      }
-                    </p>
-                  </button>
-
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setForm({
-                          ...andar,
-                        })
-                      }
-                      className="rounded-xl p-2 text-blue-600 hover:bg-blue-50"
-                      title="Editar andar"
-                    >
-                      <Edit3
-                        size={16}
-                      />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onExcluir(
-                          andar
-                        )
-                      }
-                      className="rounded-xl p-2 text-rose-600 hover:bg-rose-50"
-                      title="Remover andar"
-                    >
-                      <Trash2
-                        size={16}
-                      />
-                    </button>
-                  </div>
-                </div>
-              )
-            )}
+                <button
+                  type="button"
+                  onClick={() => onExcluir(andar)}
+                  className="rounded-xl p-2 text-rose-600 hover:bg-rose-50"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -2778,32 +1783,13 @@ function CadastroLocal({
   onSalvar,
   onCancelarEdicao,
 }) {
-  const [
-    form,
-    setForm,
-  ] =
-    useState(
-      campoLocalVazio()
-    );
+  const [form, setForm] = useState(campoLocalVazio());
 
   useEffect(() => {
-    setForm(
-      localEditando
-        ? {
-            ...localEditando,
-          }
-        : campoLocalVazio()
-    );
-  }, [
-    localEditando?.id,
-    andarSelecionado?.id,
-  ]);
+    setForm(localEditando ? { ...localEditando } : campoLocalVazio());
+  }, [localEditando?.id, andarSelecionado?.id]);
 
-  if (
-    !andarSelecionado
-  ) {
-    return null;
-  }
+  if (!andarSelecionado) return null;
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -2814,166 +1800,84 @@ function CadastroLocal({
       </h3>
 
       <p className="mt-1 text-sm text-slate-500">
-        Andar selecionado:{" "}
-        <strong>
-          {
-            andarSelecionado.nome
-          }
-        </strong>
+        Pavimento selecionado: <strong>{andarSelecionado.nome}</strong>
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <input
-          value={
-            form.nome
-          }
+          value={form.nome}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                nome:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              nome: event.target.value,
+            }))
           }
           placeholder="Nome"
           className="rounded-2xl border border-slate-200 p-3 text-sm"
         />
 
         <select
-          value={
-            form.tipo
-          }
+          value={form.tipo}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                tipo:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              tipo: event.target.value,
+            }))
           }
           className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
         >
-          {TIPOS_LOCAL.map(
-            (
-              tipo
-            ) => (
-              <option
-                key={
-                  tipo
-                }
-              >
-                {
-                  tipo
-                }
-              </option>
-            )
-          )}
+          {TIPOS_LOCAL.map((tipo) => (
+            <option key={tipo}>{tipo}</option>
+          ))}
         </select>
 
         <input
-          value={
-            form.responsavel
-          }
+          value={form.responsavel}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                responsavel:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              responsavel: event.target.value,
+            }))
           }
           placeholder="Responsável"
           className="rounded-2xl border border-slate-200 p-3 text-sm"
         />
 
         <select
-          value={
-            form.status
-          }
+          value={form.status}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                status:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              status: event.target.value,
+            }))
           }
           className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
         >
-          <option>
-            Ativo
-          </option>
-
-          <option>
-            Atenção
-          </option>
-
-          <option>
-            Manutenção
-          </option>
-
-          <option>
-            Inativo
-          </option>
+          <option>Ativo</option>
+          <option>Atenção</option>
+          <option>Manutenção</option>
+          <option>Inativo</option>
         </select>
 
         <textarea
-          value={
-            form.descricao
-          }
+          value={form.descricao}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                descricao:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              descricao: event.target.value,
+            }))
           }
           placeholder="Descrição"
           className="min-h-[74px] rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
         />
 
         <textarea
-          value={
-            form.observacao
-          }
+          value={form.observacao}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                observacao:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              observacao: event.target.value,
+            }))
           }
           placeholder="Observações operacionais"
           className="min-h-[64px] rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
@@ -2984,44 +1888,26 @@ function CadastroLocal({
         <button
           type="button"
           onClick={async () => {
-            await onSalvar(
-              form
-            );
-
-            setForm(
-              campoLocalVazio()
-            );
+            await onSalvar(form);
+            setForm(campoLocalVazio());
           }}
-          disabled={
-            salvando ||
-            !form.nome
-          }
+          disabled={salvando || !form.nome}
           className="flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 font-black text-white disabled:opacity-50"
         >
           {salvando ? (
-            <Loader2
-              size={18}
-              className="animate-spin"
-            />
+            <Loader2 size={18} className="animate-spin" />
           ) : (
-            <Save
-              size={18}
-            />
+            <Save size={18} />
           )}
 
-          {form.id
-            ? "Atualizar"
-            : "Salvar"}
+          {form.id ? "Atualizar" : "Salvar"}
         </button>
 
         {form.id && (
           <button
             type="button"
             onClick={() => {
-              setForm(
-                campoLocalVazio()
-              );
-
+              setForm(campoLocalVazio());
               onCancelarEdicao();
             }}
             className="rounded-2xl border border-slate-200 px-4 py-3 font-black text-slate-700"
@@ -3043,42 +1929,20 @@ function CadastroItemExterno({
   onExcluir,
   onNovo,
 }) {
-  const [
-    form,
-    setForm,
-  ] =
-    useState(
-      campoItemVazio()
-    );
+  const [form, setForm] = useState(campoItemVazio());
 
   useEffect(() => {
-    setForm(
-      itemSelecionado
-        ? {
-            ...itemSelecionado,
-          }
-        : campoItemVazio()
-    );
-  }, [
-    itemSelecionado?.id,
-  ]);
+    setForm(itemSelecionado ? { ...itemSelecionado } : campoItemVazio());
+  }, [itemSelecionado?.id]);
 
   useEffect(() => {
-    if (
-      posicionamento.coordenadas
-    ) {
-      setForm(
-        (
-          valor
-        ) => ({
-          ...valor,
-          ...posicionamento.coordenadas,
-        })
-      );
+    if (posicionamento.coordenadas) {
+      setForm((valor) => ({
+        ...valor,
+        ...posicionamento.coordenadas,
+      }));
     }
-  }, [
-    posicionamento.coordenadas,
-  ]);
+  }, [posicionamento.coordenadas]);
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -3096,249 +1960,121 @@ function CadastroItemExterno({
         <button
           type="button"
           onClick={() => {
-            setForm(
-              campoItemVazio()
-            );
-
+            setForm(campoItemVazio());
             onNovo();
           }}
           className="rounded-xl p-2 text-blue-600 hover:bg-blue-50"
-          title="Novo item externo"
         >
-          <Plus
-            size={18}
-          />
+          <Plus size={18} />
         </button>
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <input
-          value={
-            form.nome
-          }
+          value={form.nome}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                nome:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              nome: event.target.value,
+            }))
           }
           placeholder="Nome do item"
           className="rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
         />
 
         <select
-          value={
-            form.categoria
-          }
+          value={form.categoria}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                categoria:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              categoria: event.target.value,
+            }))
           }
           className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
         >
-          {CATEGORIAS_ITEM.map(
-            (
-              categoria
-            ) => (
-              <option
-                key={
-                  categoria
-                }
-              >
-                {
-                  categoria
-                }
-              </option>
-            )
-          )}
+          {CATEGORIAS_ITEM.map((categoria) => (
+            <option key={categoria}>{categoria}</option>
+          ))}
         </select>
 
         <select
-          value={
-            form.status
-          }
+          value={form.status}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                status:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              status: event.target.value,
+            }))
           }
           className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
         >
-          <option>
-            Ativo
-          </option>
-
-          <option>
-            Atenção
-          </option>
-
-          <option>
-            Manutenção
-          </option>
-
-          <option>
-            Inativo
-          </option>
+          <option>Ativo</option>
+          <option>Atenção</option>
+          <option>Manutenção</option>
+          <option>Inativo</option>
         </select>
 
         <select
-          value={
-            form.lado
-          }
+          value={form.lado}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                lado:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              lado: event.target.value,
+            }))
           }
           className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
         >
-          {LADOS_EXTERNOS.map(
-            (
-              opcao
-            ) => (
-              <option
-                key={
-                  opcao.value
-                }
-                value={
-                  opcao.value
-                }
-              >
-                {
-                  opcao.label
-                }
-              </option>
-            )
-          )}
+          {LADOS_EXTERNOS.map((opcao) => (
+            <option key={opcao.value} value={opcao.value}>
+              {opcao.label}
+            </option>
+          ))}
         </select>
 
         <select
-          value={
-            form.tipoVisual
-          }
+          value={form.tipoVisual}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                tipoVisual:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              tipoVisual: event.target.value,
+            }))
           }
           className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
         >
-          {TIPOS_VISUAIS.map(
-            (
-              opcao
-            ) => (
-              <option
-                key={
-                  opcao.value
-                }
-                value={
-                  opcao.value
-                }
-              >
-                {
-                  opcao.label
-                }
-              </option>
-            )
-          )}
+          {TIPOS_VISUAIS.map((opcao) => (
+            <option key={opcao.value} value={opcao.value}>
+              {opcao.label}
+            </option>
+          ))}
         </select>
 
         <select
-          value={
-            form.modoImplantacao
-          }
+          value={form.modoImplantacao}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                modoImplantacao:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              modoImplantacao: event.target.value,
+            }))
           }
           className="rounded-2xl border border-slate-200 bg-white p-3 text-sm md:col-span-2"
         >
-          {MODOS_IMPLANTACAO.map(
-            (
-              opcao
-            ) => (
-              <option
-                key={
-                  opcao.value
-                }
-                value={
-                  opcao.value
-                }
-              >
-                {
-                  opcao.label
-                }
-              </option>
-            )
-          )}
+          {MODOS_IMPLANTACAO.map((opcao) => (
+            <option key={opcao.value} value={opcao.value}>
+              {opcao.label}
+            </option>
+          ))}
         </select>
 
         <div className="md:col-span-2">
           <button
             type="button"
-            onClick={() =>
-              onAtivarPosicionamento(
-                form.lado
-              )
-            }
+            onClick={() => onAtivarPosicionamento(form.lado)}
             className={`flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3 text-sm font-black ${
               posicionamento.ativo
                 ? "border-cyan-300 bg-cyan-50 text-cyan-800"
                 : "border-blue-200 bg-blue-50 text-blue-700"
             }`}
           >
-            <MousePointer2
-              size={17}
-            />
+            <MousePointer2 size={17} />
 
             {posicionamento.ativo
               ? "Clique no terreno do mapa"
@@ -3348,141 +2084,70 @@ function CadastroItemExterno({
 
         <div className="grid grid-cols-3 gap-2 md:col-span-2">
           {[
-            [
-              "x",
-              "X",
-            ],
-            [
-              "y",
-              "Y",
-            ],
-            [
-              "z",
-              "Z",
-            ],
-          ].map(
-            ([
-              campo,
-              rotulo,
-            ]) => (
-              <label
-                key={
-                  campo
-                }
-                className="text-xs font-bold text-slate-500"
-              >
-                {
-                  rotulo
-                }
+            ["x", "X"],
+            ["y", "Y"],
+            ["z", "Z"],
+          ].map(([campo, rotulo]) => (
+            <label
+              key={campo}
+              className="text-xs font-bold text-slate-500"
+            >
+              {rotulo}
 
-                <input
-                  value={
-                    form[
-                      campo
-                    ]
-                  }
-                  onChange={(event) =>
-                    setForm(
-                      (
-                        valor
-                      ) => ({
-                        ...valor,
-                        [campo]:
-                          Number(
-                            event
-                              .target
-                              .value
-                          ),
-                      })
-                    )
-                  }
-                  type="number"
-                  step="0.1"
-                  className="mt-1 w-full rounded-xl border border-slate-200 p-2 text-sm"
-                />
-              </label>
-            )
-          )}
+              <input
+                value={form[campo]}
+                onChange={(event) =>
+                  setForm((valor) => ({
+                    ...valor,
+                    [campo]: Number(event.target.value),
+                  }))
+                }
+                type="number"
+                step="0.1"
+                className="mt-1 w-full rounded-xl border border-slate-200 p-2 text-sm"
+              />
+            </label>
+          ))}
         </div>
 
         <div className="grid grid-cols-3 gap-2 md:col-span-2">
           {[
-            [
-              "largura",
-              "Largura",
-            ],
-            [
-              "altura",
-              "Altura",
-            ],
-            [
-              "profundidade",
-              "Profund.",
-            ],
-          ].map(
-            ([
-              campo,
-              rotulo,
-            ]) => (
-              <label
-                key={
-                  campo
-                }
-                className="text-xs font-bold text-slate-500"
-              >
-                {
-                  rotulo
-                }
+            ["largura", "Largura"],
+            ["altura", "Altura"],
+            ["profundidade", "Profund."],
+          ].map(([campo, rotulo]) => (
+            <label
+              key={campo}
+              className="text-xs font-bold text-slate-500"
+            >
+              {rotulo}
 
-                <input
-                  value={
-                    form[
-                      campo
-                    ]
-                  }
-                  onChange={(event) =>
-                    setForm(
-                      (
-                        valor
-                      ) => ({
-                        ...valor,
-                        [campo]:
-                          Number(
-                            event
-                              .target
-                              .value
-                          ),
-                      })
-                    )
-                  }
-                  type="number"
-                  step="0.1"
-                  className="mt-1 w-full rounded-xl border border-slate-200 p-2 text-sm"
-                />
-              </label>
-            )
-          )}
+              <input
+                value={form[campo]}
+                onChange={(event) =>
+                  setForm((valor) => ({
+                    ...valor,
+                    [campo]: Number(event.target.value),
+                  }))
+                }
+                type="number"
+                step="0.1"
+                className="mt-1 w-full rounded-xl border border-slate-200 p-2 text-sm"
+              />
+            </label>
+          ))}
         </div>
 
         <label className="text-xs font-bold text-slate-500">
           Cor
 
           <input
-            value={
-              form.cor
-            }
+            value={form.cor}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  cor:
-                    event
-                      .target
-                      .value,
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                cor: event.target.value,
+              }))
             }
             type="color"
             className="mt-1 h-[42px] w-full rounded-xl border border-slate-200 p-2"
@@ -3493,23 +2158,12 @@ function CadastroItemExterno({
           Ordem
 
           <input
-            value={
-              form.ordem
-            }
+            value={form.ordem}
             onChange={(event) =>
-              setForm(
-                (
-                  valor
-                ) => ({
-                  ...valor,
-                  ordem:
-                    Number(
-                      event
-                        .target
-                        .value
-                    ),
-                })
-              )
+              setForm((valor) => ({
+                ...valor,
+                ordem: Number(event.target.value),
+              }))
             }
             type="number"
             className="mt-1 w-full rounded-xl border border-slate-200 p-2 text-sm"
@@ -3517,42 +2171,24 @@ function CadastroItemExterno({
         </label>
 
         <textarea
-          value={
-            form.descricao
-          }
+          value={form.descricao}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                descricao:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              descricao: event.target.value,
+            }))
           }
           placeholder="Descrição"
           className="min-h-[70px] rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
         />
 
         <textarea
-          value={
-            form.observacao
-          }
+          value={form.observacao}
           onChange={(event) =>
-            setForm(
-              (
-                valor
-              ) => ({
-                ...valor,
-                observacao:
-                  event
-                    .target
-                    .value,
-              })
-            )
+            setForm((valor) => ({
+              ...valor,
+              observacao: event.target.value,
+            }))
           }
           placeholder="Observação"
           className="min-h-[58px] rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
@@ -3562,47 +2198,26 @@ function CadastroItemExterno({
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() =>
-            onSalvar(
-              form
-            )
-          }
-          disabled={
-            salvando ||
-            !form.nome
-          }
+          onClick={() => onSalvar(form)}
+          disabled={salvando || !form.nome}
           className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 font-black text-white disabled:opacity-50"
         >
           {salvando ? (
-            <Loader2
-              size={17}
-              className="animate-spin"
-            />
+            <Loader2 size={17} className="animate-spin" />
           ) : (
-            <Save
-              size={17}
-            />
+            <Save size={17} />
           )}
 
-          {form.id
-            ? "Atualizar item"
-            : "Adicionar item"}
+          {form.id ? "Atualizar item" : "Adicionar item"}
         </button>
 
         {form.id && (
           <button
             type="button"
-            onClick={() =>
-              onExcluir(
-                form
-              )
-            }
+            onClick={() => onExcluir(form)}
             className="flex items-center gap-2 rounded-2xl bg-rose-50 px-4 py-3 font-black text-rose-700"
           >
-            <Trash2
-              size={17}
-            />
-
+            <Trash2 size={17} />
             Remover
           </button>
         )}
@@ -3618,20 +2233,11 @@ function ArquivosEntidade({
   onUpload,
   onExcluir,
 }) {
-  const cameraInput =
-    useRef(null);
+  const cameraInput = useRef(null);
+  const fotoInput = useRef(null);
+  const plantaInput = useRef(null);
 
-  const fotoInput =
-    useRef(null);
-
-  const plantaInput =
-    useRef(null);
-
-  if (
-    !entidade
-  ) {
-    return null;
-  }
+  if (!entidade) return null;
 
   return (
     <div className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
@@ -3640,206 +2246,132 @@ function ArquivosEntidade({
       </p>
 
       <h3 className="mt-1 font-black text-slate-900">
-        {
-          entidade
-            .dados
-            .nome
-        }
+        {entidade.dados.nome}
       </h3>
 
       <div className="mt-4 grid gap-2">
         <button
           type="button"
-          onClick={() =>
-            cameraInput
-              .current
-              ?.click()
-          }
+          onClick={() => cameraInput.current?.click()}
           className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
         >
-          <Camera
-            size={17}
-          />
-
+          <Camera size={17} />
           Abrir câmera
         </button>
 
         <button
           type="button"
-          onClick={() =>
-            fotoInput
-              .current
-              ?.click()
-          }
+          onClick={() => fotoInput.current?.click()}
           className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
         >
-          <ImagePlus
-            size={17}
-          />
-
+          <ImagePlus size={17} />
           Adicionar foto
         </button>
 
         <button
           type="button"
-          onClick={() =>
-            plantaInput
-              .current
-              ?.click()
-          }
+          onClick={() => plantaInput.current?.click()}
           className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
         >
-          <FileText
-            size={17}
-          />
-
+          <FileText size={17} />
           Adicionar planta ou PDF
         </button>
 
         <input
-          ref={
-            cameraInput
-          }
+          ref={cameraInput}
           type="file"
           accept="image/*"
           capture="environment"
           className="hidden"
           onChange={(event) =>
-            onUpload(
-              event
-                .target
-                .files?.[0],
-              "foto"
-            )
+            onUpload(event.target.files?.[0], "foto")
           }
         />
 
         <input
-          ref={
-            fotoInput
-          }
+          ref={fotoInput}
           type="file"
           accept="image/*"
           className="hidden"
           onChange={(event) =>
-            onUpload(
-              event
-                .target
-                .files?.[0],
-              "foto"
-            )
+            onUpload(event.target.files?.[0], "foto")
           }
         />
 
         <input
-          ref={
-            plantaInput
-          }
+          ref={plantaInput}
           type="file"
           accept=".pdf,image/*"
           className="hidden"
           onChange={(event) =>
-            onUpload(
-              event
-                .target
-                .files?.[0],
-              "planta"
-            )
+            onUpload(event.target.files?.[0], "planta")
           }
         />
       </div>
 
       {salvando && (
         <div className="mt-3 flex items-center gap-2 text-sm font-bold text-blue-700">
-          <Loader2
-            size={15}
-            className="animate-spin"
-          />
-
+          <Loader2 size={15} className="animate-spin" />
           Enviando arquivo...
         </div>
       )}
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        {arquivos.map(
-          (
-            arquivo
-          ) => (
-            <div
-              key={
-                arquivo.id
-              }
-              className="group relative overflow-hidden rounded-2xl border border-slate-100 bg-slate-50"
-            >
-              {arquivo.tipoArquivo ===
-              "foto" ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    window.open(
-                      arquivo.urlPublica,
-                      "_blank",
-                      "noopener,noreferrer"
-                    )
-                  }
-                  className="block w-full"
-                >
-                  <img
-                    src={
-                      arquivo.urlPublica
-                    }
-                    alt={
-                      arquivo.nome
-                    }
-                    className="h-24 w-full object-cover"
-                  />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() =>
-                    window.open(
-                      arquivo.urlPublica,
-                      "_blank",
-                      "noopener,noreferrer"
-                    )
-                  }
-                  className="flex h-24 w-full flex-col items-center justify-center gap-1 p-2 text-center"
-                >
-                  <FileText
-                    size={22}
-                    className="text-rose-500"
-                  />
-
-                  <span className="line-clamp-2 text-[10px] font-bold text-slate-700">
-                    {
-                      arquivo.nome
-                    }
-                  </span>
-                </button>
-              )}
-
+        {arquivos.map((arquivo) => (
+          <div
+            key={arquivo.id}
+            className="group relative overflow-hidden rounded-2xl border border-slate-100 bg-slate-50"
+          >
+            {arquivo.tipoArquivo === "foto" ? (
               <button
                 type="button"
                 onClick={() =>
-                  onExcluir(
-                    arquivo
+                  window.open(
+                    arquivo.urlPublica,
+                    "_blank",
+                    "noopener,noreferrer"
                   )
                 }
-                className="absolute right-1 top-1 rounded-lg bg-slate-950/70 p-1 text-white opacity-0 transition group-hover:opacity-100"
-                title="Excluir arquivo"
+                className="block w-full"
               >
-                <Trash2
-                  size={12}
+                <img
+                  src={arquivo.urlPublica}
+                  alt={arquivo.nome}
+                  className="h-24 w-full object-cover"
                 />
               </button>
-            </div>
-          )
-        )}
+            ) : (
+              <button
+                type="button"
+                onClick={() =>
+                  window.open(
+                    arquivo.urlPublica,
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
+                className="flex h-24 w-full flex-col items-center justify-center gap-1 p-2 text-center"
+              >
+                <FileText size={22} className="text-rose-500" />
+
+                <span className="line-clamp-2 text-[10px] font-bold text-slate-700">
+                  {arquivo.nome}
+                </span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onExcluir(arquivo)}
+              className="absolute right-1 top-1 rounded-lg bg-slate-950/70 p-1 text-white opacity-0 transition group-hover:opacity-100"
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+        ))}
       </div>
 
-      {arquivos.length ===
-        0 && (
+      {arquivos.length === 0 && (
         <p className="mt-4 text-sm text-slate-400">
           Nenhum arquivo associado ainda.
         </p>
@@ -3858,9 +2390,7 @@ function PainelDetalhes({
   onExcluirLocal,
   onSelecionarLocal,
 }) {
-  if (
-    !entidade
-  ) {
+  if (!entidade) {
     return (
       <div className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-sm">
         <p className="text-sm text-slate-500">
@@ -3875,94 +2405,60 @@ function PainelDetalhes({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-black uppercase text-slate-400">
-            {entidade.tipo ===
-            "andar"
-              ? "Andar selecionado"
-              : entidade.tipo ===
-                "item_externo"
+            {entidade.tipo === "andar"
+              ? "Pavimento selecionado"
+              : entidade.tipo === "item_externo"
               ? "Item externo selecionado"
               : "Local selecionado"}
           </p>
 
           <h2 className="mt-1 text-2xl font-black text-slate-900">
-            {
-              entidade
-                .dados
-                .nome
-            }
+            {entidade.dados.nome}
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            {entidade
-              .dados
-              .descricao ||
-              entidade
-                .dados
-                .observacao ||
+            {entidade.dados.descricao ||
+              entidade.dados.observacao ||
               "Sem observações cadastradas."}
           </p>
         </div>
 
         <button
           type="button"
-          onClick={
-            onFechar
-          }
+          onClick={onFechar}
           className="rounded-xl p-2 hover:bg-slate-100"
         >
-          <Minimize2
-            size={18}
-          />
+          <Minimize2 size={18} />
         </button>
       </div>
 
       {itemSelecionado && (
         <div className="mt-4 grid grid-cols-2 gap-2 rounded-3xl border border-slate-100 bg-slate-50 p-3 text-xs">
           <div>
-            <p className="text-slate-400">
-              Lado
-            </p>
-
+            <p className="text-slate-400">Lado</p>
             <p className="font-black text-slate-800">
-              {
-                itemSelecionado.lado
-              }
+              {itemSelecionado.lado}
             </p>
           </div>
 
           <div>
-            <p className="text-slate-400">
-              Implantação
-            </p>
-
+            <p className="text-slate-400">Implantação</p>
             <p className="font-black text-slate-800">
-              {
-                itemSelecionado.modoImplantacao
-              }
+              {itemSelecionado.modoImplantacao}
             </p>
           </div>
 
           <div>
-            <p className="text-slate-400">
-              Formato
-            </p>
-
+            <p className="text-slate-400">Formato</p>
             <p className="font-black text-slate-800">
-              {
-                itemSelecionado.tipoVisual
-              }
+              {itemSelecionado.tipoVisual}
             </p>
           </div>
 
           <div>
-            <p className="text-slate-400">
-              Status
-            </p>
-
+            <p className="text-slate-400">Status</p>
             <p className="font-black text-slate-800">
-              {
-                itemSelecionado.status
-              }
+              {itemSelecionado.status}
             </p>
           </div>
         </div>
@@ -3971,102 +2467,65 @@ function PainelDetalhes({
       {andarSelecionado && (
         <div className="mt-4 overflow-hidden rounded-3xl border border-slate-100">
           <div className="bg-slate-50 px-4 py-3 font-black text-slate-800">
-            O que tem neste andar
+            O que existe neste pavimento
           </div>
 
           <div className="max-h-[360px] divide-y divide-slate-100 overflow-auto">
-            {locaisSelecionados.length ===
-              0 && (
+            {locaisSelecionados.length === 0 && (
               <div className="p-4 text-sm text-slate-400">
                 Nenhum local ou equipamento cadastrado.
               </div>
             )}
 
-            {locaisSelecionados.map(
-              (
-                local
-              ) => (
-                <div
-                  key={
-                    local.id
-                  }
-                  className="p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
+            {locaisSelecionados.map((local) => (
+              <div key={local.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => onSelecionarLocal(local)}
+                    className="flex-1 text-left"
+                  >
+                    <p className="font-black text-slate-900">
+                      {local.nome}
+                    </p>
+
+                    <p className="text-xs font-bold text-blue-700">
+                      {local.tipo}
+                    </p>
+
+                    {local.descricao && (
+                      <p className="mt-1 text-sm text-slate-500">
+                        {local.descricao}
+                      </p>
+                    )}
+
+                    {local.responsavel && (
+                      <p className="mt-1 text-xs text-slate-400">
+                        Responsável: {local.responsavel}
+                      </p>
+                    )}
+                  </button>
+
+                  <div className="flex gap-1">
                     <button
                       type="button"
-                      onClick={() =>
-                        onSelecionarLocal(
-                          local
-                        )
-                      }
-                      className="flex-1 text-left"
+                      onClick={() => onEditarLocal(local)}
+                      className="rounded-xl p-2 text-blue-600 hover:bg-blue-50"
                     >
-                      <p className="font-black text-slate-900">
-                        {
-                          local.nome
-                        }
-                      </p>
-
-                      <p className="text-xs font-bold text-blue-700">
-                        {
-                          local.tipo
-                        }
-                      </p>
-
-                      {local.descricao && (
-                        <p className="mt-1 text-sm text-slate-500">
-                          {
-                            local.descricao
-                          }
-                        </p>
-                      )}
-
-                      {local.responsavel && (
-                        <p className="mt-1 text-xs text-slate-400">
-                          Responsável:{" "}
-                          {
-                            local.responsavel
-                          }
-                        </p>
-                      )}
+                      <Edit3 size={15} />
                     </button>
 
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onEditarLocal(
-                            local
-                          )
-                        }
-                        className="rounded-xl p-2 text-blue-600 hover:bg-blue-50"
-                        title="Editar"
-                      >
-                        <Edit3
-                          size={15}
-                        />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onExcluirLocal(
-                            local
-                          )
-                        }
-                        className="rounded-xl p-2 text-rose-600 hover:bg-rose-50"
-                        title="Excluir"
-                      >
-                        <Trash2
-                          size={15}
-                        />
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onExcluirLocal(local)}
+                      className="rounded-xl p-2 text-rose-600 hover:bg-rose-50"
+                    >
+                      <Trash2 size={15} />
+                    </button>
                   </div>
                 </div>
-              )
-            )}
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -4075,171 +2534,59 @@ function PainelDetalhes({
 }
 
 export default function Mapa3D() {
-  const [
-    andares,
-    setAndares,
-  ] =
-    useState([]);
+  const [andares, setAndares] = useState([]);
+  const [locais, setLocais] = useState([]);
+  const [itensExternos, setItensExternos] = useState([]);
+  const [arquivos, setArquivos] = useState([]);
 
-  const [
-    locais,
-    setLocais,
-  ] =
-    useState([]);
+  const [andarSelecionado, setAndarSelecionado] = useState(null);
+  const [itemSelecionado, setItemSelecionado] = useState(null);
+  const [localSelecionado, setLocalSelecionado] = useState(null);
+  const [localEditando, setLocalEditando] = useState(null);
+  const [entidadeSelecionada, setEntidadeSelecionada] = useState(null);
 
-  const [
-    itensExternos,
-    setItensExternos,
-  ] =
-    useState([]);
+  const [camada, setCamada] = useState("geral");
+  const [painelAberto, setPainelAberto] = useState(true);
+  const [menuCamadasAberto, setMenuCamadasAberto] = useState(true);
+  const [modalAndaresAberto, setModalAndaresAberto] = useState(false);
+  const [cadastroExternoAberto, setCadastroExternoAberto] = useState(false);
 
-  const [
-    arquivos,
-    setArquivos,
-  ] =
-    useState([]);
+  const [posicionamento, setPosicionamento] = useState({
+    ativo: false,
+    lado: "frente",
+    coordenadas: null,
+  });
 
-  const [
-    andarSelecionado,
-    setAndarSelecionado,
-  ] =
-    useState(null);
-
-  const [
-    itemSelecionado,
-    setItemSelecionado,
-  ] =
-    useState(null);
-
-  const [
-    localSelecionado,
-    setLocalSelecionado,
-  ] =
-    useState(null);
-
-  const [
-    localEditando,
-    setLocalEditando,
-  ] =
-    useState(null);
-
-  const [
-    entidadeSelecionada,
-    setEntidadeSelecionada,
-  ] =
-    useState(null);
-
-  const [
-    camada,
-    setCamada,
-  ] =
-    useState("geral");
-
-  const [
-    painelAberto,
-    setPainelAberto,
-  ] =
-    useState(true);
-
-  const [
-    menuCamadasAberto,
-    setMenuCamadasAberto,
-  ] =
-    useState(true);
-
-  const [
-    modalAndaresAberto,
-    setModalAndaresAberto,
-  ] =
-    useState(false);
-
-  const [
-    cadastroExternoAberto,
-    setCadastroExternoAberto,
-  ] =
-    useState(false);
-
-  const [
-    posicionamento,
-    setPosicionamento,
-  ] =
-    useState({
-      ativo: false,
-      lado: "frente",
-      coordenadas: null,
-    });
-
-  const [
-    carregando,
-    setCarregando,
-  ] =
-    useState(true);
-
-  const [
-    salvando,
-    setSalvando,
-  ] =
-    useState(false);
-
-  const [
-    erro,
-    setErro,
-  ] =
-    useState("");
-
-  const [
-    resetCamera,
-    setResetCamera,
-  ] =
-    useState(0);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [resetCamera, setResetCamera] = useState(0);
 
   const andaresOrdenados =
     useMemo(
-      () =>
-        ordenarAndares(
-          andares
-        ),
-      [
-        andares,
-      ]
+      () => ordenarAndares(andares),
+      [andares]
     );
 
   const itensOrdenados =
     useMemo(
-      () =>
-        ordenarItens(
-          itensExternos
-        ),
-      [
-        itensExternos,
-      ]
+      () => ordenarItens(itensExternos),
+      [itensExternos]
     );
 
   const locaisSelecionados =
     useMemo(() => {
-      if (
-        !andarSelecionado
-      ) {
-        return [];
-      }
+      if (!andarSelecionado) return [];
 
       return locaisDoAndar(
         locais,
         andarSelecionado.id
       );
-    }, [
-      andarSelecionado,
-      locais,
-    ]);
+    }, [andarSelecionado, locais]);
 
-  async function carregarArquivos(
-    entidade
-  ) {
-    if (
-      !entidade?.dados?.id
-    ) {
+  async function carregarArquivos(entidade) {
+    if (!entidade?.dados?.id) {
       setArquivos([]);
-
       return;
     }
 
@@ -4247,20 +2594,12 @@ export default function Mapa3D() {
       const lista =
         await listarArquivosMapa3DPorEntidade(
           entidade.tipo,
-          entidade
-            .dados
-            .id
+          entidade.dados.id
         );
 
-      setArquivos(
-        lista
-      );
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+      setArquivos(lista);
+    } catch (error) {
+      console.error(error);
 
       setErro(
         "Não foi possível carregar os arquivos associados."
@@ -4269,10 +2608,7 @@ export default function Mapa3D() {
   }
 
   async function carregar() {
-    setCarregando(
-      true
-    );
-
+    setCarregando(true);
     setErro("");
 
     try {
@@ -4287,17 +2623,9 @@ export default function Mapa3D() {
           listarItensExternosMapa3D(),
         ]);
 
-      setAndares(
-        listaAndares
-      );
-
-      setLocais(
-        listaLocais
-      );
-
-      setItensExternos(
-        listaItens
-      );
+      setAndares(listaAndares);
+      setLocais(listaLocais);
+      setItensExternos(listaItens);
 
       if (
         !entidadeSelecionada &&
@@ -4305,33 +2633,21 @@ export default function Mapa3D() {
       ) {
         const terreo =
           listaAndares.find(
-            (
-              andar
-            ) =>
-              Number(
-                andar.ordem
-              ) === 0
+            (andar) =>
+              Number(andar.ordem) === 0
           ) ||
           listaAndares[0];
 
-        await selecionarAndar(
-          terreo
-        );
+        await selecionarAndar(terreo);
       }
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
-        "Não foi possível carregar o Mapa 3D. Confira o Supabase."
+        "Não foi possível carregar o Mapa 3D. Confira a conexão com o Supabase."
       );
     } finally {
-      setCarregando(
-        false
-      );
+      setCarregando(false);
     }
   }
 
@@ -4340,10 +2656,7 @@ export default function Mapa3D() {
   }, []);
 
   async function criarEstruturaBase() {
-    setSalvando(
-      true
-    );
-
+    setSalvando(true);
     setErro("");
 
     try {
@@ -4353,79 +2666,41 @@ export default function Mapa3D() {
       for (const andar of ANDARES_BASE) {
         const existente =
           atuais.some(
-            (
-              item
-            ) =>
-              Number(
-                item.ordem
-              ) ===
-              Number(
-                andar.ordem
-              )
+            (item) =>
+              Number(item.ordem) ===
+              Number(andar.ordem)
           );
 
-        if (
-          !existente
-        ) {
-          await criarAndarMapa3D(
-            andar
-          );
+        if (!existente) {
+          await criarAndarMapa3D(andar);
         }
       }
 
       await carregar();
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
         "Não foi possível criar a estrutura base."
       );
     } finally {
-      setSalvando(
-        false
-      );
+      setSalvando(false);
     }
   }
 
-  async function selecionarAndar(
-    andar
-  ) {
+  async function selecionarAndar(andar) {
     const entidade = {
       tipo: "andar",
       dados: andar,
     };
 
-    setAndarSelecionado(
-      andar
-    );
-
-    setItemSelecionado(
-      null
-    );
-
-    setLocalSelecionado(
-      null
-    );
-
-    setLocalEditando(
-      null
-    );
-
-    setEntidadeSelecionada(
-      entidade
-    );
-
-    setCadastroExternoAberto(
-      false
-    );
-
-    setPainelAberto(
-      true
-    );
+    setAndarSelecionado(andar);
+    setItemSelecionado(null);
+    setLocalSelecionado(null);
+    setLocalEditando(null);
+    setEntidadeSelecionada(entidade);
+    setCadastroExternoAberto(false);
+    setPainelAberto(true);
 
     setPosicionamento({
       ativo: false,
@@ -4433,300 +2708,173 @@ export default function Mapa3D() {
       coordenadas: null,
     });
 
-    await carregarArquivos(
-      entidade
-    );
+    await carregarArquivos(entidade);
   }
 
-  async function selecionarItem(
-    item
-  ) {
+  async function selecionarItem(item) {
     const entidade = {
       tipo: "item_externo",
       dados: item,
     };
 
-    setItemSelecionado(
-      item
-    );
-
-    setAndarSelecionado(
-      null
-    );
-
-    setLocalSelecionado(
-      null
-    );
-
-    setLocalEditando(
-      null
-    );
-
-    setEntidadeSelecionada(
-      entidade
-    );
-
-    setCadastroExternoAberto(
-      true
-    );
-
-    setPainelAberto(
-      true
-    );
+    setItemSelecionado(item);
+    setAndarSelecionado(null);
+    setLocalSelecionado(null);
+    setLocalEditando(null);
+    setEntidadeSelecionada(entidade);
+    setCadastroExternoAberto(true);
+    setPainelAberto(true);
 
     setPosicionamento({
       ativo: false,
-      lado:
-        item.lado ||
-        "frente",
+      lado: item.lado || "frente",
       coordenadas: null,
     });
 
-    await carregarArquivos(
-      entidade
-    );
+    await carregarArquivos(entidade);
   }
 
-  async function selecionarLocal(
-    local
-  ) {
+  async function selecionarLocal(local) {
     const entidade = {
       tipo: "local",
       dados: local,
     };
 
-    setLocalSelecionado(
-      local
-    );
+    setLocalSelecionado(local);
+    setEntidadeSelecionada(entidade);
+    setPainelAberto(true);
 
-    setEntidadeSelecionada(
-      entidade
-    );
-
-    setPainelAberto(
-      true
-    );
-
-    await carregarArquivos(
-      entidade
-    );
+    await carregarArquivos(entidade);
   }
 
-  async function salvarAndar(
-    form
-  ) {
-    setSalvando(
-      true
-    );
-
+  async function salvarAndar(form) {
+    setSalvando(true);
     setErro("");
 
     try {
-      if (
-        form.id
-      ) {
+      if (form.id) {
         const atualizado =
           await atualizarAndarMapa3D(
             form.id,
             form
           );
 
-        setAndares(
-          (
-            anteriores
-          ) =>
-            anteriores.map(
-              (
-                andar
-              ) =>
-                andar.id ===
-                atualizado.id
-                  ? atualizado
-                  : andar
-            )
+        setAndares((anteriores) =>
+          anteriores.map((andar) =>
+            andar.id === atualizado.id
+              ? atualizado
+              : andar
+          )
         );
 
-        if (
-          andarSelecionado?.id ===
-          atualizado.id
-        ) {
-          await selecionarAndar(
-            atualizado
-          );
+        if (andarSelecionado?.id === atualizado.id) {
+          await selecionarAndar(atualizado);
         }
       } else {
         const criado =
-          await criarAndarMapa3D(
-            form
-          );
+          await criarAndarMapa3D(form);
 
-        setAndares(
-          (
-            anteriores
-          ) =>
-            ordenarAndares([
-              ...anteriores,
-              criado,
-            ])
+        setAndares((anteriores) =>
+          ordenarAndares([
+            ...anteriores,
+            criado,
+          ])
         );
       }
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
-        "Não foi possível salvar o andar."
+        "Não foi possível salvar o pavimento."
       );
     } finally {
-      setSalvando(
-        false
-      );
+      setSalvando(false);
     }
   }
 
-  async function excluirAndar(
-    andar
-  ) {
+  async function excluirAndar(andar) {
     if (
       !window.confirm(
-        `Remover "${andar.nome}"? Os locais vinculados também serão removidos.`
+        `Remover "${andar.nome}"?`
       )
     ) {
       return;
     }
 
     try {
-      await excluirAndarMapa3D(
-        andar.id
+      await excluirAndarMapa3D(andar.id);
+
+      setAndares((anteriores) =>
+        anteriores.filter(
+          (item) =>
+            item.id !== andar.id
+        )
       );
 
-      setAndares(
-        (
-          anteriores
-        ) =>
-          anteriores.filter(
-            (
-              item
-            ) =>
-              item.id !==
-              andar.id
-          )
-      );
-
-      if (
-        andarSelecionado?.id ===
-        andar.id
-      ) {
-        setAndarSelecionado(
-          null
-        );
-
-        setEntidadeSelecionada(
-          null
-        );
-
+      if (andarSelecionado?.id === andar.id) {
+        setAndarSelecionado(null);
+        setEntidadeSelecionada(null);
         setArquivos([]);
       }
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
-        "Não foi possível remover o andar."
+        "Não foi possível remover o pavimento."
       );
     }
   }
 
-  async function salvarLocal(
-    form
-  ) {
-    if (
-      !andarSelecionado
-    ) {
-      return;
-    }
+  async function salvarLocal(form) {
+    if (!andarSelecionado) return;
 
-    setSalvando(
-      true
-    );
-
+    setSalvando(true);
     setErro("");
 
     try {
-      if (
-        form.id
-      ) {
+      if (form.id) {
         const atualizado =
           await atualizarLocalMapa3D(
             form.id,
             {
               ...form,
-              andarId:
-                andarSelecionado.id,
+              andarId: andarSelecionado.id,
             }
           );
 
-        setLocais(
-          (
-            anteriores
-          ) =>
-            anteriores.map(
-              (
-                local
-              ) =>
-                local.id ===
-                atualizado.id
-                  ? atualizado
-                  : local
-            )
+        setLocais((anteriores) =>
+          anteriores.map((local) =>
+            local.id === atualizado.id
+              ? atualizado
+              : local
+          )
         );
 
-        setLocalEditando(
-          null
-        );
+        setLocalEditando(null);
       } else {
         const criado =
           await criarLocalMapa3D({
             ...form,
-            andarId:
-              andarSelecionado.id,
+            andarId: andarSelecionado.id,
           });
 
-        setLocais(
-          (
-            anteriores
-          ) => [
-            criado,
-            ...anteriores,
-          ]
-        );
+        setLocais((anteriores) => [
+          criado,
+          ...anteriores,
+        ]);
       }
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
         "Não foi possível salvar o local ou equipamento."
       );
     } finally {
-      setSalvando(
-        false
-      );
+      setSalvando(false);
     }
   }
 
-  async function excluirLocal(
-    local
-  ) {
+  async function excluirLocal(local) {
     if (
       !window.confirm(
         `Excluir "${local.nome}"?`
@@ -4736,37 +2884,20 @@ export default function Mapa3D() {
     }
 
     try {
-      await excluirLocalMapa3D(
-        local.id
+      await excluirLocalMapa3D(local.id);
+
+      setLocais((anteriores) =>
+        anteriores.filter(
+          (item) =>
+            item.id !== local.id
+        )
       );
 
-      setLocais(
-        (
-          anteriores
-        ) =>
-          anteriores.filter(
-            (
-              item
-            ) =>
-              item.id !==
-              local.id
-          )
-      );
-
-      if (
-        localSelecionado?.id ===
-        local.id
-      ) {
-        await selecionarAndar(
-          andarSelecionado
-        );
+      if (localSelecionado?.id === local.id) {
+        await selecionarAndar(andarSelecionado);
       }
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
         "Não foi possível excluir o local."
@@ -4774,83 +2905,52 @@ export default function Mapa3D() {
     }
   }
 
-  async function salvarItemExterno(
-    form
-  ) {
-    setSalvando(
-      true
-    );
-
+  async function salvarItemExterno(form) {
+    setSalvando(true);
     setErro("");
 
     try {
-      if (
-        form.id
-      ) {
+      if (form.id) {
         const atualizado =
           await atualizarItemExternoMapa3D(
             form.id,
             form
           );
 
-        setItensExternos(
-          (
-            anteriores
-          ) =>
-            anteriores.map(
-              (
-                item
-              ) =>
-                item.id ===
-                atualizado.id
-                  ? atualizado
-                  : item
-            )
+        setItensExternos((anteriores) =>
+          anteriores.map((item) =>
+            item.id === atualizado.id
+              ? atualizado
+              : item
+          )
         );
 
-        await selecionarItem(
-          atualizado
-        );
+        await selecionarItem(atualizado);
       } else {
         const criado =
-          await criarItemExternoMapa3D(
-            form
-          );
+          await criarItemExternoMapa3D(form);
 
-        setItensExternos(
-          (
-            anteriores
-          ) =>
-            ordenarItens([
-              ...anteriores,
-              criado,
-            ])
+        setItensExternos((anteriores) =>
+          ordenarItens([
+            ...anteriores,
+            criado,
+          ])
         );
 
-        await selecionarItem(
-          criado
-        );
+        await selecionarItem(criado);
       }
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
         "Não foi possível salvar o item externo."
       );
     } finally {
-      setSalvando(
-        false
-      );
+      setSalvando(false);
     }
   }
 
-  async function excluirItemExterno(
-    item
-  ) {
+  async function excluirItemExterno(item) {
     if (
       !window.confirm(
         `Remover "${item.nome}"?`
@@ -4860,43 +2960,22 @@ export default function Mapa3D() {
     }
 
     try {
-      await excluirItemExternoMapa3D(
-        item.id
+      await excluirItemExternoMapa3D(item.id);
+
+      setItensExternos((anteriores) =>
+        anteriores.filter(
+          (atual) =>
+            atual.id !== item.id
+        )
       );
 
-      setItensExternos(
-        (
-          anteriores
-        ) =>
-          anteriores.filter(
-            (
-              atual
-            ) =>
-              atual.id !==
-              item.id
-          )
-      );
-
-      if (
-        itemSelecionado?.id ===
-        item.id
-      ) {
-        setItemSelecionado(
-          null
-        );
-
-        setEntidadeSelecionada(
-          null
-        );
-
+      if (itemSelecionado?.id === item.id) {
+        setItemSelecionado(null);
+        setEntidadeSelecionada(null);
         setArquivos([]);
       }
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
         "Não foi possível remover o item externo."
@@ -4908,60 +2987,36 @@ export default function Mapa3D() {
     arquivo,
     tipoArquivo
   ) {
-    if (
-      !arquivo ||
-      !entidadeSelecionada
-    ) {
-      return;
-    }
+    if (!arquivo || !entidadeSelecionada) return;
 
-    setSalvando(
-      true
-    );
-
+    setSalvando(true);
     setErro("");
 
     try {
       const criado =
         await criarArquivoMapa3D({
-          entidadeTipo:
-            entidadeSelecionada.tipo,
-          entidadeId:
-            entidadeSelecionada
-              .dados
-              .id,
+          entidadeTipo: entidadeSelecionada.tipo,
+          entidadeId: entidadeSelecionada.dados.id,
           tipoArquivo,
           arquivo,
         });
 
-      setArquivos(
-        (
-          anteriores
-        ) => [
-          criado,
-          ...anteriores,
-        ]
-      );
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+      setArquivos((anteriores) => [
+        criado,
+        ...anteriores,
+      ]);
+    } catch (error) {
+      console.error(error);
 
       setErro(
-        "Não foi possível enviar o arquivo. Confira o bucket mapa3d-arquivos no Supabase Storage."
+        "Não foi possível enviar o arquivo."
       );
     } finally {
-      setSalvando(
-        false
-      );
+      setSalvando(false);
     }
   }
 
-  async function excluirArquivo(
-    arquivo
-  ) {
+  async function excluirArquivo(arquivo) {
     if (
       !window.confirm(
         `Excluir "${arquivo.nome}"?`
@@ -4976,24 +3031,14 @@ export default function Mapa3D() {
         arquivo.caminhoStorage
       );
 
-      setArquivos(
-        (
-          anteriores
-        ) =>
-          anteriores.filter(
-            (
-              item
-            ) =>
-              item.id !==
-              arquivo.id
-          )
+      setArquivos((anteriores) =>
+        anteriores.filter(
+          (item) =>
+            item.id !== arquivo.id
+        )
       );
-    } catch (
-      error
-    ) {
-      console.error(
-        error
-      );
+    } catch (error) {
+      console.error(error);
 
       setErro(
         "Não foi possível excluir o arquivo."
@@ -5001,9 +3046,7 @@ export default function Mapa3D() {
     }
   }
 
-  function ativarPosicionamento(
-    lado
-  ) {
+  function ativarPosicionamento(lado) {
     setPosicionamento({
       ativo: true,
       lado,
@@ -5011,23 +3054,15 @@ export default function Mapa3D() {
     });
   }
 
-  function escolherPosicao(
-    coordenadas
-  ) {
-    setPosicionamento(
-      (
-        valor
-      ) => ({
-        ...valor,
-        ativo: false,
-        coordenadas,
-      })
-    );
+  function escolherPosicao(coordenadas) {
+    setPosicionamento((valor) => ({
+      ...valor,
+      ativo: false,
+      coordenadas,
+    }));
   }
 
-  if (
-    carregando
-  ) {
+  if (carregando) {
     return (
       <div className="rounded-3xl border border-slate-100 bg-white p-12 text-center shadow-sm">
         <Loader2
@@ -5046,20 +3081,12 @@ export default function Mapa3D() {
     <div className="space-y-5">
       {erro && (
         <div className="flex gap-2 rounded-3xl border border-amber-100 bg-amber-50 p-4 text-amber-800">
-          <AlertTriangle
-            size={18}
-          />
-
-          <span>
-            {
-              erro
-            }
-          </span>
+          <AlertTriangle size={18} />
+          <span>{erro}</span>
         </div>
       )}
 
-      {andares.length ===
-      0 ? (
+      {andares.length === 0 ? (
         <div className="rounded-3xl border border-slate-100 bg-white p-8 text-center shadow-sm">
           <Building2
             size={42}
@@ -5076,12 +3103,8 @@ export default function Mapa3D() {
 
           <button
             type="button"
-            onClick={
-              criarEstruturaBase
-            }
-            disabled={
-              salvando
-            }
+            onClick={criarEstruturaBase}
+            disabled={salvando}
             className="mx-auto mt-5 flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 font-black text-white disabled:opacity-50"
           >
             {salvando ? (
@@ -5090,9 +3113,7 @@ export default function Mapa3D() {
                 className="animate-spin"
               />
             ) : (
-              <Layers3
-                size={18}
-              />
+              <Layers3 size={18} />
             )}
 
             Criar estrutura base
@@ -5114,7 +3135,7 @@ export default function Mapa3D() {
                 </h1>
 
                 <p className="text-sm text-slate-500">
-                  Torre espelhada, áreas externas editáveis, três fontes, paisagismo e cinco subsolos abaixo do nível da rua.
+                  Torre espelhada, áreas técnicas clicáveis, itens externos e cinco subsolos em corte técnico.
                 </p>
               </div>
 
@@ -5122,79 +3143,41 @@ export default function Mapa3D() {
                 <button
                   type="button"
                   onClick={() =>
-                    setResetCamera(
-                      (
-                        valor
-                      ) =>
-                        valor +
-                        1
-                    )
+                    setResetCamera((valor) => valor + 1)
                   }
                   className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700"
                 >
-                  <RotateCcw
-                    size={16}
-                  />
-
+                  <RotateCcw size={16} />
                   Reposicionar
                 </button>
 
                 <button
                   type="button"
-                  onClick={
-                    carregar
-                  }
+                  onClick={carregar}
                   className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700"
                 >
-                  <RefreshCcw
-                    size={16}
-                  />
-
+                  <RefreshCcw size={16} />
                   Atualizar
                 </button>
 
                 <button
                   type="button"
-                  onClick={() =>
-                    setModalAndaresAberto(
-                      true
-                    )
-                  }
+                  onClick={() => setModalAndaresAberto(true)}
                   className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700"
                 >
-                  <Layers3
-                    size={16}
-                  />
-
+                  <Layers3 size={16} />
                   Gerenciar andares
                 </button>
 
                 <button
                   type="button"
                   onClick={() => {
-                    setCadastroExternoAberto(
-                      true
-                    );
-
-                    setPainelAberto(
-                      true
-                    );
-
-                    setItemSelecionado(
-                      null
-                    );
-
-                    setAndarSelecionado(
-                      null
-                    );
-
-                    setLocalSelecionado(
-                      null
-                    );
-
-                    setEntidadeSelecionada(
-                      null
-                    );
+                    setCadastroExternoAberto(true);
+                    setPainelAberto(true);
+                    setItemSelecionado(null);
+                    setAndarSelecionado(null);
+                    setLocalSelecionado(null);
+                    setEntidadeSelecionada(null);
 
                     setPosicionamento({
                       ativo: false,
@@ -5204,33 +3187,21 @@ export default function Mapa3D() {
                   }}
                   className="flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-black text-blue-700"
                 >
-                  <Plus
-                    size={16}
-                  />
-
+                  <Plus size={16} />
                   Item externo
                 </button>
 
                 <button
                   type="button"
                   onClick={() =>
-                    setPainelAberto(
-                      (
-                        valor
-                      ) =>
-                        !valor
-                    )
+                    setPainelAberto((valor) => !valor)
                   }
                   className="flex items-center gap-2 rounded-2xl bg-slate-950 px-3 py-2 text-sm font-black text-white"
                 >
                   {painelAberto ? (
-                    <Minimize2
-                      size={16}
-                    />
+                    <Minimize2 size={16} />
                   ) : (
-                    <Maximize2
-                      size={16}
-                    />
+                    <Maximize2 size={16} />
                   )}
 
                   {painelAberto
@@ -5263,13 +3234,11 @@ export default function Mapa3D() {
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
                     <div className="rounded-2xl bg-slate-50 p-2">
                       <p className="text-slate-400">
-                        Andares
+                        Pavimentos
                       </p>
 
                       <p className="font-black text-slate-900">
-                        {
-                          andares.length
-                        }
+                        {andares.length}
                       </p>
                     </div>
 
@@ -5279,9 +3248,7 @@ export default function Mapa3D() {
                       </p>
 
                       <p className="font-black text-slate-900">
-                        {
-                          itensExternos.length
-                        }
+                        {itensExternos.length}
                       </p>
                     </div>
                   </div>
@@ -5291,61 +3258,36 @@ export default function Mapa3D() {
                   <button
                     type="button"
                     onClick={() =>
-                      setMenuCamadasAberto(
-                        (
-                          valor
-                        ) =>
-                          !valor
-                      )
+                      setMenuCamadasAberto((valor) => !valor)
                     }
                     className="flex w-full items-center justify-between rounded-2xl px-3 py-2 text-sm font-black text-slate-700 hover:bg-white"
                   >
                     Navegação
 
                     {menuCamadasAberto ? (
-                      <ChevronUp
-                        size={16}
-                      />
+                      <ChevronUp size={16} />
                     ) : (
-                      <ChevronDown
-                        size={16}
-                      />
+                      <ChevronDown size={16} />
                     )}
                   </button>
 
                   {menuCamadasAberto && (
                     <div className="mt-1 space-y-1">
-                      {CAMADAS.map(
-                        (
-                          item
-                        ) => (
-                          <button
-                            type="button"
-                            key={
-                              item.id
-                            }
-                            onClick={() =>
-                              setCamada(
-                                item.id
-                              )
-                            }
-                            className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm font-bold transition ${
-                              camada ===
-                              item.id
-                                ? "bg-blue-600 text-white"
-                                : "text-slate-600 hover:bg-white"
-                            }`}
-                          >
-                            <Eye
-                              size={15}
-                            />
-
-                            {
-                              item.nome
-                            }
-                          </button>
-                        )
-                      )}
+                      {CAMADAS.map((item) => (
+                        <button
+                          type="button"
+                          key={item.id}
+                          onClick={() => setCamada(item.id)}
+                          className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm font-bold transition ${
+                            camada === item.id
+                              ? "bg-blue-600 text-white"
+                              : "text-slate-600 hover:bg-white"
+                          }`}
+                        >
+                          <Eye size={15} />
+                          {item.nome}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -5356,39 +3298,21 @@ export default function Mapa3D() {
                   </p>
 
                   <div className="mt-2 max-h-[330px] space-y-1 overflow-auto">
-                    {itensOrdenados.map(
-                      (
-                        item
-                      ) => (
-                        <button
-                          type="button"
-                          key={
-                            item.id
-                          }
-                          onClick={() =>
-                            selecionarItem(
-                              item
-                            )
-                          }
-                          className={`flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-xs font-bold ${
-                            itemSelecionado?.id ===
-                            item.id
-                              ? "bg-cyan-100 text-cyan-950"
-                              : "hover:bg-white"
-                          }`}
-                        >
-                          <MapPin
-                            size={13}
-                          />
-
-                          <span className="truncate">
-                            {
-                              item.nome
-                            }
-                          </span>
-                        </button>
-                      )
-                    )}
+                    {itensOrdenados.map((item) => (
+                      <button
+                        type="button"
+                        key={item.id}
+                        onClick={() => selecionarItem(item)}
+                        className={`flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-xs font-bold ${
+                          itemSelecionado?.id === item.id
+                            ? "bg-cyan-100 text-cyan-950"
+                            : "hover:bg-white"
+                        }`}
+                      >
+                        <MapPin size={13} />
+                        <span className="truncate">{item.nome}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </aside>
@@ -5399,175 +3323,100 @@ export default function Mapa3D() {
                 </p>
 
                 <div className="mt-2 max-h-[875px] space-y-1 overflow-auto">
-                  {andaresOrdenados
-                    .slice()
-                    .reverse()
-                    .map(
-                      (
-                        andar
-                      ) => (
-                        <button
-                          type="button"
-                          key={
-                            andar.id
-                          }
-                          onClick={() =>
-                            selecionarAndar(
-                              andar
-                            )
-                          }
-                          className={`flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-xs font-bold ${
-                            andarSelecionado?.id ===
-                            andar.id
-                              ? "bg-cyan-100 text-cyan-950"
-                              : "hover:bg-slate-50"
-                          }`}
-                        >
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{
-                              backgroundColor:
-                                andar.cor,
-                            }}
-                          />
+                  {andaresOrdenados.slice().reverse().map((andar) => (
+                    <button
+                      type="button"
+                      key={andar.id}
+                      onClick={() => selecionarAndar(andar)}
+                      className={`flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-xs font-bold ${
+                        andarSelecionado?.id === andar.id
+                          ? "bg-cyan-100 text-cyan-950"
+                          : "hover:bg-slate-50"
+                      }`}
+                    >
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor: andar.cor,
+                        }}
+                      />
 
-                          <span className="flex-1 truncate">
-                            {
-                              andar.nome
-                            }
-                          </span>
+                      <span className="flex-1 truncate">
+                        {andar.nome}
+                      </span>
 
-                          <span className="text-slate-400">
-                            {
-                              andar.ordem
-                            }
-                          </span>
-                        </button>
-                      )
-                    )}
+                      <span className="text-slate-400">
+                        {andar.ordem}
+                      </span>
+                    </button>
+                  ))}
                 </div>
               </aside>
 
               <div className="bg-gradient-to-b from-slate-50 via-blue-50 to-slate-100">
                 <Canvas
                   shadows
-                  dpr={[
-                    1,
-                    1.55,
-                  ]}
-                  key={
-                    resetCamera
-                  }
+                  dpr={[1, 1.55]}
+                  key={resetCamera}
                 >
                   <PerspectiveCamera
                     makeDefault
-                    position={[
-                      22,
-                      17,
-                      24,
-                    ]}
+                    position={[23, 18, 25]}
                     fov={46}
                   />
 
-                  <ambientLight
-                    intensity={
-                      0.72
-                    }
-                  />
+                  <ambientLight intensity={0.82} />
 
                   <directionalLight
-                    position={[
-                      10,
-                      15,
-                      9,
-                    ]}
-                    intensity={
-                      1.32
-                    }
+                    position={[10, 15, 9]}
+                    intensity={1.42}
                     castShadow
                   />
 
                   <pointLight
-                    position={[
-                      -9,
-                      9,
-                      -8,
-                    ]}
-                    intensity={
-                      0.55
-                    }
+                    position={[-9, 9, -8]}
+                    intensity={0.65}
                     color="#dbeafe"
                   />
 
+                  <pointLight
+                    position={[0, -2.5, 5]}
+                    intensity={0.5}
+                    color="#f8fafc"
+                  />
+
                   <ModeloJK1455
-                    andares={
-                      andaresOrdenados
-                    }
-                    locais={
-                      locais
-                    }
-                    itensExternos={
-                      itensOrdenados
-                    }
-                    camada={
-                      camada
-                    }
-                    andarSelecionado={
-                      andarSelecionado
-                    }
-                    itemSelecionado={
-                      itemSelecionado
-                    }
-                    onSelectAndar={
-                      selecionarAndar
-                    }
-                    onSelectItem={
-                      selecionarItem
-                    }
-                    posicionamento={
-                      posicionamento
-                    }
-                    onEscolherPosicao={
-                      escolherPosicao
-                    }
+                    andares={andaresOrdenados}
+                    locais={locais}
+                    itensExternos={itensOrdenados}
+                    camada={camada}
+                    andarSelecionado={andarSelecionado}
+                    itemSelecionado={itemSelecionado}
+                    onSelectAndar={selecionarAndar}
+                    onSelectItem={selecionarItem}
+                    posicionamento={posicionamento}
+                    onEscolherPosicao={escolherPosicao}
                   />
 
                   <ContactShadows
-                    opacity={
-                      0.25
-                    }
-                    scale={26}
+                    opacity={0.25}
+                    scale={28}
                     blur={3}
-                    far={8}
-                    position={[
-                      0,
-                      -4.8,
-                      0,
-                    ]}
+                    far={10}
+                    position={[0, -6.5, 0]}
                   />
 
-                  <Environment
-                    preset="city"
-                  />
+                  <Environment preset="city" />
 
                   <OrbitControls
                     makeDefault
                     enablePan
                     enableZoom
-                    enableRotate={
-                      !posicionamento.ativo
-                    }
+                    enableRotate={!posicionamento.ativo}
                     minDistance={8}
-                    maxDistance={72}
-                    target={[
-                      0,
-                      4.2,
-                      0,
-                    ]}
-                    maxPolarAngle={
-                      Math.PI /
-                      2.02
-                    }
+                    maxDistance={78}
+                    target={[0, 5.1, 0]}
+                    maxPolarAngle={Math.PI / 2.02}
                   />
                 </Canvas>
               </div>
@@ -5577,81 +3426,35 @@ export default function Mapa3D() {
           {painelAberto && (
             <section className="space-y-5">
               <PainelDetalhes
-                entidade={
-                  entidadeSelecionada
-                }
-                andarSelecionado={
-                  andarSelecionado
-                }
-                itemSelecionado={
-                  itemSelecionado
-                }
-                locaisSelecionados={
-                  locaisSelecionados
-                }
-                onFechar={() =>
-                  setPainelAberto(
-                    false
-                  )
-                }
-                onEditarLocal={
-                  setLocalEditando
-                }
-                onExcluirLocal={
-                  excluirLocal
-                }
-                onSelecionarLocal={
-                  selecionarLocal
-                }
+                entidade={entidadeSelecionada}
+                andarSelecionado={andarSelecionado}
+                itemSelecionado={itemSelecionado}
+                locaisSelecionados={locaisSelecionados}
+                onFechar={() => setPainelAberto(false)}
+                onEditarLocal={setLocalEditando}
+                onExcluirLocal={excluirLocal}
+                onSelecionarLocal={selecionarLocal}
               />
 
               <ArquivosEntidade
-                entidade={
-                  entidadeSelecionada
-                }
-                arquivos={
-                  arquivos
-                }
-                salvando={
-                  salvando
-                }
-                onUpload={
-                  enviarArquivo
-                }
-                onExcluir={
-                  excluirArquivo
-                }
+                entidade={entidadeSelecionada}
+                arquivos={arquivos}
+                salvando={salvando}
+                onUpload={enviarArquivo}
+                onExcluir={excluirArquivo}
               />
 
               {cadastroExternoAberto ? (
                 <CadastroItemExterno
-                  itemSelecionado={
-                    itemSelecionado
-                  }
-                  salvando={
-                    salvando
-                  }
-                  posicionamento={
-                    posicionamento
-                  }
-                  onAtivarPosicionamento={
-                    ativarPosicionamento
-                  }
-                  onSalvar={
-                    salvarItemExterno
-                  }
-                  onExcluir={
-                    excluirItemExterno
-                  }
+                  itemSelecionado={itemSelecionado}
+                  salvando={salvando}
+                  posicionamento={posicionamento}
+                  onAtivarPosicionamento={ativarPosicionamento}
+                  onSalvar={salvarItemExterno}
+                  onExcluir={excluirItemExterno}
                   onNovo={() => {
-                    setItemSelecionado(
-                      null
-                    );
-
-                    setEntidadeSelecionada(
-                      null
-                    );
-
+                    setItemSelecionado(null);
+                    setEntidadeSelecionada(null);
                     setArquivos([]);
 
                     setPosicionamento({
@@ -5663,23 +3466,11 @@ export default function Mapa3D() {
                 />
               ) : (
                 <CadastroLocal
-                  andarSelecionado={
-                    andarSelecionado
-                  }
-                  localEditando={
-                    localEditando
-                  }
-                  salvando={
-                    salvando
-                  }
-                  onSalvar={
-                    salvarLocal
-                  }
-                  onCancelarEdicao={() =>
-                    setLocalEditando(
-                      null
-                    )
-                  }
+                  andarSelecionado={andarSelecionado}
+                  localEditando={localEditando}
+                  salvando={salvando}
+                  onSalvar={salvarLocal}
+                  onCancelarEdicao={() => setLocalEditando(null)}
                 />
               )}
             </section>
@@ -5689,23 +3480,11 @@ export default function Mapa3D() {
 
       {modalAndaresAberto && (
         <ModalAndares
-          andares={
-            andares
-          }
-          salvando={
-            salvando
-          }
-          onFechar={() =>
-            setModalAndaresAberto(
-              false
-            )
-          }
-          onSalvar={
-            salvarAndar
-          }
-          onExcluir={
-            excluirAndar
-          }
+          andares={andares}
+          salvando={salvando}
+          onFechar={() => setModalAndaresAberto(false)}
+          onSalvar={salvarAndar}
+          onExcluir={excluirAndar}
         />
       )}
     </div>
