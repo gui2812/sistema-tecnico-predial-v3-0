@@ -9,9 +9,12 @@ import {
   Edit3,
   Eye,
   FileText,
+  FolderOpen,
   ImagePlus,
+  Layers3,
   Loader2,
   MapPin,
+  Menu,
   Minus,
   MousePointer2,
   Plus,
@@ -31,6 +34,7 @@ import {
   PerspectiveCamera,
 } from "@react-three/drei";
 import {
+  forwardRef,
   useEffect,
   useMemo,
   useRef,
@@ -52,26 +56,40 @@ import {
   listarArquivosMapa3DPorEntidade,
   listarItensExternosMapa3D,
   listarLocaisMapa3D,
+  montarArvoreLocaisMapa3D,
+  montarTrilhaLocalMapa3D,
 } from "../services/mapa3dSupabaseService";
 
 /**
- * MAPA 3D JK 1455 — V14
+ * MAPA 3D JK 1455 — V15
  *
- * Melhorias:
- * - vidro detalhado nos quatro lados;
- * - 1º e 2º pavimentos técnicos em pedra;
- * - 3º andar e Ferrero com vidro e pilastras nos quatro lados;
- * - coluna de pavimentos minimizável;
- * - card flutuante móvel;
- * - card flutuante redimensionável;
- * - card flutuante minimizável;
- * - rótulos menores e abaixo do card;
- * - fotos, câmera, plantas e PDFs;
- * - exclusão protegida por senha;
- * - gerenciamento de pavimentos, locatários e equipamentos;
- * - itens externos editáveis;
- * - 13º andar removido visualmente;
- * - primeiro subsolo visível.
+ * Estrutura:
+ *
+ * Pavimento
+ * ├── Ambiente
+ * │   ├── Fotos próprias
+ * │   ├── Plantas próprias
+ * │   └── Equipamento
+ * │       ├── Fotos próprias
+ * │       └── PDFs próprios
+ * └── Equipamento diretamente ligado ao pavimento
+ *
+ * Layout:
+ *
+ * Parte superior:
+ * - edifício 3D;
+ * - lateral esquerda recolhível;
+ * - pavimentos recolhíveis;
+ * - resumo flutuante pequeno.
+ *
+ * Parte inferior:
+ * - detalhes completos;
+ * - breadcrumb;
+ * - ambientes internos;
+ * - equipamentos;
+ * - fotos;
+ * - plantas;
+ * - PDFs.
  */
 
 // =========================================================
@@ -86,15 +104,25 @@ const CAMADAS = [
   ["sistemas", "Sistemas prediais"],
 ];
 
+const MODOS_ROTULOS = [
+  ["essenciais", "Essenciais"],
+  ["todos", "Todos"],
+  ["ocultar", "Ocultar"],
+];
+
 const TIPOS_LOCAL = [
+  "Ambiente",
+  "Hall social",
+  "Hall de serviço",
+  "Sala técnica",
   "Locatário",
   "Administrativo",
-  "Técnico",
-  "Equipamento",
+  "Ar-condicionado",
   "Elétrica",
   "Hidráulica",
-  "Ar-condicionado",
   "Segurança",
+  "Elevadores",
+  "Equipamento",
   "Operação",
   "Outro",
 ];
@@ -131,9 +159,25 @@ const MODOS_IMPLANTACAO = [
   ["subterraneo", "Dentro da terra / subterrâneo"],
 ];
 
+const NOMES_EXTERNOS_ESSENCIAIS = [
+  "estacionamento externo",
+  "docas",
+  "central de esgoto a vácuo",
+  "cavalete de gás",
+  "cavalete sabesp",
+  "entrada de energia — condomínio",
+  "entrada de energia — locatários",
+];
+
 // =========================================================
 // HELPERS
 // =========================================================
+
+function normalizarTexto(valor = "") {
+  return String(valor)
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+}
 
 function ordenarAndares(lista = []) {
   return [...lista].sort(
@@ -144,32 +188,147 @@ function ordenarAndares(lista = []) {
 }
 
 function ordenarItens(lista = []) {
-  return [...lista].sort(
-    (a, b) =>
+  return [...lista].sort((a, b) => {
+    const ordem =
       Number(a.ordem || 0) -
-      Number(b.ordem || 0)
-  );
+      Number(b.ordem || 0);
+
+    if (ordem !== 0) {
+      return ordem;
+    }
+
+    return String(a.nome || "").localeCompare(
+      String(b.nome || ""),
+      "pt-BR"
+    );
+  });
+}
+
+function ordenarLocais(lista = []) {
+  return [...lista].sort((a, b) => {
+    const ordem =
+      Number(a.ordem || 0) -
+      Number(b.ordem || 0);
+
+    if (ordem !== 0) {
+      return ordem;
+    }
+
+    return String(a.nome || "").localeCompare(
+      String(b.nome || ""),
+      "pt-BR"
+    );
+  });
 }
 
 function locaisDoAndar(
   locais,
   andarId
 ) {
-  return locais.filter(
-    (local) =>
-      local.andarId ===
-      andarId
+  return ordenarLocais(
+    locais.filter(
+      (local) =>
+        local.andarId ===
+        andarId
+    )
   );
+}
+
+function locaisRaizDoAndar(
+  locais,
+  andarId
+) {
+  return ordenarLocais(
+    locais.filter(
+      (local) =>
+        local.andarId === andarId &&
+        !local.localPaiId
+    )
+  );
+}
+
+function locaisFilhos(
+  locais,
+  localPaiId
+) {
+  return ordenarLocais(
+    locais.filter(
+      (local) =>
+        local.localPaiId ===
+        localPaiId
+    )
+  );
+}
+
+function contarDescendentes(
+  locais,
+  localId
+) {
+  let total = 0;
+
+  function percorrer(
+    paiId
+  ) {
+    locaisFilhos(
+      locais,
+      paiId
+    ).forEach((filho) => {
+      total += 1;
+
+      percorrer(
+        filho.id
+      );
+    });
+  }
+
+  percorrer(
+    localId
+  );
+
+  return total;
 }
 
 function itemEhEstacionamento(
   item
 ) {
   return (
-    item?.nome
-      ?.trim()
-      .toLowerCase() ===
+    normalizarTexto(
+      item?.nome
+    ) ===
     "estacionamento externo"
+  );
+}
+
+function itemExternoEhEssencial(
+  item
+) {
+  return NOMES_EXTERNOS_ESSENCIAIS.includes(
+    normalizarTexto(
+      item?.nome
+    )
+  );
+}
+
+function mostrarRotuloExterno(
+  item,
+  modoRotulos
+) {
+  if (
+    modoRotulos ===
+    "ocultar"
+  ) {
+    return false;
+  }
+
+  if (
+    modoRotulos ===
+    "todos"
+  ) {
+    return true;
+  }
+
+  return itemExternoEhEssencial(
+    item
   );
 }
 
@@ -202,17 +361,20 @@ function andarVazio() {
 }
 
 function localVazio(
-  andarId = ""
+  andarId = "",
+  localPaiId = null
 ) {
   return {
     id: "",
     andarId,
+    localPaiId,
     nome: "",
-    tipo: "Locatário",
+    tipo: "Ambiente",
     descricao: "",
     observacao: "",
     responsavel: "",
     status: "Ativo",
+    ordem: 0,
   };
 }
 
@@ -235,6 +397,33 @@ function itemExternoVazio() {
     altura: 0.6,
     profundidade: 0.8,
     ordem: 99,
+  };
+}
+
+function entidadeDoAndar(
+  andar
+) {
+  return {
+    tipo: "andar",
+    dados: andar,
+  };
+}
+
+function entidadeDoLocal(
+  local
+) {
+  return {
+    tipo: "local",
+    dados: local,
+  };
+}
+
+function entidadeDoItemExterno(
+  item
+) {
+  return {
+    tipo: "item_externo",
+    dados: item,
   };
 }
 
@@ -328,8 +517,13 @@ function Label({
   titulo,
   subtitulo,
   ativo = false,
+  visivel = true,
   onClick,
 }) {
+  if (!visivel) {
+    return null;
+  }
+
   return (
     <Html
       position={position}
@@ -343,7 +537,7 @@ function Label({
       <button
         type="button"
         onClick={onClick}
-        className={`pointer-events-auto max-w-[128px] min-w-[96px] rounded-xl border px-2 py-1.5 text-left shadow-md backdrop-blur transition ${
+        className={`pointer-events-auto max-w-[128px] min-w-[92px] rounded-xl border px-2 py-1.5 text-left shadow-md backdrop-blur transition ${
           ativo
             ? "border-cyan-300 bg-cyan-500 text-white"
             : "border-slate-200 bg-white/95 text-slate-800 hover:bg-white"
@@ -387,11 +581,9 @@ function MoldurasHorizontais({
           0,
         ]}
         size={[
-          largura +
-            0.54,
+          largura + 0.54,
           0.12,
-          profundidade +
-            0.52,
+          profundidade + 0.52,
         ]}
         color={cor}
       />
@@ -405,11 +597,9 @@ function MoldurasHorizontais({
           0,
         ]}
         size={[
-          largura +
-            0.54,
+          largura + 0.54,
           0.12,
-          profundidade +
-            0.52,
+          profundidade + 0.52,
         ]}
         color={cor}
       />
@@ -461,8 +651,7 @@ function PilastrasQuatroLados({
         _,
         index
       ) =>
-        -profundidade /
-          2 +
+        -profundidade / 2 +
         (
           index *
           profundidade
@@ -477,9 +666,7 @@ function PilastrasQuatroLados({
   return (
     <group>
       {frente.map(
-        (
-          x
-        ) => (
+        (x) => (
           <group
             key={`pilastra-frente-${x}`}
           >
@@ -487,8 +674,7 @@ function PilastrasQuatroLados({
               position={[
                 x,
                 y,
-                profundidade /
-                  2 +
+                profundidade / 2 +
                   afastamento,
               ]}
               size={[
@@ -498,17 +684,14 @@ function PilastrasQuatroLados({
               ]}
               color={cor}
               roughness={0.82}
-              onClick={
-                onClick
-              }
+              onClick={onClick}
             />
 
             <Box
               position={[
                 x,
                 y,
-                -profundidade /
-                  2 -
+                -profundidade / 2 -
                   afastamento,
               ]}
               size={[
@@ -518,18 +701,14 @@ function PilastrasQuatroLados({
               ]}
               color={cor}
               roughness={0.82}
-              onClick={
-                onClick
-              }
+              onClick={onClick}
             />
           </group>
         )
       )}
 
       {lateral.map(
-        (
-          z
-        ) => (
+        (z) => (
           <group
             key={`pilastra-lateral-${z}`}
           >
@@ -547,15 +726,12 @@ function PilastrasQuatroLados({
               ]}
               color={cor}
               roughness={0.82}
-              onClick={
-                onClick
-              }
+              onClick={onClick}
             />
 
             <Box
               position={[
-                -largura /
-                  2 -
+                -largura / 2 -
                   afastamento,
                 y,
                 z,
@@ -567,9 +743,7 @@ function PilastrasQuatroLados({
               ]}
               color={cor}
               roughness={0.82}
-              onClick={
-                onClick
-              }
+              onClick={onClick}
             />
           </group>
         )
@@ -619,8 +793,7 @@ function MalhaVidroQuatroLados({
         _,
         index
       ) =>
-        -profundidade /
-          2 +
+        -profundidade / 2 +
         (
           index *
           profundidade
@@ -635,9 +808,7 @@ function MalhaVidroQuatroLados({
   return (
     <group>
       {frente.map(
-        (
-          x
-        ) => (
+        (x) => (
           <group
             key={`vidro-frente-${x}`}
           >
@@ -645,10 +816,8 @@ function MalhaVidroQuatroLados({
               position={[
                 x,
                 baseY +
-                  altura /
-                    2,
-                profundidade /
-                  2 +
+                  altura / 2,
+                profundidade / 2 +
                   0.015,
               ]}
               size={[
@@ -663,10 +832,8 @@ function MalhaVidroQuatroLados({
               position={[
                 x,
                 baseY +
-                  altura /
-                    2,
-                -profundidade /
-                  2 -
+                  altura / 2,
+                -profundidade / 2 -
                   0.015,
               ]}
               size={[
@@ -681,20 +848,16 @@ function MalhaVidroQuatroLados({
       )}
 
       {lateral.map(
-        (
-          z
-        ) => (
+        (z) => (
           <group
             key={`vidro-lateral-${z}`}
           >
             <Linha
               position={[
-                largura /
-                  2 +
+                largura / 2 +
                   0.015,
                 baseY +
-                  altura /
-                    2,
+                  altura / 2,
                 z,
               ]}
               size={[
@@ -707,12 +870,10 @@ function MalhaVidroQuatroLados({
 
             <Linha
               position={[
-                -largura /
-                  2 -
+                -largura / 2 -
                   0.015,
                 baseY +
-                  altura /
-                    2,
+                  altura / 2,
                 z,
               ]}
               size={[
@@ -761,8 +922,7 @@ function FaixasHorizontaisQuatroLados({
                 position={[
                   0,
                   y,
-                  profundidade /
-                    2 +
+                  profundidade / 2 +
                     0.034,
                 ]}
                 size={[
@@ -777,8 +937,7 @@ function FaixasHorizontaisQuatroLados({
                 position={[
                   0,
                   y,
-                  -profundidade /
-                    2 -
+                  -profundidade / 2 -
                     0.034,
                 ]}
                 size={[
@@ -791,8 +950,7 @@ function FaixasHorizontaisQuatroLados({
 
               <Linha
                 position={[
-                  largura /
-                    2 +
+                  largura / 2 +
                     0.034,
                   y,
                   0,
@@ -807,8 +965,7 @@ function FaixasHorizontaisQuatroLados({
 
               <Linha
                 position={[
-                  -largura /
-                    2 -
+                  -largura / 2 -
                     0.034,
                   y,
                   0,
@@ -842,9 +999,7 @@ function PavimentoPedra({
   ) {
     event.stopPropagation();
 
-    if (
-      andar
-    ) {
+    if (andar) {
       onSelect(
         andar
       );
@@ -919,9 +1074,7 @@ function PavimentoVidroComPedra({
   ) {
     event.stopPropagation();
 
-    if (
-      andar
-    ) {
+    if (andar) {
       onSelect(
         andar
       );
@@ -951,8 +1104,7 @@ function PavimentoVidroComPedra({
         }
         baseY={
           y -
-          altura /
-            2
+          altura / 2
         }
         altura={altura}
         quantidadeFrente={11}
@@ -966,8 +1118,7 @@ function PavimentoVidroComPedra({
         }
         y={y}
         altura={
-          altura +
-          0.08
+          altura + 0.08
         }
         cor="#d8ccb6"
         quantidadeFrente={11}
@@ -993,12 +1144,9 @@ function PavimentoVidroComPedra({
           0,
         ]}
         size={[
-          largura +
-            0.05,
-          altura +
-            0.05,
-          profundidade +
-            0.05,
+          largura + 0.05,
+          altura + 0.05,
+          profundidade + 0.05,
         ]}
         color={
           selecionado
@@ -1224,6 +1372,7 @@ function Vaga({
 function EstacionamentoFundos({
   item,
   selecionado,
+  modoRotulos,
   onSelect,
 }) {
   return (
@@ -1288,6 +1437,10 @@ function EstacionamentoFundos({
         subtitulo="Fundos do edifício"
         ativo={
           selecionado
+        }
+        visivel={
+          modoRotulos !==
+          "ocultar"
         }
         onClick={() =>
           item &&
@@ -1469,9 +1622,7 @@ function Paisagismo() {
         4.1,
         4.8,
       ].map(
-        (
-          x
-        ) => (
+        (x) => (
           <Arvore
             key={x}
             position={[
@@ -1640,6 +1791,7 @@ function offsetsPorClique(
 function ItemExternoVisual({
   item,
   selecionado,
+  modoRotulos,
   onSelect,
 }) {
   if (
@@ -1694,8 +1846,7 @@ function ItemExternoVisual({
     subterraneo
       ? -0.04
       : yBase +
-        altura /
-          2;
+        altura / 2;
 
   function clicar(
     event
@@ -1718,18 +1869,14 @@ function ItemExternoVisual({
       {item.tipoVisual ===
       "redondo" ? (
         <mesh
-          onClick={
-            clicar
-          }
+          onClick={clicar}
           castShadow
           receiveShadow
         >
           <cylinderGeometry
             args={[
-              largura /
-                2,
-              largura /
-                2,
+              largura / 2,
+              largura / 2,
               subterraneo
                 ? 0.08
                 : altura,
@@ -1748,13 +1895,10 @@ function ItemExternoVisual({
       ) : item.tipoVisual ===
         "poste" ? (
         <mesh
-          onClick={
-            clicar
-          }
+          onClick={clicar}
           position={[
             0,
-            altura /
-              2,
+            altura / 2,
             0,
           ]}
           castShadow
@@ -1763,13 +1907,11 @@ function ItemExternoVisual({
             args={[
               Math.max(
                 0.05,
-                largura /
-                  7
+                largura / 7
               ),
               Math.max(
                 0.05,
-                largura /
-                  7
+                largura / 7
               ),
               altura,
               20,
@@ -1802,9 +1944,7 @@ function ItemExternoVisual({
             "#64748b"
           }
           roughness={0.74}
-          onClick={
-            clicar
-          }
+          onClick={clicar}
         />
       )}
 
@@ -1813,8 +1953,7 @@ function ItemExternoVisual({
           0,
           subterraneo
             ? 0.42
-            : altura /
-                2 +
+            : altura / 2 +
               0.55,
           0,
         ]}
@@ -1828,6 +1967,12 @@ function ItemExternoVisual({
         }`}
         ativo={
           selecionado
+        }
+        visivel={
+          mostrarRotuloExterno(
+            item,
+            modoRotulos
+          )
         }
         onClick={() =>
           onSelect(
@@ -1844,9 +1989,7 @@ function PlanoPosicionamento({
   lado,
   onEscolher,
 }) {
-  if (
-    !ativo
-  ) {
+  if (!ativo) {
     return null;
   }
 
@@ -1858,8 +2001,7 @@ function PlanoPosicionamento({
         0,
       ]}
       rotation={[
-        -Math.PI /
-          2,
+        -Math.PI / 2,
         0,
         0,
       ]}
@@ -1901,6 +2043,7 @@ function Embasamento({
   selecionado,
   onSelect,
   camada,
+  modoRotulos,
 }) {
   if (
     camada ===
@@ -1933,9 +2076,7 @@ function Embasamento({
         ) => {
           event.stopPropagation();
 
-          if (
-            terreo
-          ) {
+          if (terreo) {
             onSelect(
               terreo
             );
@@ -2008,6 +2149,10 @@ function Embasamento({
         ativo={
           selecionado
         }
+        visivel={
+          modoRotulos !==
+          "ocultar"
+        }
         onClick={() =>
           terreo &&
           onSelect(
@@ -2040,9 +2185,7 @@ function TorrePrincipal({
 
   const primeiroTecnico =
     andares.find(
-      (
-        andar
-      ) =>
+      (andar) =>
         Number(
           andar.ordem
         ) ===
@@ -2051,9 +2194,7 @@ function TorrePrincipal({
 
   const segundoTecnico =
     andares.find(
-      (
-        andar
-      ) =>
+      (andar) =>
         Number(
           andar.ordem
         ) ===
@@ -2062,9 +2203,7 @@ function TorrePrincipal({
 
   const terceiro =
     andares.find(
-      (
-        andar
-      ) =>
+      (andar) =>
         Number(
           andar.ordem
         ) ===
@@ -2073,9 +2212,7 @@ function TorrePrincipal({
 
   const ferrero =
     andares.find(
-      (
-        andar
-      ) =>
+      (andar) =>
         Number(
           andar.ordem
         ) ===
@@ -2084,21 +2221,16 @@ function TorrePrincipal({
 
   const corporativos =
     andares.filter(
-      (
-        andar
-      ) => {
+      (andar) => {
         const ordem =
           Number(
             andar.ordem
           );
 
         return (
-          ordem >=
-            4 &&
-          ordem <=
-            15 &&
-          ordem !==
-            13
+          ordem >= 4 &&
+          ordem <= 15 &&
+          ordem !== 13
         );
       }
     );
@@ -2128,9 +2260,7 @@ function TorrePrincipal({
           selecionado?.id ===
           primeiroTecnico?.id
         }
-        onSelect={
-          onSelect
-        }
+        onSelect={onSelect}
       />
 
       <PavimentoPedra
@@ -2142,15 +2272,11 @@ function TorrePrincipal({
           selecionado?.id ===
           segundoTecnico?.id
         }
-        onSelect={
-          onSelect
-        }
+        onSelect={onSelect}
       />
 
       <PavimentoVidroComPedra
-        andar={
-          terceiro
-        }
+        andar={terceiro}
         y={3.83}
         selecionado={
           selecionado?.id ===
@@ -2158,17 +2284,14 @@ function TorrePrincipal({
         }
         titulo="3º Andar"
         subtitulo="Vidro com pilastras de pedra"
-        onSelect={
-          onSelect
-        }
+        onSelect={onSelect}
       />
 
       <GlassBox
         position={[
           0,
           baseVidroY +
-            alturaVidro /
-              2,
+            alturaVidro / 2,
           0,
         ]}
         size={[
@@ -2179,36 +2302,24 @@ function TorrePrincipal({
       />
 
       <MalhaVidroQuatroLados
-        largura={
-          largura
-        }
+        largura={largura}
         profundidade={
           profundidade
         }
-        baseY={
-          baseVidroY
-        }
-        altura={
-          alturaVidro
-        }
+        baseY={baseVidroY}
+        altura={alturaVidro}
       />
 
       <FaixasHorizontaisQuatroLados
-        largura={
-          largura
-        }
+        largura={largura}
         profundidade={
           profundidade
         }
-        baseY={
-          baseVidroY
-        }
+        baseY={baseVidroY}
         quantidade={
           corporativos.length
         }
-        passo={
-          alturaPiso
-        }
+        passo={alturaPiso}
       />
 
       {corporativos.map(
@@ -2220,8 +2331,7 @@ function TorrePrincipal({
             baseVidroY +
             index *
               alturaPiso +
-            alturaPiso /
-              2;
+            alturaPiso / 2;
 
           const ativo =
             selecionado?.id ===
@@ -2229,17 +2339,14 @@ function TorrePrincipal({
 
           return (
             <Box
-              key={
-                andar.id
-              }
+              key={andar.id}
               position={[
                 0,
                 y,
                 0,
               ]}
               size={[
-                largura +
-                  0.05,
+                largura + 0.05,
                 alturaPiso *
                   0.94,
                 profundidade +
@@ -2279,19 +2386,15 @@ function TorrePrincipal({
           0,
         ]}
         size={[
-          largura +
-            0.72,
+          largura + 0.72,
           0.16,
-          profundidade +
-            0.68,
+          profundidade + 0.68,
         ]}
         color="#c8baa2"
       />
 
       <PavimentoVidroComPedra
-        andar={
-          ferrero
-        }
+        andar={ferrero}
         y={
           topoVidroY +
           0.62
@@ -2302,9 +2405,7 @@ function TorrePrincipal({
         }
         titulo="16º Andar — Ferrero"
         subtitulo="Último pavimento comercial"
-        onSelect={
-          onSelect
-        }
+        onSelect={onSelect}
       />
     </group>
   );
@@ -2348,9 +2449,7 @@ function AreasTecnicasSuperiores({
         ) => ({
           andar:
             andares.find(
-              (
-                item
-              ) =>
+              (item) =>
                 Number(
                   item.ordem
                 ) ===
@@ -2364,9 +2463,7 @@ function AreasTecnicasSuperiores({
         })
       )
       .filter(
-        (
-          item
-        ) =>
+        (item) =>
           Boolean(
             item.andar
           )
@@ -2374,9 +2471,7 @@ function AreasTecnicasSuperiores({
 
   const heliponto =
     andares.find(
-      (
-        andar
-      ) =>
+      (andar) =>
         Number(
           andar.ordem
         ) ===
@@ -2389,9 +2484,7 @@ function AreasTecnicasSuperiores({
   return (
     <group>
       {niveis.map(
-        (
-          nivel
-        ) => (
+        (nivel) => (
           <group
             key={
               nivel.andar.id
@@ -2401,9 +2494,7 @@ function AreasTecnicasSuperiores({
               andar={
                 nivel.andar
               }
-              y={
-                nivel.y
-              }
+              y={nivel.y}
               largura={9.52}
               profundidade={7.94}
               altura={0.7}
@@ -2411,9 +2502,7 @@ function AreasTecnicasSuperiores({
                 selecionado?.id ===
                 nivel.andar.id
               }
-              onSelect={
-                onSelect
-              }
+              onSelect={onSelect}
             />
 
             {selecionado?.id ===
@@ -2478,9 +2567,7 @@ function AreasTecnicasSuperiores({
         ) => {
           event.stopPropagation();
 
-          if (
-            heliponto
-          ) {
+          if (heliponto) {
             onSelect(
               heliponto
             );
@@ -2496,8 +2583,7 @@ function AreasTecnicasSuperiores({
           0,
         ]}
         rotation={[
-          -Math.PI /
-            2,
+          -Math.PI / 2,
           0,
           0,
         ]}
@@ -2553,13 +2639,12 @@ function Subsolos({
   locais,
   camada,
   selecionado,
+  modoRotulos,
   onSelect,
 }) {
   if (
-    camada !==
-      "geral" &&
-    camada !==
-      "subsolos"
+    camada !== "geral" &&
+    camada !== "subsolos"
   ) {
     return null;
   }
@@ -2567,13 +2652,10 @@ function Subsolos({
   const lista =
     ordenarAndares(
       andares.filter(
-        (
-          andar
-        ) =>
+        (andar) =>
           Number(
             andar.ordem
-          ) <
-          0
+          ) < 0
       )
     ).reverse();
 
@@ -2615,9 +2697,7 @@ function Subsolos({
 
           return (
             <group
-              key={
-                andar.id
-              }
+              key={andar.id}
             >
               <Box
                 position={[
@@ -2653,9 +2733,7 @@ function Subsolos({
                 1.55,
                 4.65,
               ].map(
-                (
-                  x
-                ) => (
+                (x) => (
                   <group
                     key={`${andar.id}-${x}`}
                   >
@@ -2663,8 +2741,7 @@ function Subsolos({
                       position={[
                         x,
                         y +
-                          alturaLivre /
-                            2,
+                          alturaLivre / 2,
                         -2.55,
                       ]}
                       size={[
@@ -2679,8 +2756,7 @@ function Subsolos({
                       position={[
                         x,
                         y +
-                          alturaLivre /
-                            2,
+                          alturaLivre / 2,
                         2.55,
                       ]}
                       size={[
@@ -2710,13 +2786,11 @@ function Subsolos({
                     key={`${andar.id}-carro-${x}`}
                     position={[
                       x,
-                      y +
-                        0.13,
+                      y + 0.13,
                       1.55,
                     ]}
                     color={
-                      carIndex %
-                        2
+                      carIndex % 2
                         ? "#cbd5e1"
                         : "#1e293b"
                     }
@@ -2727,8 +2801,7 @@ function Subsolos({
               <Label
                 position={[
                   -7.32,
-                  y +
-                    0.18,
+                  y + 0.18,
                   0,
                 ]}
                 titulo={
@@ -2739,8 +2812,10 @@ function Subsolos({
                   )
                 }
                 subtitulo={`${quantidade} local(is)`}
-                ativo={
-                  ativo
+                ativo={ativo}
+                visivel={
+                  modoRotulos !==
+                  "ocultar"
                 }
                 onClick={() =>
                   onSelect(
@@ -2775,6 +2850,10 @@ function Subsolos({
         ]}
         titulo="Nível da rua"
         subtitulo="0,00 m"
+        visivel={
+          modoRotulos !==
+          "ocultar"
+        }
       />
     </group>
   );
@@ -2787,6 +2866,7 @@ function ModeloJK1455({
   camada,
   andarSelecionado,
   itemSelecionado,
+  modoRotulos,
   onSelectAndar,
   onSelectItem,
   posicionamento,
@@ -2794,9 +2874,7 @@ function ModeloJK1455({
 }) {
   const terreo =
     andares.find(
-      (
-        andar
-      ) =>
+      (andar) =>
         Number(
           andar.ordem
         ) ===
@@ -2809,12 +2887,9 @@ function ModeloJK1455({
     );
 
   const mostrarExternos =
-    camada ===
-      "geral" ||
-    camada ===
-      "externas" ||
-    camada ===
-      "sistemas";
+    camada === "geral" ||
+    camada === "externas" ||
+    camada === "sistemas";
 
   return (
     <group>
@@ -2830,6 +2905,9 @@ function ModeloJK1455({
               itemSelecionado?.id ===
               estacionamento?.id
             }
+            modoRotulos={
+              modoRotulos
+            }
             onSelect={
               onSelectItem
             }
@@ -2840,19 +2918,16 @@ function ModeloJK1455({
           {ordenarItens(
             itensExternos
           ).map(
-            (
-              item
-            ) => (
+            (item) => (
               <ItemExternoVisual
-                key={
-                  item.id
-                }
-                item={
-                  item
-                }
+                key={item.id}
+                item={item}
                 selecionado={
                   itemSelecionado?.id ===
                   item.id
+                }
+                modoRotulos={
+                  modoRotulos
                 }
                 onSelect={
                   onSelectItem
@@ -2864,9 +2939,7 @@ function ModeloJK1455({
       )}
 
       <Embasamento
-        terreo={
-          terreo
-        }
+        terreo={terreo}
         selecionado={
           andarSelecionado?.id ===
           terreo?.id
@@ -2874,53 +2947,43 @@ function ModeloJK1455({
         onSelect={
           onSelectAndar
         }
-        camada={
-          camada
+        camada={camada}
+        modoRotulos={
+          modoRotulos
         }
       />
 
       <TorrePrincipal
-        andares={
-          andares
-        }
+        andares={andares}
         selecionado={
           andarSelecionado
         }
         onSelect={
           onSelectAndar
         }
-        camada={
-          camada
-        }
+        camada={camada}
       />
 
       <AreasTecnicasSuperiores
-        andares={
-          andares
-        }
+        andares={andares}
         selecionado={
           andarSelecionado
         }
         onSelect={
           onSelectAndar
         }
-        camada={
-          camada
-        }
+        camada={camada}
       />
 
       <Subsolos
-        andares={
-          andares
-        }
-        locais={
-          locais
-        }
-        camada={
-          camada
-        }
+        andares={andares}
+        locais={locais}
+        camada={camada}
         selecionado={
           andarSelecionado
+        }
+        modoRotulos={
+          modoRotulos
         }
         onSelect={
           onSelectAndar
@@ -2952,7 +3015,7 @@ function Resumo({
 }) {
   return (
     <div className="rounded-2xl bg-slate-50 p-3">
-      <p className="text-[10px] font-bold text-slate-400">
+      <p className="text-[10px] font-bold uppercase text-slate-400">
         {rotulo}
       </p>
 
@@ -2971,13 +3034,10 @@ function BotaoArquivo({
   return (
     <button
       type="button"
-      onClick={
-        onClick
-      }
+      onClick={onClick}
       className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
     >
       {icon}
-
       {texto}
     </button>
   );
@@ -3001,26 +3061,20 @@ function ArquivosEntidade({
   const plantaInput =
     useRef(null);
 
-  if (
-    !entidade
-  ) {
+  if (!entidade) {
     return null;
   }
 
   const fotos =
     arquivos.filter(
-      (
-        arquivo
-      ) =>
+      (arquivo) =>
         arquivo.tipoArquivo ===
         "foto"
     );
 
   const plantas =
     arquivos.filter(
-      (
-        arquivo
-      ) =>
+      (arquivo) =>
         arquivo.tipoArquivo !==
         "foto"
     );
@@ -3032,9 +3086,7 @@ function ArquivosEntidade({
     const arquivo =
       event.target.files?.[0];
 
-    if (
-      arquivo
-    ) {
+    if (arquivo) {
       onUpload(
         arquivo,
         tipo
@@ -3049,9 +3101,7 @@ function ArquivosEntidade({
     <div className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
       <button
         type="button"
-        onClick={
-          onAlternar
-        }
+        onClick={onAlternar}
         className="flex w-full items-center justify-between gap-3 text-left"
       >
         <div>
@@ -3079,7 +3129,7 @@ function ArquivosEntidade({
 
       {aberto && (
         <>
-          <div className="mt-4 grid gap-2">
+          <div className="mt-4 grid gap-2 md:grid-cols-3">
             <BotaoArquivo
               icon={
                 <Camera
@@ -3117,9 +3167,7 @@ function ArquivosEntidade({
             />
 
             <input
-              ref={
-                cameraInput
-              }
+              ref={cameraInput}
               type="file"
               accept="image/*"
               capture="environment"
@@ -3135,9 +3183,7 @@ function ArquivosEntidade({
             />
 
             <input
-              ref={
-                fotoInput
-              }
+              ref={fotoInput}
               type="file"
               accept="image/*"
               className="hidden"
@@ -3152,9 +3198,7 @@ function ArquivosEntidade({
             />
 
             <input
-              ref={
-                plantaInput
-              }
+              ref={plantaInput}
               type="file"
               accept=".pdf,image/*"
               className="hidden"
@@ -3185,15 +3229,11 @@ function ArquivosEntidade({
           </p>
 
           {fotos.length ? (
-            <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {fotos.map(
-                (
-                  arquivo
-                ) => (
+                (arquivo) => (
                   <div
-                    key={
-                      arquivo.id
-                    }
+                    key={arquivo.id}
                     className="relative overflow-hidden rounded-2xl border border-slate-100 bg-slate-50"
                   >
                     <button
@@ -3214,7 +3254,7 @@ function ArquivosEntidade({
                         alt={
                           arquivo.nome
                         }
-                        className="h-24 w-full object-cover"
+                        className="h-28 w-full object-cover"
                       />
                     </button>
 
@@ -3249,13 +3289,9 @@ function ArquivosEntidade({
           {plantas.length ? (
             <div className="mt-2 space-y-2">
               {plantas.map(
-                (
-                  arquivo
-                ) => (
+                (arquivo) => (
                   <div
-                    key={
-                      arquivo.id
-                    }
+                    key={arquivo.id}
                     className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 p-3"
                   >
                     <button
@@ -3315,27 +3351,22 @@ function ArquivosEntidade({
 }
 
 // =========================================================
-// CARD FLUTUANTE MÓVEL E REDIMENSIONÁVEL
+// CARD FLUTUANTE PEQUENO
 // =========================================================
 
-function CardFlutuante({
+function CardResumoFlutuante({
   entidade,
   andar,
+  local,
   itemExterno,
   locais,
-  arquivos,
-  salvando,
-  arquivosAbertos,
-  onAlternarArquivos,
-  onUpload,
-  onExcluirArquivo,
   onFechar,
-  onEditarExterno,
+  onVerDetalhes,
 }) {
   const cardRef =
     useRef(null);
 
-  const interacaoRef =
+  const arrasteRef =
     useRef(null);
 
   const [
@@ -3353,128 +3384,22 @@ function CardFlutuante({
       y: 16,
     });
 
-  const [
-    tamanho,
-    setTamanho,
-  ] =
-    useState({
-      largura: 390,
-      altura: 670,
-    });
-
-  function obterLimites() {
-    const pai =
-      cardRef.current?.parentElement;
-
-    const larguraPai =
-      pai?.clientWidth ||
-      window.innerWidth;
-
-    const alturaPai =
-      pai?.clientHeight ||
-      window.innerHeight;
-
-    return {
-      larguraPai,
-      alturaPai,
-      larguraMaxima:
-        Math.max(
-          300,
-          larguraPai -
-            24
-        ),
-      alturaMaxima:
-        Math.max(
-          260,
-          alturaPai -
-            24
-        ),
-    };
-  }
-
-  function ajustarDentroDaTela(
-    proximaPosicao,
-    proximoTamanho =
-      tamanho
-  ) {
-    const {
-      larguraPai,
-      alturaPai,
-    } =
-      obterLimites();
-
-    const larguraAtual =
-      Math.min(
-        proximoTamanho.largura,
-        larguraPai -
-          24
-      );
-
-    const alturaAtual =
-      minimizado
-        ? 68
-        : Math.min(
-            proximoTamanho.altura,
-            alturaPai -
-              24
-          );
-
-    return {
-      x: limitar(
-        proximaPosicao.x,
-        12,
-        Math.max(
-          12,
-          larguraPai -
-            larguraAtual -
-            12
-        )
-      ),
-      y: limitar(
-        proximaPosicao.y,
-        12,
-        Math.max(
-          12,
-          alturaPai -
-            alturaAtual -
-            12
-        )
-      ),
-    };
-  }
-
   useEffect(() => {
     const pai =
       cardRef.current?.parentElement;
 
-    if (
-      !pai
-    ) {
+    if (!pai) {
       return;
     }
 
     setPosicao(
-      (
-        atual
-      ) => {
-        if (
-          atual.x !==
-          null
-        ) {
-          return ajustarDentroDaTela(
-            atual
-          );
-        }
-
-        return {
-          x: Math.max(
-            12,
-            pai.clientWidth -
-              tamanho.largura -
-              18
-          ),
-          y: 16,
-        };
+      {
+        x: Math.max(
+          12,
+          pai.clientWidth -
+            300
+        ),
+        y: 16,
       }
     );
   }, []);
@@ -3491,98 +3416,58 @@ function CardFlutuante({
     function mover(
       event
     ) {
-      const interacao =
-        interacaoRef.current;
+      const arraste =
+        arrasteRef.current;
 
-      if (
-        !interacao
-      ) {
+      if (!arraste) {
         return;
       }
 
-      const deltaX =
-        event.clientX -
-        interacao.clientXInicial;
+      const pai =
+        cardRef.current?.parentElement;
 
-      const deltaY =
-        event.clientY -
-        interacao.clientYInicial;
-
-      if (
-        interacao.tipo ===
-        "arrastar"
-      ) {
-        setPosicao(
-          ajustarDentroDaTela({
-            x:
-              interacao.xInicial +
-              deltaX,
-            y:
-              interacao.yInicial +
-              deltaY,
-          })
-        );
-
+      if (!pai) {
         return;
       }
 
-      if (
-        interacao.tipo ===
-        "redimensionar"
-      ) {
-        const {
-          larguraMaxima,
-          alturaMaxima,
-        } =
-          obterLimites();
+      const largura =
+        cardRef.current?.offsetWidth ||
+        280;
 
-        const novaLargura =
-          limitar(
-            interacao.larguraInicial -
-              deltaX,
-            300,
-            larguraMaxima
-          );
+      const altura =
+        cardRef.current?.offsetHeight ||
+        90;
 
-        const novaAltura =
-          limitar(
-            interacao.alturaInicial +
-              deltaY,
-            260,
-            alturaMaxima
-          );
-
-        const novoTamanho = {
-          largura:
-            novaLargura,
-          altura:
-            novaAltura,
-        };
-
-        setTamanho(
-          novoTamanho
-        );
-
-        setPosicao(
-          ajustarDentroDaTela(
-            {
-              x:
-                interacao.xInicial +
-                (
-                  interacao.larguraInicial -
-                  novaLargura
-                ),
-              y:
-                interacao.yInicial,
-            },
-            novoTamanho
+      setPosicao({
+        x: limitar(
+          arraste.x +
+            event.clientX -
+            arraste.clientX,
+          12,
+          Math.max(
+            12,
+            pai.clientWidth -
+              largura -
+              12
           )
-        );
-      }
+        ),
+        y: limitar(
+          arraste.y +
+            event.clientY -
+            arraste.clientY,
+          12,
+          Math.max(
+            12,
+            pai.clientHeight -
+              altura -
+              12
+          )
+        ),
+      });
     }
 
     function finalizar() {
-      interacaoRef.current =
+      arrasteRef.current =
         null;
 
       document.body.style.userSelect =
@@ -3599,11 +3484,6 @@ function CardFlutuante({
       finalizar
     );
 
-    window.addEventListener(
-      "pointercancel",
-      finalizar
-    );
-
     return () => {
       window.removeEventListener(
         "pointermove",
@@ -3614,85 +3494,32 @@ function CardFlutuante({
         "pointerup",
         finalizar
       );
-
-      window.removeEventListener(
-        "pointercancel",
-        finalizar
-      );
     };
-  }, [
-    tamanho,
-    minimizado,
-  ]);
+  }, []);
 
-  useEffect(() => {
-    function ajustarAoRedimensionarTela() {
-      setPosicao(
-        (
-          atual
-        ) => {
-          if (
-            atual.x ===
-            null
-          ) {
-            return atual;
-          }
-
-          return ajustarDentroDaTela(
-            atual
-          );
-        }
-      );
-    }
-
-    window.addEventListener(
-      "resize",
-      ajustarAoRedimensionarTela
-    );
-
-    return () =>
-      window.removeEventListener(
-        "resize",
-        ajustarAoRedimensionarTela
-      );
-  }, [
-    tamanho,
-    minimizado,
-  ]);
-
-  if (
-    !entidade
-  ) {
+  if (!entidade) {
     return null;
   }
 
-  const fotos =
-    arquivos.filter(
-      (
-        arquivo
-      ) =>
-        arquivo.tipoArquivo ===
-        "foto"
-    );
-
-  const plantas =
-    arquivos.filter(
-      (
-        arquivo
-      ) =>
-        arquivo.tipoArquivo !==
-        "foto"
-    );
-
-  const primeiraPlanta =
-    plantas[0];
+  const quantidadeLocais =
+    andar
+      ? locaisDoAndar(
+          locais,
+          andar.id
+        ).length
+      : local
+        ? locaisFilhos(
+            locais,
+            local.id
+          ).length
+        : 0;
 
   function iniciarArraste(
     event
   ) {
     if (
       event.target.closest(
-        "button, input, textarea, select, a"
+        "button"
       )
     ) {
       return;
@@ -3703,82 +3530,40 @@ function CardFlutuante({
     document.body.style.userSelect =
       "none";
 
-    interacaoRef.current = {
-      tipo:
-        "arrastar",
-      clientXInicial:
+    arrasteRef.current = {
+      clientX:
         event.clientX,
-      clientYInicial:
+      clientY:
         event.clientY,
-      xInicial:
+      x:
         posicao.x ??
         12,
-      yInicial:
+      y:
         posicao.y ??
         12,
-    };
-  }
-
-  function iniciarRedimensionamento(
-    event
-  ) {
-    event.preventDefault();
-
-    event.stopPropagation();
-
-    document.body.style.userSelect =
-      "none";
-
-    interacaoRef.current = {
-      tipo:
-        "redimensionar",
-      clientXInicial:
-        event.clientX,
-      clientYInicial:
-        event.clientY,
-      xInicial:
-        posicao.x ??
-        12,
-      yInicial:
-        posicao.y ??
-        12,
-      larguraInicial:
-        tamanho.largura,
-      alturaInicial:
-        tamanho.altura,
     };
   }
 
   return (
     <section
-      ref={
-        cardRef
-      }
+      ref={cardRef}
       style={{
         left:
-          posicao.x ===
-          null
+          posicao.x === null
             ? "auto"
             : `${posicao.x}px`,
         right:
-          posicao.x ===
-          null
+          posicao.x === null
             ? "16px"
             : "auto",
         top:
           `${posicao.y}px`,
-        width:
-          `${Math.min(
-            tamanho.largura,
-            window.innerWidth -
-              24
-          )}px`,
-        height:
+        resize:
           minimizado
-            ? "auto"
-            : `${tamanho.altura}px`,
+            ? "none"
+            : "horizontal",
       }}
-      className="pointer-events-auto absolute z-[999] flex max-w-[calc(100%-24px)] flex-col overflow-hidden rounded-3xl border border-white/80 bg-white/95 shadow-2xl backdrop-blur"
+      className="pointer-events-auto absolute z-[999] w-[280px] min-w-[220px] max-w-[360px] overflow-auto rounded-3xl border border-white/80 bg-white/95 shadow-2xl backdrop-blur"
     >
       <div
         onPointerDown={
@@ -3789,11 +3574,15 @@ function CardFlutuante({
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-wide text-blue-600">
             {andar
-              ? "Pavimento selecionado"
-              : "Ambiente externo selecionado"}
+              ? "Pavimento"
+              : local
+                ? "Ambiente ou equipamento"
+                : itemExterno
+                  ? "Área externa"
+                  : "Item selecionado"}
           </p>
 
-          <h2 className="mt-1 truncate text-base font-black text-slate-900">
+          <h2 className="mt-1 truncate text-sm font-black text-slate-900">
             {
               entidade.dados.nome
             }
@@ -3805,13 +3594,11 @@ function CardFlutuante({
             type="button"
             onClick={() =>
               setMinimizado(
-                (
-                  atual
-                ) =>
+                (atual) =>
                   !atual
               )
             }
-            className="rounded-lg p-2 text-slate-600 hover:bg-slate-200"
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-200"
             title={
               minimizado
                 ? "Restaurar"
@@ -3820,190 +3607,781 @@ function CardFlutuante({
           >
             {minimizado ? (
               <Plus
-                size={17}
+                size={15}
               />
             ) : (
               <Minus
-                size={17}
+                size={15}
               />
             )}
           </button>
 
           <button
             type="button"
-            onClick={
-              onFechar
-            }
-            className="rounded-lg p-2 text-slate-600 hover:bg-slate-200"
+            onClick={onFechar}
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-200"
             title="Fechar"
           >
             <X
-              size={17}
+              size={15}
             />
           </button>
         </div>
       </div>
 
       {!minimizado && (
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <p className="text-sm text-slate-500">
+        <div className="p-4">
+          <p className="text-xs text-slate-500">
             {entidade.dados.observacao ||
               entidade.dados.descricao ||
               "Sem observações cadastradas."}
           </p>
 
-          {andar && (
-            <>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                <Resumo
-                  rotulo="Locais"
-                  valor={
-                    locais.length
-                  }
-                />
-
-                <Resumo
-                  rotulo="Fotos"
-                  valor={
-                    fotos.length
-                  }
-                />
-
-                <Resumo
-                  rotulo="Plantas"
-                  valor={
-                    plantas.length
-                  }
-                />
-              </div>
-
-              <button
-                type="button"
-                disabled={
-                  !primeiraPlanta
-                }
-                onClick={() =>
-                  primeiraPlanta &&
-                  window.open(
-                    primeiraPlanta.urlPublica,
-                    "_blank",
-                    "noopener,noreferrer"
-                  )
-                }
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
-              >
-                <FileText
-                  size={17}
-                />
-
-                Abrir planta
-              </button>
-
-              <p className="mt-5 text-sm font-black text-slate-800">
-                Locais, locatários e equipamentos
-              </p>
-
-              {locais.length ? (
-                <div className="mt-2 max-h-[210px] space-y-2 overflow-auto">
-                  {locais.map(
-                    (
-                      local
-                    ) => (
-                      <div
-                        key={
-                          local.id
-                        }
-                        className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
-                      >
-                        <p className="text-sm font-black text-slate-800">
-                          {
-                            local.nome
-                          }
-                        </p>
-
-                        <p className="mt-1 text-xs font-bold text-blue-700">
-                          {
-                            local.tipo
-                          }
-                        </p>
-
-                        {local.descricao && (
-                          <p className="mt-1 text-xs text-slate-500">
-                            {
-                              local.descricao
-                            }
-                          </p>
-                        )}
-                      </div>
-                    )
-                  )}
-                </div>
-              ) : (
-                <p className="mt-2 text-sm text-slate-400">
-                  Nenhum local cadastrado.
-                </p>
-              )}
-            </>
+          {(andar ||
+            local) && (
+            <p className="mt-2 text-xs font-bold text-slate-500">
+              {quantidadeLocais} item(ns) interno(s)
+            </p>
           )}
 
-          {itemExterno && (
+          <button
+            type="button"
+            onClick={onVerDetalhes}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-3 py-2 text-xs font-black text-white"
+          >
+            <ChevronDown
+              size={15}
+            />
+
+            Ver detalhes abaixo
+          </button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// =========================================================
+// MODAL DE AMBIENTE OU EQUIPAMENTO
+// =========================================================
+
+function ModalLocalInterno({
+  aberto,
+  andar,
+  locais,
+  localEditando,
+  localPaiPadrao,
+  salvando,
+  onSalvar,
+  onExcluir,
+  onFechar,
+}) {
+  const [
+    form,
+    setForm,
+  ] =
+    useState(
+      localVazio()
+    );
+
+  useEffect(() => {
+    if (!aberto) {
+      return;
+    }
+
+    setForm(
+      localEditando
+        ? {
+            ...localEditando,
+          }
+        : localVazio(
+            andar?.id ||
+              "",
+            localPaiPadrao ||
+              null
+          )
+    );
+  }, [
+    aberto,
+    andar?.id,
+    localEditando?.id,
+    localPaiPadrao,
+  ]);
+
+  if (
+    !aberto ||
+    !andar
+  ) {
+    return null;
+  }
+
+  const paisPossiveis =
+    locaisDoAndar(
+      locais,
+      andar.id
+    ).filter(
+      (local) =>
+        local.id !==
+        form.id
+    );
+
+  function alterar(
+    campo,
+    valor
+  ) {
+    setForm(
+      (atual) => ({
+        ...atual,
+        [campo]:
+          valor,
+      })
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-slate-950/50 p-3">
+      <section className="max-h-[calc(100vh-24px)] w-full max-w-xl overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="font-black text-slate-900">
+              {form.id
+                ? "Editar ambiente ou equipamento"
+                : "Adicionar ambiente ou equipamento"}
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Pavimento:{" "}
+
+              <strong>
+                {andar.nome}
+              </strong>
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onFechar}
+            className="rounded-xl p-2 hover:bg-slate-100"
+          >
+            <X
+              size={18}
+            />
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <input
+            value={
+              form.nome
+            }
+            onChange={(
+              event
+            ) =>
+              alterar(
+                "nome",
+                event.target.value
+              )
+            }
+            placeholder="Nome: Hall social, Fan coil..."
+            className="rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
+          />
+
+          <select
+            value={
+              form.tipo
+            }
+            onChange={(
+              event
+            ) =>
+              alterar(
+                "tipo",
+                event.target.value
+              )
+            }
+            className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
+          >
+            {TIPOS_LOCAL.map(
+              (tipo) => (
+                <option
+                  key={tipo}
+                >
+                  {tipo}
+                </option>
+              )
+            )}
+          </select>
+
+          <input
+            value={
+              form.ordem
+            }
+            onChange={(
+              event
+            ) =>
+              alterar(
+                "ordem",
+                Number(
+                  event.target.value
+                )
+              )
+            }
+            type="number"
+            placeholder="Ordem"
+            className="rounded-2xl border border-slate-200 p-3 text-sm"
+          />
+
+          <select
+            value={
+              form.localPaiId ||
+              ""
+            }
+            onChange={(
+              event
+            ) =>
+              alterar(
+                "localPaiId",
+                event.target.value ||
+                  null
+              )
+            }
+            className="rounded-2xl border border-slate-200 bg-white p-3 text-sm md:col-span-2"
+          >
+            <option value="">
+              Diretamente no pavimento
+            </option>
+
+            {paisPossiveis.map(
+              (local) => (
+                <option
+                  key={local.id}
+                  value={local.id}
+                >
+                  Dentro de: {local.nome}
+                </option>
+              )
+            )}
+          </select>
+
+          <input
+            value={
+              form.responsavel ||
+              ""
+            }
+            onChange={(
+              event
+            ) =>
+              alterar(
+                "responsavel",
+                event.target.value
+              )
+            }
+            placeholder="Responsável opcional"
+            className="rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
+          />
+
+          <textarea
+            value={
+              form.descricao ||
+              ""
+            }
+            onChange={(
+              event
+            ) =>
+              alterar(
+                "descricao",
+                event.target.value
+              )
+            }
+            placeholder="Descrição"
+            className="min-h-[90px] rounded-2xl border border-slate-200 p-3 text-sm md:col-span-2"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={
+              salvando ||
+              !form.nome
+            }
+            onClick={() =>
+              onSalvar({
+                ...form,
+                andarId:
+                  andar.id,
+              })
+            }
+            className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
+          >
+            {salvando ? (
+              <Loader2
+                size={16}
+                className="animate-spin"
+              />
+            ) : (
+              <Save
+                size={16}
+              />
+            )}
+
+            Salvar
+          </button>
+
+          {form.id && (
             <button
               type="button"
-              onClick={
-                onEditarExterno
+              onClick={() =>
+                onExcluir(
+                  form
+                )
               }
-              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700"
+              className="flex items-center gap-2 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-black text-rose-700"
             >
-              <Edit3
+              <Trash2
                 size={16}
               />
 
-              Editar item externo
+              Remover
             </button>
           )}
+        </div>
+      </section>
+    </div>
+  );
+}
 
+// =========================================================
+// PAINEL DETALHADO INFERIOR
+// =========================================================
+
+function BotaoAba({
+  ativo,
+  texto,
+  onClick,
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl px-4 py-2 text-sm font-black transition ${
+        ativo
+          ? "bg-blue-600 text-white"
+          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+      }`}
+    >
+      {texto}
+    </button>
+  );
+}
+
+function CardLocal({
+  local,
+  locais,
+  onAbrir,
+  onEditar,
+}) {
+  const quantidade =
+    locaisFilhos(
+      locais,
+      local.id
+    ).length;
+
+  return (
+    <article className="rounded-3xl border border-slate-100 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase text-blue-600">
+            {local.tipo}
+          </p>
+
+          <h3 className="mt-1 font-black text-slate-900">
+            {local.nome}
+          </h3>
+
+          {local.descricao && (
+            <p className="mt-2 text-sm text-slate-500">
+              {local.descricao}
+            </p>
+          )}
+
+          <p className="mt-2 text-xs font-bold text-slate-400">
+            {quantidade} item(ns) interno(s)
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            onEditar(
+              local
+            )
+          }
+          className="rounded-xl bg-slate-50 p-2 text-slate-600 hover:bg-slate-100"
+          title="Editar"
+        >
+          <Edit3
+            size={15}
+          />
+        </button>
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          onAbrir(
+            local
+          )
+        }
+        className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-50 px-3 py-2 text-sm font-black text-blue-700 hover:bg-blue-100"
+      >
+        <FolderOpen
+          size={16}
+        />
+
+        Abrir
+      </button>
+    </article>
+  );
+}
+
+const PainelDetalhes = forwardRef(
+  function PainelDetalhes(
+    {
+      entidade,
+      andar,
+      local,
+      itemExterno,
+      locais,
+      arquivos,
+      salvando,
+      arquivosAbertos,
+      aba,
+      onMudarAba,
+      onAlternarArquivos,
+      onSelecionarAndar,
+      onSelecionarLocal,
+      onAdicionarLocal,
+      onEditarLocal,
+      onEditarExterno,
+      onUpload,
+      onExcluirArquivo,
+    },
+    ref
+  ) {
+    if (!entidade) {
+      return (
+        <section
+          ref={ref}
+          className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm"
+        >
+          <Building2
+            size={32}
+            className="mx-auto text-slate-300"
+          />
+
+          <h2 className="mt-3 font-black text-slate-800">
+            Selecione um pavimento ou ambiente
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            As informações detalhadas aparecerão aqui sem cobrir o prédio.
+          </p>
+        </section>
+      );
+    }
+
+    const locaisDoNivel =
+      andar && !local
+        ? locaisRaizDoAndar(
+            locais,
+            andar.id
+          )
+        : local
+          ? locaisFilhos(
+              locais,
+              local.id
+            )
+          : [];
+
+    const fotos =
+      arquivos.filter(
+        (arquivo) =>
+          arquivo.tipoArquivo ===
+          "foto"
+      );
+
+    const plantas =
+      arquivos.filter(
+        (arquivo) =>
+          arquivo.tipoArquivo !==
+          "foto"
+      );
+
+    const trilha =
+      local
+        ? montarTrilhaLocalMapa3D(
+            locais,
+            local.id
+          )
+        : [];
+
+    return (
+      <section
+        ref={ref}
+        className="rounded-[2rem] border border-slate-100 bg-white p-4 shadow-sm md:p-5"
+      >
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div>
+            <p className="text-xs font-black uppercase text-blue-600">
+              Informações detalhadas
+            </p>
+
+            <div className="mt-2 flex flex-wrap items-center gap-1 text-sm font-bold text-slate-500">
+              {andar && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onSelecionarAndar(
+                      andar
+                    )
+                  }
+                  className="rounded-lg px-1 py-0.5 hover:bg-slate-100 hover:text-blue-700"
+                >
+                  {andar.nome}
+                </button>
+              )}
+
+              {trilha.map(
+                (item) => (
+                  <span
+                    key={item.id}
+                    className="flex items-center gap-1"
+                  >
+                    <ChevronRight
+                      size={14}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSelecionarLocal(
+                          item
+                        )
+                      }
+                      className="rounded-lg px-1 py-0.5 hover:bg-slate-100 hover:text-blue-700"
+                    >
+                      {item.nome}
+                    </button>
+                  </span>
+                )
+              )}
+
+              {itemExterno && (
+                <span>
+                  {itemExterno.nome}
+                </span>
+              )}
+            </div>
+
+            <h2 className="mt-2 text-2xl font-black text-slate-900">
+              {
+                entidade.dados.nome
+              }
+            </h2>
+
+            <p className="mt-1 max-w-3xl text-sm text-slate-500">
+              {entidade.dados.observacao ||
+                entidade.dados.descricao ||
+                "Sem observações cadastradas."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            {(andar ||
+              local) && (
+              <button
+                type="button"
+                onClick={() =>
+                  onAdicionarLocal(
+                    local?.id ||
+                      null
+                  )
+                }
+                className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white"
+              >
+                <Plus
+                  size={16}
+                />
+
+                {local
+                  ? "Adicionar item interno"
+                  : "Adicionar ambiente ou equipamento"}
+              </button>
+            )}
+
+            {local && (
+              <button
+                type="button"
+                onClick={() =>
+                  onEditarLocal(
+                    local
+                  )
+                }
+                className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700"
+              >
+                <Edit3
+                  size={16}
+                />
+
+                Editar
+              </button>
+            )}
+
+            {itemExterno && (
+              <button
+                type="button"
+                onClick={
+                  onEditarExterno
+                }
+                className="flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700"
+              >
+                <Edit3
+                  size={16}
+                />
+
+                Editar item externo
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <BotaoAba
+            ativo={
+              aba ===
+              "visao"
+            }
+            texto="Visão geral"
+            onClick={() =>
+              onMudarAba(
+                "visao"
+              )
+            }
+          />
+
+          <BotaoAba
+            ativo={
+              aba ===
+              "itens"
+            }
+            texto="Ambientes e equipamentos"
+            onClick={() =>
+              onMudarAba(
+                "itens"
+              )
+            }
+          />
+
+          <BotaoAba
+            ativo={
+              aba ===
+              "arquivos"
+            }
+            texto="Fotos, plantas e PDFs"
+            onClick={() =>
+              onMudarAba(
+                "arquivos"
+              )
+            }
+          />
+        </div>
+
+        {aba ===
+          "visao" && (
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <Resumo
+              rotulo="Itens internos"
+              valor={
+                locaisDoNivel.length
+              }
+            />
+
+            <Resumo
+              rotulo="Fotos"
+              valor={
+                fotos.length
+              }
+            />
+
+            <Resumo
+              rotulo="Plantas e PDFs"
+              valor={
+                plantas.length
+              }
+            />
+          </div>
+        )}
+
+        {aba ===
+          "itens" && (
+          <div className="mt-5">
+            {locaisDoNivel.length ? (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {locaisDoNivel.map(
+                  (item) => (
+                    <CardLocal
+                      key={item.id}
+                      local={item}
+                      locais={locais}
+                      onAbrir={
+                        onSelecionarLocal
+                      }
+                      onEditar={
+                        onEditarLocal
+                      }
+                    />
+                  )
+                )}
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-dashed border-slate-200 p-6 text-center">
+                <Layers3
+                  size={28}
+                  className="mx-auto text-slate-300"
+                />
+
+                <p className="mt-2 text-sm font-bold text-slate-500">
+                  Nenhum ambiente ou equipamento cadastrado neste nível.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {aba ===
+          "arquivos" && (
           <div className="mt-5">
             <ArquivosEntidade
-              entidade={
-                entidade
-              }
-              arquivos={
-                arquivos
-              }
-              salvando={
-                salvando
-              }
+              entidade={entidade}
+              arquivos={arquivos}
+              salvando={salvando}
               aberto={
                 arquivosAbertos
               }
               onAlternar={
                 onAlternarArquivos
               }
-              onUpload={
-                onUpload
-              }
+              onUpload={onUpload}
               onExcluir={
                 onExcluirArquivo
               }
             />
           </div>
-        </div>
-      )}
-
-      {!minimizado && (
-        <button
-          type="button"
-          aria-label="Redimensionar janela"
-          title="Arraste para ajustar o tamanho"
-          onPointerDown={
-            iniciarRedimensionamento
-          }
-          className="absolute bottom-0 left-0 h-7 w-7 cursor-nesw-resize touch-none rounded-tr-2xl border-r-2 border-t-2 border-blue-400 bg-blue-50/90"
-        />
-      )}
-    </section>
-  );
-}
+        )}
+      </section>
+    );
+  }
+);
 
 // =========================================================
 // CADASTRO DE ITEM EXTERNO
@@ -4022,14 +4400,10 @@ function CamposNumericos({
           rotulo,
         ]) => (
           <label
-            key={
-              campo
-            }
+            key={campo}
             className="text-xs font-bold text-slate-500"
           >
-            {
-              rotulo
-            }
+            {rotulo}
 
             <input
               value={
@@ -4090,9 +4464,7 @@ function CadastroItemExterno({
       posicionamento.coordenadas
     ) {
       setForm(
-        (
-          atual
-        ) => ({
+        (atual) => ({
           ...atual,
           ...posicionamento.coordenadas,
         })
@@ -4107,9 +4479,7 @@ function CadastroItemExterno({
     valor
   ) {
     setForm(
-      (
-        atual
-      ) => ({
+      (atual) => ({
         ...atual,
         [campo]:
           valor,
@@ -4132,9 +4502,7 @@ function CadastroItemExterno({
 
         <button
           type="button"
-          onClick={
-            onFechar
-          }
+          onClick={onFechar}
           className="rounded-xl p-2 hover:bg-slate-100"
         >
           <X
@@ -4175,17 +4543,11 @@ function CadastroItemExterno({
           className="rounded-2xl border border-slate-200 bg-white p-3 text-sm"
         >
           {CATEGORIAS_ITEM.map(
-            (
-              categoria
-            ) => (
+            (categoria) => (
               <option
-                key={
-                  categoria
-                }
+                key={categoria}
               >
-                {
-                  categoria
-                }
+                {categoria}
               </option>
             )
           )}
@@ -4211,16 +4573,10 @@ function CadastroItemExterno({
               texto,
             ]) => (
               <option
-                key={
-                  valor
-                }
-                value={
-                  valor
-                }
+                key={valor}
+                value={valor}
               >
-                {
-                  texto
-                }
+                {texto}
               </option>
             )
           )}
@@ -4246,16 +4602,10 @@ function CadastroItemExterno({
               texto,
             ]) => (
               <option
-                key={
-                  valor
-                }
-                value={
-                  valor
-                }
+                key={valor}
+                value={valor}
               >
-                {
-                  texto
-                }
+                {texto}
               </option>
             )
           )}
@@ -4281,25 +4631,17 @@ function CadastroItemExterno({
               texto,
             ]) => (
               <option
-                key={
-                  valor
-                }
-                value={
-                  valor
-                }
+                key={valor}
+                value={valor}
               >
-                {
-                  texto
-                }
+                {texto}
               </option>
             )
           )}
         </select>
 
         <input
-          value={
-            form.cor
-          }
+          value={form.cor}
           onChange={(
             event
           ) =>
@@ -4310,6 +4652,23 @@ function CadastroItemExterno({
           }
           type="color"
           className="h-[46px] rounded-2xl border border-slate-200 p-2"
+        />
+
+        <input
+          value={form.ordem}
+          onChange={(
+            event
+          ) =>
+            alterar(
+              "ordem",
+              Number(
+                event.target.value
+              )
+            )
+          }
+          type="number"
+          placeholder="Ordem"
+          className="rounded-2xl border border-slate-200 p-3 text-sm"
         />
 
         <button
@@ -4331,12 +4690,8 @@ function CadastroItemExterno({
         </button>
 
         <CamposNumericos
-          form={
-            form
-          }
-          alterar={
-            alterar
-          }
+          form={form}
+          alterar={alterar}
           campos={[
             [
               "x",
@@ -4354,12 +4709,8 @@ function CadastroItemExterno({
         />
 
         <CamposNumericos
-          form={
-            form
-          }
-          alterar={
-            alterar
-          }
+          form={form}
+          alterar={alterar}
           campos={[
             [
               "largura",
@@ -4446,8 +4797,69 @@ function CadastroItemExterno({
 }
 
 // =========================================================
-// GERENCIAMENTO DE ANDARES E LOCAIS
+// GERENCIAMENTO
 // =========================================================
+
+function ItemArvoreGerenciamento({
+  local,
+  nivel = 0,
+  selecionadoId,
+  onSelecionar,
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() =>
+          onSelecionar(
+            local
+          )
+        }
+        className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm ${
+          selecionadoId ===
+          local.id
+            ? "bg-blue-600 text-white"
+            : "bg-white text-slate-700 hover:bg-slate-100"
+        }`}
+        style={{
+          paddingLeft:
+            `${12 + nivel * 16}px`,
+        }}
+      >
+        <ChevronRight
+          size={13}
+        />
+
+        <span className="flex-1 truncate font-bold">
+          {local.nome}
+        </span>
+
+        <span className="text-[10px] opacity-70">
+          {local.tipo}
+        </span>
+      </button>
+
+      {(local.filhos ||
+        []).map(
+        (filho) => (
+          <ItemArvoreGerenciamento
+            key={filho.id}
+            local={filho}
+            nivel={
+              nivel + 1
+            }
+            selecionadoId={
+              selecionadoId
+            }
+            onSelecionar={
+              onSelecionar
+            }
+          />
+        )
+      )}
+    </>
+  );
+}
 
 function ModalGerenciar({
   andares,
@@ -4473,9 +4885,7 @@ function ModalGerenciar({
   ] =
     useState(
       andares.find(
-        (
-          andar
-        ) =>
+        (andar) =>
           Number(
             andar.ordem
           ) ===
@@ -4490,38 +4900,26 @@ function ModalGerenciar({
     setLocalForm,
   ] =
     useState(
-      localVazio(
-        andarGerenciadoId
-      )
+      localVazio()
     );
 
   const andarGerenciado =
     andares.find(
-      (
-        andar
-      ) =>
+      (andar) =>
         andar.id ===
         andarGerenciadoId
     );
 
   const locaisGerenciados =
-    locais
-      .filter(
-        (
-          local
-        ) =>
-          local.andarId ===
-          andarGerenciadoId
-      )
-      .sort(
-        (
-          a,
-          b
-        ) =>
-          a.nome.localeCompare(
-            b.nome
-          )
-      );
+    locaisDoAndar(
+      locais,
+      andarGerenciadoId
+    );
+
+  const arvore =
+    montarArvoreLocaisMapa3D(
+      locaisGerenciados
+    );
 
   useEffect(() => {
     setLocalForm(
@@ -4534,24 +4932,22 @@ function ModalGerenciar({
   ]);
 
   return (
-    <div className="fixed inset-0 z-[1200] overflow-y-auto bg-slate-950/50 p-3 md:p-6">
-      <div className="mx-auto max-w-6xl rounded-[2rem] bg-white p-5 shadow-2xl">
+    <div className="fixed inset-0 z-[1500] overflow-y-auto bg-slate-950/50 p-3 md:p-6">
+      <div className="mx-auto max-w-7xl rounded-[2rem] bg-white p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-black text-slate-900">
-              Gerenciar andares, locatários e equipamentos
+              Gerenciar prédio
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Edite nomes, observações e itens cadastrados em cada pavimento.
+              Edite pavimentos, ambientes, locatários e equipamentos.
             </p>
           </div>
 
           <button
             type="button"
-            onClick={
-              onFechar
-            }
+            onClick={onFechar}
             className="rounded-xl p-2 hover:bg-slate-100"
           >
             <X
@@ -4560,7 +4956,7 @@ function ModalGerenciar({
           </button>
         </div>
 
-        <div className="mt-5 grid gap-5 lg:grid-cols-[310px_1fr]">
+        <div className="mt-5 grid gap-5 xl:grid-cols-[280px_1fr_1fr]">
           <aside className="rounded-3xl bg-slate-50 p-4">
             <div className="flex items-center justify-between gap-2">
               <h3 className="font-black text-slate-900">
@@ -4587,14 +4983,10 @@ function ModalGerenciar({
                 .slice()
                 .reverse()
                 .map(
-                  (
-                    andar
-                  ) => (
+                  (andar) => (
                     <button
                       type="button"
-                      key={
-                        andar.id
-                      }
+                      key={andar.id}
                       onClick={() => {
                         setAndarForm({
                           ...andar,
@@ -4620,14 +5012,8 @@ function ModalGerenciar({
                       />
 
                       <span className="flex-1 truncate">
-                        {
-                          andar.nome
-                        }
+                        {andar.nome}
                       </span>
-
-                      <Edit3
-                        size={13}
-                      />
                     </button>
                   )
                 )}
@@ -4651,9 +5037,7 @@ function ModalGerenciar({
                     event
                   ) =>
                     setAndarForm(
-                      (
-                        atual
-                      ) => ({
+                      (atual) => ({
                         ...atual,
                         nome:
                           event.target.value,
@@ -4672,9 +5056,7 @@ function ModalGerenciar({
                     event
                   ) =>
                     setAndarForm(
-                      (
-                        atual
-                      ) => ({
+                      (atual) => ({
                         ...atual,
                         ordem:
                           Number(
@@ -4696,9 +5078,7 @@ function ModalGerenciar({
                     event
                   ) =>
                     setAndarForm(
-                      (
-                        atual
-                      ) => ({
+                      (atual) => ({
                         ...atual,
                         cor:
                           event.target.value,
@@ -4717,9 +5097,7 @@ function ModalGerenciar({
                     event
                   ) =>
                     setAndarForm(
-                      (
-                        atual
-                      ) => ({
+                      (atual) => ({
                         ...atual,
                         tituloCurto:
                           event.target.value,
@@ -4738,9 +5116,7 @@ function ModalGerenciar({
                     event
                   ) =>
                     setAndarForm(
-                      (
-                        atual
-                      ) => ({
+                      (atual) => ({
                         ...atual,
                         observacao:
                           event.target.value,
@@ -4787,245 +5163,252 @@ function ModalGerenciar({
                       size={16}
                     />
 
-                    Remover pavimento
+                    Remover
                   </button>
                 )}
               </div>
             </section>
+          </main>
 
-            <section className="rounded-3xl border border-slate-100 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-black text-slate-900">
-                    Locatários, locais e equipamentos
-                  </h3>
+          <section className="rounded-3xl border border-slate-100 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-black text-slate-900">
+                  Ambientes e equipamentos
+                </h3>
 
-                  <p className="mt-1 text-sm text-slate-500">
-                    Pavimento:{" "}
+                <p className="mt-1 text-sm text-slate-500">
+                  {andarGerenciado?.nome ||
+                    "Selecione um pavimento"}
+                </p>
+              </div>
 
-                    <strong>
-                      {andarGerenciado?.nome ||
-                        "Selecione um pavimento"}
-                    </strong>
-                  </p>
-                </div>
+              <button
+                type="button"
+                disabled={
+                  !andarGerenciadoId
+                }
+                onClick={() =>
+                  setLocalForm(
+                    localVazio(
+                      andarGerenciadoId
+                    )
+                  )
+                }
+                className="rounded-xl bg-blue-600 p-2 text-white disabled:opacity-40"
+              >
+                <Plus
+                  size={16}
+                />
+              </button>
+            </div>
 
+            <div className="mt-4 max-h-[260px] space-y-1 overflow-auto rounded-2xl bg-slate-50 p-2">
+              {arvore.length ? (
+                arvore.map(
+                  (local) => (
+                    <ItemArvoreGerenciamento
+                      key={local.id}
+                      local={local}
+                      selecionadoId={
+                        localForm.id
+                      }
+                      onSelecionar={
+                        setLocalForm
+                      }
+                    />
+                  )
+                )
+              ) : (
+                <p className="p-3 text-sm text-slate-400">
+                  Nenhum item cadastrado.
+                </p>
+              )}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <input
+                value={
+                  localForm.nome
+                }
+                onChange={(
+                  event
+                ) =>
+                  setLocalForm(
+                    (atual) => ({
+                      ...atual,
+                      nome:
+                        event.target.value,
+                    })
+                  )
+                }
+                placeholder="Nome do ambiente ou equipamento"
+                className="w-full rounded-2xl border border-slate-200 p-3 text-sm"
+              />
+
+              <select
+                value={
+                  localForm.tipo
+                }
+                onChange={(
+                  event
+                ) =>
+                  setLocalForm(
+                    (atual) => ({
+                      ...atual,
+                      tipo:
+                        event.target.value,
+                    })
+                  )
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm"
+              >
+                {TIPOS_LOCAL.map(
+                  (tipo) => (
+                    <option
+                      key={tipo}
+                    >
+                      {tipo}
+                    </option>
+                  )
+                )}
+              </select>
+
+              <select
+                value={
+                  localForm.localPaiId ||
+                  ""
+                }
+                onChange={(
+                  event
+                ) =>
+                  setLocalForm(
+                    (atual) => ({
+                      ...atual,
+                      localPaiId:
+                        event.target.value ||
+                        null,
+                    })
+                  )
+                }
+                className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm"
+              >
+                <option value="">
+                  Diretamente no pavimento
+                </option>
+
+                {locaisGerenciados
+                  .filter(
+                    (local) =>
+                      local.id !==
+                      localForm.id
+                  )
+                  .map(
+                    (local) => (
+                      <option
+                        key={local.id}
+                        value={local.id}
+                      >
+                        Dentro de: {local.nome}
+                      </option>
+                    )
+                  )}
+              </select>
+
+              <input
+                value={
+                  localForm.ordem
+                }
+                onChange={(
+                  event
+                ) =>
+                  setLocalForm(
+                    (atual) => ({
+                      ...atual,
+                      ordem:
+                        Number(
+                          event.target.value
+                        ),
+                    })
+                  )
+                }
+                type="number"
+                placeholder="Ordem"
+                className="w-full rounded-2xl border border-slate-200 p-3 text-sm"
+              />
+
+              <textarea
+                value={
+                  localForm.descricao
+                }
+                onChange={(
+                  event
+                ) =>
+                  setLocalForm(
+                    (atual) => ({
+                      ...atual,
+                      descricao:
+                        event.target.value,
+                    })
+                  )
+                }
+                placeholder="Descrição"
+                className="min-h-[74px] w-full rounded-2xl border border-slate-200 p-3 text-sm"
+              />
+
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={
-                    !andarGerenciadoId
+                    salvando ||
+                    !andarGerenciadoId ||
+                    !localForm.nome
                   }
                   onClick={() =>
-                    setLocalForm(
-                      localVazio(
-                        andarGerenciadoId
-                      )
-                    )
+                    onSalvarLocal({
+                      ...localForm,
+                      andarId:
+                        andarGerenciadoId,
+                    })
                   }
-                  className="rounded-xl bg-blue-600 p-2 text-white disabled:opacity-40"
+                  className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
                 >
-                  <Plus
+                  <Save
                     size={16}
                   />
+
+                  Salvar item
                 </button>
-              </div>
 
-              <div className="mt-4 grid gap-4 xl:grid-cols-[1fr_0.9fr]">
-                <div className="max-h-[420px] space-y-2 overflow-auto">
-                  {locaisGerenciados.length ? (
-                    locaisGerenciados.map(
-                      (
-                        local
-                      ) => (
-                        <button
-                          type="button"
-                          key={
-                            local.id
-                          }
-                          onClick={() =>
-                            setLocalForm({
-                              ...local,
-                            })
-                          }
-                          className={`w-full rounded-2xl border p-3 text-left ${
-                            localForm.id ===
-                            local.id
-                              ? "border-blue-400 bg-blue-50"
-                              : "border-slate-100 bg-slate-50"
-                          }`}
-                        >
-                          <p className="text-sm font-black text-slate-800">
-                            {
-                              local.nome
-                            }
-                          </p>
-
-                          <p className="mt-1 text-xs font-bold text-blue-700">
-                            {
-                              local.tipo
-                            }
-                          </p>
-                        </button>
-                      )
-                    )
-                  ) : (
-                    <p className="rounded-2xl border border-dashed border-slate-200 p-4 text-sm text-slate-400">
-                      Nenhum item cadastrado neste pavimento.
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-3">
-                  <input
-                    value={
-                      localForm.nome
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setLocalForm(
-                        (
-                          atual
-                        ) => ({
-                          ...atual,
-                          nome:
-                            event.target.value,
-                        })
+                {localForm.id && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onExcluirLocal(
+                        localForm
                       )
                     }
-                    placeholder="Nome do locatário, local ou equipamento"
-                    className="w-full rounded-2xl border border-slate-200 p-3 text-sm"
-                  />
-
-                  <select
-                    value={
-                      localForm.tipo
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setLocalForm(
-                        (
-                          atual
-                        ) => ({
-                          ...atual,
-                          tipo:
-                            event.target.value,
-                        })
-                      )
-                    }
-                    className="w-full rounded-2xl border border-slate-200 bg-white p-3 text-sm"
+                    className="flex items-center gap-2 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-black text-rose-700"
                   >
-                    {TIPOS_LOCAL.map(
-                      (
-                        tipo
-                      ) => (
-                        <option
-                          key={
-                            tipo
-                          }
-                        >
-                          {
-                            tipo
-                          }
-                        </option>
-                      )
-                    )}
-                  </select>
+                    <Trash2
+                      size={16}
+                    />
 
-                  <input
-                    value={
-                      localForm.responsavel
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setLocalForm(
-                        (
-                          atual
-                        ) => ({
-                          ...atual,
-                          responsavel:
-                            event.target.value,
-                        })
-                      )
-                    }
-                    placeholder="Responsável"
-                    className="w-full rounded-2xl border border-slate-200 p-3 text-sm"
-                  />
-
-                  <textarea
-                    value={
-                      localForm.descricao
-                    }
-                    onChange={(
-                      event
-                    ) =>
-                      setLocalForm(
-                        (
-                          atual
-                        ) => ({
-                          ...atual,
-                          descricao:
-                            event.target.value,
-                        })
-                      )
-                    }
-                    placeholder="Descrição"
-                    className="min-h-[74px] w-full rounded-2xl border border-slate-200 p-3 text-sm"
-                  />
-
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      disabled={
-                        salvando ||
-                        !andarGerenciadoId ||
-                        !localForm.nome
-                      }
-                      onClick={() =>
-                        onSalvarLocal({
-                          ...localForm,
-                          andarId:
-                            andarGerenciadoId,
-                        })
-                      }
-                      className="flex items-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-50"
-                    >
-                      <Save
-                        size={16}
-                      />
-
-                      Salvar item
-                    </button>
-
-                    {localForm.id && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onExcluirLocal(
-                            localForm
-                          )
-                        }
-                        className="flex items-center gap-2 rounded-2xl bg-rose-50 px-4 py-3 text-sm font-black text-rose-700"
-                      >
-                        <Trash2
-                          size={16}
-                        />
-
-                        Remover item
-                      </button>
-                    )}
-                  </div>
-                </div>
+                    Remover
+                  </button>
+                )}
               </div>
-            </section>
-          </main>
+            </div>
+          </section>
         </div>
       </div>
     </div>
   );
 }
+
+// =========================================================
+// BOTÕES
+// =========================================================
 
 function BotaoTopo({
   icon,
@@ -5035,13 +5418,10 @@ function BotaoTopo({
   return (
     <button
       type="button"
-      onClick={
-        onClick
-      }
+      onClick={onClick}
       className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-50"
     >
       {icon}
-
       {texto}
     </button>
   );
@@ -5083,6 +5463,12 @@ export default function Mapa3D() {
     useState(null);
 
   const [
+    localSelecionado,
+    setLocalSelecionado,
+  ] =
+    useState(null);
+
+  const [
     itemSelecionado,
     setItemSelecionado,
   ] =
@@ -5095,8 +5481,8 @@ export default function Mapa3D() {
     useState(null);
 
   const [
-    cardFlutuanteAberto,
-    setCardFlutuanteAberto,
+    cardResumoAberto,
+    setCardResumoAberto,
   ] =
     useState(false);
 
@@ -5109,6 +5495,12 @@ export default function Mapa3D() {
   const [
     pavimentosAbertos,
     setPavimentosAbertos,
+  ] =
+    useState(true);
+
+  const [
+    lateralAberta,
+    setLateralAberta,
   ] =
     useState(true);
 
@@ -5131,6 +5523,24 @@ export default function Mapa3D() {
     useState(false);
 
   const [
+    modalLocalAberto,
+    setModalLocalAberto,
+  ] =
+    useState(false);
+
+  const [
+    localEditando,
+    setLocalEditando,
+  ] =
+    useState(null);
+
+  const [
+    localPaiCadastro,
+    setLocalPaiCadastro,
+  ] =
+    useState(null);
+
+  const [
     modalGerenciarAberto,
     setModalGerenciarAberto,
   ] =
@@ -5142,6 +5552,22 @@ export default function Mapa3D() {
   ] =
     useState(
       "geral"
+    );
+
+  const [
+    modoRotulos,
+    setModoRotulos,
+  ] =
+    useState(
+      "essenciais"
+    );
+
+  const [
+    abaDetalhes,
+    setAbaDetalhes,
+  ] =
+    useState(
+      "visao"
     );
 
   const [
@@ -5178,6 +5604,9 @@ export default function Mapa3D() {
   ] =
     useState(0);
 
+  const detalhesRef =
+    useRef(null);
+
   const andaresOrdenados =
     useMemo(
       () =>
@@ -5200,22 +5629,12 @@ export default function Mapa3D() {
       ]
     );
 
-  const locaisSelecionados =
-    useMemo(() => {
-      if (
-        !andarSelecionado
-      ) {
-        return [];
-      }
-
-      return locaisDoAndar(
-        locais,
-        andarSelecionado.id
-      );
-    }, [
-      andarSelecionado,
-      locais,
-    ]);
+  function rolarParaDetalhes() {
+    detalhesRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  }
 
   async function carregarArquivos(
     entidade
@@ -5260,19 +5679,14 @@ export default function Mapa3D() {
           listarItensExternosMapa3D(),
         ]);
 
-      const listaSem13 =
+      setAndares(
         listaAndares.filter(
-          (
-            andar
-          ) =>
+          (andar) =>
             Number(
               andar.ordem
             ) !==
             13
-        );
-
-      setAndares(
-        listaSem13
+        )
       );
 
       setLocais(
@@ -5306,13 +5720,17 @@ export default function Mapa3D() {
   async function selecionarAndar(
     andar
   ) {
-    const entidade = {
-      tipo: "andar",
-      dados: andar,
-    };
+    const entidade =
+      entidadeDoAndar(
+        andar
+      );
 
     setAndarSelecionado(
       andar
+    );
+
+    setLocalSelecionado(
+      null
     );
 
     setItemSelecionado(
@@ -5327,8 +5745,57 @@ export default function Mapa3D() {
       false
     );
 
-    setCardFlutuanteAberto(
+    setCardResumoAberto(
       true
+    );
+
+    setAbaDetalhes(
+      "visao"
+    );
+
+    await carregarArquivos(
+      entidade
+    );
+  }
+
+  async function selecionarLocal(
+    local
+  ) {
+    const andar =
+      andares.find(
+        (item) =>
+          item.id ===
+          local.andarId
+      );
+
+    const entidade =
+      entidadeDoLocal(
+        local
+      );
+
+    setAndarSelecionado(
+      andar ||
+      null
+    );
+
+    setLocalSelecionado(
+      local
+    );
+
+    setItemSelecionado(
+      null
+    );
+
+    setEntidadeSelecionada(
+      entidade
+    );
+
+    setCardResumoAberto(
+      true
+    );
+
+    setAbaDetalhes(
+      "visao"
     );
 
     await carregarArquivos(
@@ -5339,11 +5806,10 @@ export default function Mapa3D() {
   async function selecionarItem(
     item
   ) {
-    const entidade = {
-      tipo:
-        "item_externo",
-      dados: item,
-    };
+    const entidade =
+      entidadeDoItemExterno(
+        item
+      );
 
     setItemSelecionado(
       item
@@ -5353,16 +5819,63 @@ export default function Mapa3D() {
       null
     );
 
+    setLocalSelecionado(
+      null
+    );
+
     setEntidadeSelecionada(
       entidade
     );
 
-    setCardFlutuanteAberto(
+    setCardResumoAberto(
       true
+    );
+
+    setAbaDetalhes(
+      "visao"
     );
 
     await carregarArquivos(
       entidade
+    );
+  }
+
+  function abrirCadastroLocal(
+    localPaiId = null
+  ) {
+    if (
+      !andarSelecionado
+    ) {
+      return;
+    }
+
+    setLocalEditando(
+      null
+    );
+
+    setLocalPaiCadastro(
+      localPaiId
+    );
+
+    setModalLocalAberto(
+      true
+    );
+  }
+
+  function abrirEdicaoLocal(
+    local
+  ) {
+    setLocalEditando(
+      local
+    );
+
+    setLocalPaiCadastro(
+      local.localPaiId ||
+      null
+    );
+
+    setModalLocalAberto(
+      true
     );
   }
 
@@ -5387,9 +5900,7 @@ export default function Mapa3D() {
     );
 
     try {
-      if (
-        form.id
-      ) {
+      if (form.id) {
         const atualizado =
           await atualizarAndarMapa3D(
             form.id,
@@ -5397,14 +5908,10 @@ export default function Mapa3D() {
           );
 
         setAndares(
-          (
-            atuais
-          ) =>
+          (atuais) =>
             ordenarAndares(
               atuais.map(
-                (
-                  andar
-                ) =>
+                (andar) =>
                   andar.id ===
                   atualizado.id
                     ? atualizado
@@ -5419,9 +5926,7 @@ export default function Mapa3D() {
           );
 
         setAndares(
-          (
-            atuais
-          ) =>
+          (atuais) =>
             ordenarAndares([
               ...atuais,
               criado,
@@ -5462,13 +5967,9 @@ export default function Mapa3D() {
       );
 
       setAndares(
-        (
-          atuais
-        ) =>
+        (atuais) =>
           atuais.filter(
-            (
-              item
-            ) =>
+            (item) =>
               item.id !==
               andar.id
           )
@@ -5494,42 +5995,58 @@ export default function Mapa3D() {
     );
 
     try {
-      if (
-        form.id
-      ) {
-        const atualizado =
+      let salvo;
+
+      if (form.id) {
+        salvo =
           await atualizarLocalMapa3D(
             form.id,
             form
           );
 
         setLocais(
-          (
-            atuais
-          ) =>
-            atuais.map(
-              (
-                local
-              ) =>
-                local.id ===
-                atualizado.id
-                  ? atualizado
-                  : local
+          (atuais) =>
+            ordenarLocais(
+              atuais.map(
+                (local) =>
+                  local.id ===
+                  salvo.id
+                    ? salvo
+                    : local
+              )
             )
         );
       } else {
-        const criado =
+        salvo =
           await criarLocalMapa3D(
             form
           );
 
         setLocais(
-          (
-            atuais
-          ) => [
-            ...atuais,
-            criado,
-          ]
+          (atuais) =>
+            ordenarLocais([
+              ...atuais,
+              salvo,
+            ])
+        );
+      }
+
+      setModalLocalAberto(
+        false
+      );
+
+      setLocalEditando(
+        null
+      );
+
+      if (
+        entidadeSelecionada?.tipo ===
+          "local" &&
+        entidadeSelecionada.dados.id ===
+          salvo.id
+      ) {
+        await selecionarLocal(
+          salvo
         );
       }
     } catch (
@@ -5540,7 +6057,7 @@ export default function Mapa3D() {
       );
 
       setErro(
-        "Não foi possível salvar o local."
+        "Não foi possível salvar o ambiente ou equipamento."
       );
     } finally {
       setSalvando(
@@ -5552,31 +6069,65 @@ export default function Mapa3D() {
   async function removerLocal(
     local
   ) {
+    const descendentes =
+      contarDescendentes(
+        locais,
+        local.id
+      );
+
+    const textoDescendentes =
+      descendentes
+        ? ` Também serão removidos ${descendentes} item(ns) interno(s).`
+        : "";
+
     if (
       !window.confirm(
-        `Remover "${local.nome}"?`
+        `Remover "${local.nome}"?${textoDescendentes}`
       )
     ) {
       return;
     }
 
     try {
-      await excluirLocalMapa3D(
-        local.id
-      );
+      const resultado =
+        await excluirLocalMapa3D(
+          local.id
+        );
+
+      const ids =
+        resultado?.idsDesativados ||
+        [
+          local.id,
+        ];
 
       setLocais(
-        (
-          atuais
-        ) =>
+        (atuais) =>
           atuais.filter(
-            (
-              item
-            ) =>
-              item.id !==
-              local.id
+            (item) =>
+              !ids.includes(
+                item.id
+              )
           )
       );
+
+      setModalLocalAberto(
+        false
+      );
+
+      if (
+        localSelecionado &&
+        ids.includes(
+          localSelecionado.id
+        )
+      ) {
+        if (
+          andarSelecionado
+        ) {
+          await selecionarAndar(
+            andarSelecionado
+          );
+        }
+      }
     } catch (
       error
     ) {
@@ -5585,7 +6136,7 @@ export default function Mapa3D() {
       );
 
       setErro(
-        "Não foi possível remover o local."
+        "Não foi possível remover o ambiente ou equipamento."
       );
     }
   }
@@ -5598,9 +6149,7 @@ export default function Mapa3D() {
     );
 
     try {
-      if (
-        form.id
-      ) {
+      if (form.id) {
         const atualizado =
           await atualizarItemExternoMapa3D(
             form.id,
@@ -5608,17 +6157,15 @@ export default function Mapa3D() {
           );
 
         setItensExternos(
-          (
-            atuais
-          ) =>
-            atuais.map(
-              (
-                item
-              ) =>
-                item.id ===
-                atualizado.id
-                  ? atualizado
-                  : item
+          (atuais) =>
+            ordenarItens(
+              atuais.map(
+                (item) =>
+                  item.id ===
+                  atualizado.id
+                    ? atualizado
+                    : item
+              )
             )
         );
 
@@ -5632,9 +6179,7 @@ export default function Mapa3D() {
           );
 
         setItensExternos(
-          (
-            atuais
-          ) =>
+          (atuais) =>
             ordenarItens([
               ...atuais,
               criado,
@@ -5683,13 +6228,9 @@ export default function Mapa3D() {
       );
 
       setItensExternos(
-        (
-          atuais
-        ) =>
+        (atuais) =>
           atuais.filter(
-            (
-              atual
-            ) =>
+            (atual) =>
               atual.id !==
               item.id
           )
@@ -5705,7 +6246,7 @@ export default function Mapa3D() {
 
       setArquivos([]);
 
-      setCardFlutuanteAberto(
+      setCardResumoAberto(
         false
       );
 
@@ -5752,9 +6293,7 @@ export default function Mapa3D() {
         });
 
       setArquivos(
-        (
-          atuais
-        ) => [
+        (atuais) => [
           criado,
           ...atuais,
         ]
@@ -5784,9 +6323,7 @@ export default function Mapa3D() {
         "Digite a senha para excluir este arquivo:"
       );
 
-    if (
-      !senha
-    ) {
+    if (!senha) {
       return;
     }
 
@@ -5810,13 +6347,9 @@ export default function Mapa3D() {
       );
 
       setArquivos(
-        (
-          atuais
-        ) =>
+        (atuais) =>
           atuais.filter(
-            (
-              item
-            ) =>
+            (item) =>
               item.id !==
               arquivo.id
           )
@@ -5847,9 +6380,7 @@ export default function Mapa3D() {
     }
   }
 
-  if (
-    carregando
-  ) {
+  if (carregando) {
     return (
       <div className="rounded-3xl border border-slate-100 bg-white p-12 text-center shadow-sm">
         <Loader2
@@ -5886,7 +6417,7 @@ export default function Mapa3D() {
             </h1>
 
             <p className="text-sm text-slate-500">
-              Torre espelhada, pavimentos técnicos, áreas externas e subsolos.
+              Selecione um pavimento, ambiente ou equipamento para abrir os detalhes abaixo.
             </p>
           </div>
 
@@ -5900,11 +6431,8 @@ export default function Mapa3D() {
               texto="Reposicionar"
               onClick={() =>
                 setResetCamera(
-                  (
-                    valor
-                  ) =>
-                    valor +
-                    1
+                  (valor) =>
+                    valor + 1
                 )
               }
             />
@@ -5916,9 +6444,7 @@ export default function Mapa3D() {
                 />
               }
               texto="Atualizar"
-              onClick={
-                carregar
-              }
+              onClick={carregar}
             />
 
             <BotaoTopo
@@ -5956,130 +6482,171 @@ export default function Mapa3D() {
         </div>
 
         <div
-          className={`grid min-h-[calc(100vh-190px)] grid-cols-1 xl:min-h-[900px] ${
+          className={`grid grid-cols-1 ${
+            lateralAberta &&
             pavimentosAbertos
               ? "xl:grid-cols-[200px_175px_minmax(0,1fr)]"
-              : "xl:grid-cols-[200px_minmax(0,1fr)]"
+              : lateralAberta
+                ? "xl:grid-cols-[200px_minmax(0,1fr)]"
+                : pavimentosAbertos
+                  ? "xl:grid-cols-[175px_minmax(0,1fr)]"
+                  : "xl:grid-cols-1"
           }`}
         >
-          <aside className="hidden border-r border-slate-100 bg-slate-50/80 p-4 xl:block">
-            <div className="rounded-3xl bg-white p-4 shadow-sm">
-              <Building2
-                size={22}
-                className="text-blue-600"
-              />
+          {lateralAberta && (
+            <aside className="hidden border-r border-slate-100 bg-slate-50/80 p-4 xl:block">
+              <div className="flex items-start justify-between gap-2 rounded-3xl bg-white p-4 shadow-sm">
+                <div>
+                  <Building2
+                    size={22}
+                    className="text-blue-600"
+                  />
 
-              <p className="mt-2 font-black text-slate-900">
-                Edifício JK 1455
-              </p>
+                  <p className="mt-2 font-black text-slate-900">
+                    Edifício JK 1455
+                  </p>
 
-              <p className="text-[11px] text-slate-400">
-                Gestão predial
-              </p>
-            </div>
+                  <p className="text-[11px] text-slate-400">
+                    Gestão predial
+                  </p>
+                </div>
 
-            <button
-              type="button"
-              onClick={() =>
-                setMenuCamadasAberto(
-                  (
-                    valor
-                  ) =>
-                    !valor
-                )
-              }
-              className="mt-4 flex w-full items-center justify-between rounded-2xl px-3 py-2 text-sm font-black text-slate-700 hover:bg-white"
-            >
-              Navegação
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLateralAberta(
+                      false
+                    )
+                  }
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"
+                  title="Recolher menu"
+                >
+                  <ChevronLeft
+                    size={15}
+                  />
+                </button>
+              </div>
 
-              {menuCamadasAberto ? (
-                <ChevronUp
-                  size={16}
-                />
-              ) : (
-                <ChevronDown
-                  size={16}
-                />
+              <button
+                type="button"
+                onClick={() =>
+                  setMenuCamadasAberto(
+                    (valor) =>
+                      !valor
+                  )
+                }
+                className="mt-4 flex w-full items-center justify-between rounded-2xl px-3 py-2 text-sm font-black text-slate-700 hover:bg-white"
+              >
+                Navegação
+
+                {menuCamadasAberto ? (
+                  <ChevronUp
+                    size={16}
+                  />
+                ) : (
+                  <ChevronDown
+                    size={16}
+                  />
+                )}
+              </button>
+
+              {menuCamadasAberto && (
+                <div className="mt-1 space-y-1">
+                  {CAMADAS.map(
+                    ([
+                      id,
+                      nome,
+                    ]) => (
+                      <button
+                        type="button"
+                        key={id}
+                        onClick={() =>
+                          setCamada(
+                            id
+                          )
+                        }
+                        className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm font-bold ${
+                          camada === id
+                            ? "bg-blue-600 text-white"
+                            : "text-slate-600 hover:bg-white"
+                        }`}
+                      >
+                        <Eye
+                          size={15}
+                        />
+
+                        {nome}
+                      </button>
+                    )
+                  )}
+                </div>
               )}
-            </button>
 
-            {menuCamadasAberto && (
-              <div className="mt-1 space-y-1">
-                {CAMADAS.map(
+              <p className="mt-5 px-2 text-xs font-black uppercase text-slate-400">
+                Rótulos
+              </p>
+
+              <div className="mt-2 space-y-1">
+                {MODOS_ROTULOS.map(
                   ([
                     id,
                     nome,
                   ]) => (
                     <button
                       type="button"
-                      key={
-                        id
-                      }
+                      key={id}
                       onClick={() =>
-                        setCamada(
+                        setModoRotulos(
                           id
                         )
                       }
-                      className={`flex w-full items-center gap-2 rounded-2xl px-3 py-2 text-left text-sm font-bold ${
-                        camada ===
-                        id
-                          ? "bg-blue-600 text-white"
-                          : "text-slate-600 hover:bg-white"
+                      className={`w-full rounded-xl px-3 py-2 text-left text-xs font-bold ${
+                        modoRotulos === id
+                          ? "bg-cyan-100 text-cyan-950"
+                          : "hover:bg-white"
                       }`}
                     >
-                      <Eye
-                        size={15}
-                      />
-
-                      {
-                        nome
-                      }
+                      {nome}
                     </button>
                   )
                 )}
               </div>
-            )}
 
-            <p className="mt-5 px-2 text-xs font-black uppercase text-slate-400">
-              Itens externos
-            </p>
+              <p className="mt-5 px-2 text-xs font-black uppercase text-slate-400">
+                Itens externos
+              </p>
 
-            <div className="mt-2 max-h-[360px] space-y-1 overflow-auto">
-              {itensOrdenados.map(
-                (
-                  item
-                ) => (
-                  <button
-                    type="button"
-                    key={
-                      item.id
-                    }
-                    onClick={() =>
-                      selecionarItem(
-                        item
-                      )
-                    }
-                    className={`flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-xs font-bold ${
-                      itemSelecionado?.id ===
-                      item.id
-                        ? "bg-cyan-100 text-cyan-950"
-                        : "hover:bg-white"
-                    }`}
-                  >
-                    <MapPin
-                      size={13}
-                    />
-
-                    <span className="truncate">
-                      {
-                        item.nome
+              <div className="mt-2 max-h-[270px] space-y-1 overflow-auto">
+                {itensOrdenados.map(
+                  (item) => (
+                    <button
+                      type="button"
+                      key={item.id}
+                      onClick={() =>
+                        selecionarItem(
+                          item
+                        )
                       }
-                    </span>
-                  </button>
-                )
-              )}
-            </div>
-          </aside>
+                      className={`flex w-full items-center gap-2 rounded-xl px-2 py-2 text-left text-xs font-bold ${
+                        itemSelecionado?.id ===
+                        item.id
+                          ? "bg-cyan-100 text-cyan-950"
+                          : "hover:bg-white"
+                      }`}
+                    >
+                      <MapPin
+                        size={13}
+                      />
+
+                      <span className="truncate">
+                        {item.nome}
+                      </span>
+                    </button>
+                  )
+                )}
+              </div>
+            </aside>
+          )}
 
           {pavimentosAbertos && (
             <aside className="hidden border-r border-slate-100 bg-white p-3 xl:block">
@@ -6104,19 +6671,15 @@ export default function Mapa3D() {
                 </button>
               </div>
 
-              <div className="mt-2 max-h-[860px] space-y-1 overflow-auto">
+              <div className="mt-2 max-h-[620px] space-y-1 overflow-auto">
                 {andaresOrdenados
                   .slice()
                   .reverse()
                   .map(
-                    (
-                      andar
-                    ) => (
+                    (andar) => (
                       <button
                         type="button"
-                        key={
-                          andar.id
-                        }
+                        key={andar.id}
                         onClick={() =>
                           selecionarAndar(
                             andar
@@ -6138,9 +6701,7 @@ export default function Mapa3D() {
                         />
 
                         <span className="flex-1 truncate">
-                          {
-                            andar.nome
-                          }
+                          {andar.nome}
                         </span>
                       </button>
                     )
@@ -6149,24 +6710,44 @@ export default function Mapa3D() {
             </aside>
           )}
 
-          <div className="relative min-h-[calc(100vh-190px)] bg-gradient-to-b from-slate-50 via-blue-50 to-slate-100 xl:min-h-[900px]">
-            {!pavimentosAbertos && (
-              <button
-                type="button"
-                onClick={() =>
-                  setPavimentosAbertos(
-                    true
-                  )
-                }
-                className="absolute left-3 top-3 z-20 hidden items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-lg xl:flex"
-              >
-                <ChevronRight
-                  size={16}
-                />
+          <div className="relative h-[620px] bg-gradient-to-b from-slate-50 via-blue-50 to-slate-100 md:h-[690px]">
+            <div className="absolute left-3 top-3 z-20 flex flex-wrap gap-2">
+              {!lateralAberta && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLateralAberta(
+                      true
+                    )
+                  }
+                  className="hidden items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-lg xl:flex"
+                >
+                  <Menu
+                    size={15}
+                  />
 
-                Pavimentos
-              </button>
-            )}
+                  Menu
+                </button>
+              )}
+
+              {!pavimentosAbertos && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPavimentosAbertos(
+                      true
+                    )
+                  }
+                  className="hidden items-center gap-2 rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-lg xl:flex"
+                >
+                  <ChevronRight
+                    size={16}
+                  />
+
+                  Pavimentos
+                </button>
+              )}
+            </div>
 
             <Canvas
               shadows
@@ -6174,9 +6755,7 @@ export default function Mapa3D() {
                 1,
                 1.55,
               ]}
-              key={
-                resetCamera
-              }
+              key={resetCamera}
             >
               <PerspectiveCamera
                 makeDefault
@@ -6206,20 +6785,19 @@ export default function Mapa3D() {
                 andares={
                   andaresOrdenados
                 }
-                locais={
-                  locais
-                }
+                locais={locais}
                 itensExternos={
                   itensOrdenados
                 }
-                camada={
-                  camada
-                }
+                camada={camada}
                 andarSelecionado={
                   andarSelecionado
                 }
                 itemSelecionado={
                   itemSelecionado
+                }
+                modoRotulos={
+                  modoRotulos
                 }
                 onSelectAndar={
                   selecionarAndar
@@ -6234,12 +6812,9 @@ export default function Mapa3D() {
                   coordenadas
                 ) =>
                   setPosicionamento(
-                    (
-                      atual
-                    ) => ({
+                    (atual) => ({
                       ...atual,
-                      ativo:
-                        false,
+                      ativo: false,
                       coordenadas,
                     })
                   )
@@ -6283,53 +6858,29 @@ export default function Mapa3D() {
               />
             </Canvas>
 
-            {cardFlutuanteAberto &&
+            {cardResumoAberto &&
               entidadeSelecionada && (
-                <CardFlutuante
+                <CardResumoFlutuante
                   entidade={
                     entidadeSelecionada
                   }
                   andar={
                     andarSelecionado
                   }
+                  local={
+                    localSelecionado
+                  }
                   itemExterno={
                     itemSelecionado
                   }
-                  locais={
-                    locaisSelecionados
-                  }
-                  arquivos={
-                    arquivos
-                  }
-                  salvando={
-                    salvando
-                  }
-                  arquivosAbertos={
-                    arquivosAbertos
-                  }
-                  onAlternarArquivos={() =>
-                    setArquivosAbertos(
-                      (
-                        valor
-                      ) =>
-                        !valor
-                    )
-                  }
-                  onUpload={
-                    enviarArquivo
-                  }
-                  onExcluirArquivo={
-                    removerArquivo
-                  }
+                  locais={locais}
                   onFechar={() =>
-                    setCardFlutuanteAberto(
+                    setCardResumoAberto(
                       false
                     )
                   }
-                  onEditarExterno={() =>
-                    setCadastroExternoAberto(
-                      true
-                    )
+                  onVerDetalhes={
+                    rolarParaDetalhes
                   }
                 />
               )}
@@ -6337,7 +6888,62 @@ export default function Mapa3D() {
         </div>
       </section>
 
-      <div className="fixed bottom-5 left-5 z-[70] flex gap-2 xl:hidden">
+      <PainelDetalhes
+        ref={detalhesRef}
+        entidade={
+          entidadeSelecionada
+        }
+        andar={
+          andarSelecionado
+        }
+        local={
+          localSelecionado
+        }
+        itemExterno={
+          itemSelecionado
+        }
+        locais={locais}
+        arquivos={arquivos}
+        salvando={salvando}
+        arquivosAbertos={
+          arquivosAbertos
+        }
+        aba={abaDetalhes}
+        onMudarAba={
+          setAbaDetalhes
+        }
+        onAlternarArquivos={() =>
+          setArquivosAbertos(
+            (valor) =>
+              !valor
+          )
+        }
+        onSelecionarAndar={
+          selecionarAndar
+        }
+        onSelecionarLocal={
+          selecionarLocal
+        }
+        onAdicionarLocal={
+          abrirCadastroLocal
+        }
+        onEditarLocal={
+          abrirEdicaoLocal
+        }
+        onEditarExterno={() =>
+          setCadastroExternoAberto(
+            true
+          )
+        }
+        onUpload={
+          enviarArquivo
+        }
+        onExcluirArquivo={
+          removerArquivo
+        }
+      />
+
+      <div className="fixed bottom-5 left-5 z-[1000] flex gap-2 xl:hidden">
         <button
           type="button"
           onClick={() =>
@@ -6347,31 +6953,28 @@ export default function Mapa3D() {
           }
           className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white shadow-xl"
         >
-          Pavimentos
+          Navegação
         </button>
 
-        {entidadeSelecionada &&
-          !cardFlutuanteAberto && (
-            <button
-              type="button"
-              onClick={() =>
-                setCardFlutuanteAberto(
-                  true
-                )
-              }
-              className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-xl"
-            >
-              Informações
-            </button>
-          )}
+        {entidadeSelecionada && (
+          <button
+            type="button"
+            onClick={
+              rolarParaDetalhes
+            }
+            className="rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white shadow-xl"
+          >
+            Detalhes
+          </button>
+        )}
       </div>
 
       {menuMobileAberto && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/45 p-3 xl:hidden">
+        <div className="fixed inset-0 z-[1300] bg-slate-950/45 p-3 xl:hidden">
           <div className="ml-auto h-full w-full max-w-sm overflow-y-auto rounded-3xl bg-white p-4 shadow-2xl">
             <div className="flex items-center justify-between gap-3">
               <h2 className="font-black text-slate-900">
-                Pavimentos
+                Navegação
               </h2>
 
               <button
@@ -6389,19 +6992,19 @@ export default function Mapa3D() {
               </button>
             </div>
 
-            <div className="mt-3 space-y-1">
+            <p className="mt-4 text-xs font-black uppercase text-slate-400">
+              Pavimentos
+            </p>
+
+            <div className="mt-2 space-y-1">
               {andaresOrdenados
                 .slice()
                 .reverse()
                 .map(
-                  (
-                    andar
-                  ) => (
+                  (andar) => (
                     <button
                       type="button"
-                      key={
-                        andar.id
-                      }
+                      key={andar.id}
                       onClick={async () => {
                         await selecionarAndar(
                           andar
@@ -6427,9 +7030,7 @@ export default function Mapa3D() {
                       />
 
                       <span className="flex-1 truncate">
-                        {
-                          andar.nome
-                        }
+                        {andar.nome}
                       </span>
                     </button>
                   )
@@ -6442,14 +7043,10 @@ export default function Mapa3D() {
 
             <div className="mt-2 space-y-1">
               {itensOrdenados.map(
-                (
-                  item
-                ) => (
+                (item) => (
                   <button
                     type="button"
-                    key={
-                      item.id
-                    }
+                    key={item.id}
                     onClick={async () => {
                       await selecionarItem(
                         item
@@ -6466,9 +7063,7 @@ export default function Mapa3D() {
                     />
 
                     <span className="truncate">
-                      {
-                        item.nome
-                      }
+                      {item.nome}
                     </span>
                   </button>
                 )
@@ -6478,14 +7073,40 @@ export default function Mapa3D() {
         </div>
       )}
 
+      <ModalLocalInterno
+        aberto={
+          modalLocalAberto
+        }
+        andar={
+          andarSelecionado
+        }
+        locais={locais}
+        localEditando={
+          localEditando
+        }
+        localPaiPadrao={
+          localPaiCadastro
+        }
+        salvando={salvando}
+        onSalvar={
+          salvarLocal
+        }
+        onExcluir={
+          removerLocal
+        }
+        onFechar={() =>
+          setModalLocalAberto(
+            false
+          )
+        }
+      />
+
       {cadastroExternoAberto && (
         <CadastroItemExterno
           itemSelecionado={
             itemSelecionado
           }
-          salvando={
-            salvando
-          }
+          salvando={salvando}
           posicionamento={
             posicionamento
           }
@@ -6517,12 +7138,8 @@ export default function Mapa3D() {
           andares={
             andaresOrdenados
           }
-          locais={
-            locais
-          }
-          salvando={
-            salvando
-          }
+          locais={locais}
+          salvando={salvando}
           onFechar={() =>
             setModalGerenciarAberto(
               false
