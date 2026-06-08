@@ -16,6 +16,7 @@ import Locatarios from "./pages/Locatarios";
 import Login from "./pages/Login";
 import Malote from "./pages/Malote";
 import Mapa3D from "./pages/Mapa3D";
+import MapaCotacao from "./pages/MapaCotacao";
 import Pendencias from "./pages/Pendencias";
 import RelatoriosPDF from "./pages/RelatoriosPDF";
 import RateioAgua from "./pages/RateioAgua";
@@ -68,6 +69,7 @@ function primeiraPaginaPermitida(
     "dashboard",
     "pendencias",
     "solicitacoes",
+    "mapaCotacao",
     "mapa3d",
     "jk1455",
     "climas",
@@ -182,6 +184,13 @@ export default function App() {
       case "solicitacoes":
         return (
           <SolicitacoesMaterial
+            user={user}
+          />
+        );
+
+      case "mapaCotacao":
+        return (
+          <MapaCotacao
             user={user}
           />
         );
