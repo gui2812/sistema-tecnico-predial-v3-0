@@ -1,296 +1,645 @@
-const PREFIX = 'stp_v2_';
+const PREFIX = "stp_v2_";
+
+// =========================================================
+// PERMISSÕES DISPONÍVEIS NO SISTEMA
+// =========================================================
 
 export const PERMISSIONS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'calculadora', label: 'Calculadora Elétrica' },
-  { id: 'tecnicos', label: 'Cálculos Técnicos' },
-  { id: 'geradores', label: 'Geradores' },
-  { id: 'locatarios', label: 'Energia dos Locatários' },
-  { id: 'malote', label: 'Malote' },
-  { id: 'rateioAgua', label: 'Rateio de Água' },
-  { id: 'solicitacoes', label: 'Solicitação de Material' },
-  { id: 'historico', label: 'Histórico' },
-  { id: 'relatorios', label: 'Relatórios PDF' },
-  { id: 'usuarios', label: 'Usuários e Permissões' },
+  {
+    id: "dashboard",
+    label: "Dashboard",
+  },
+  {
+    id: "pendencias",
+    label: "Pendências",
+  },
+  {
+    id: "solicitacoes",
+    label: "Solicitação de Material",
+  },
+  {
+    id: "mapaCotacao",
+    label: "Mapa de Cotação",
+  },
+  {
+    id: "mapa3d",
+    label: "Mapa 3D — Gestão completa",
+  },
+  {
+    id: "jk1455",
+    label: "JK 1455 — Consulta técnica",
+  },
+  {
+    id: "climas",
+    label: "Climas",
+  },
+  {
+    id: "calculadora",
+    label: "Calculadora Elétrica",
+  },
+  {
+    id: "tecnicos",
+    label: "Cálculos Técnicos",
+  },
+  {
+    id: "geradores",
+    label: "Geradores",
+  },
+  {
+    id: "locatarios",
+    label: "Energia dos Locatários",
+  },
+  {
+    id: "malote",
+    label: "Malote",
+  },
+  {
+    id: "rateioAgua",
+    label: "Rateio de Água",
+  },
+  {
+    id: "historico",
+    label: "Histórico",
+  },
+  {
+    id: "relatorios",
+    label: "Relatórios PDF",
+  },
+  {
+    id: "usuarios",
+    label: "Usuários e Permissões",
+  },
 ];
 
+// =========================================================
+// PERFIS PADRÃO
+// =========================================================
+
 export const PROFILE_PRESETS = {
-  admin: PERMISSIONS.map((p) => p.id),
-  administrador: PERMISSIONS.map((p) => p.id),
-  lider: ['solicitacoes'],
-  tecnico: ['dashboard', 'calculadora', 'tecnicos', 'geradores', 'historico', 'relatorios'],
-  consulta: ['dashboard', 'historico', 'relatorios'],
+  admin: PERMISSIONS.map(
+    (permissao) =>
+      permissao.id
+  ),
+
+  administrador:
+    PERMISSIONS.map(
+      (permissao) =>
+        permissao.id
+    ),
+
+  lider: [
+    "solicitacoes",
+  ],
+
+  tecnico: [
+    "dashboard",
+    "pendencias",
+    "jk1455",
+    "climas",
+    "calculadora",
+    "tecnicos",
+    "geradores",
+    "locatarios",
+    "historico",
+    "relatorios",
+  ],
+
+  consulta: [
+    "dashboard",
+    "jk1455",
+    "historico",
+    "relatorios",
+  ],
 };
+
+// =========================================================
+// USUÁRIOS PADRÃO
+// =========================================================
 
 export const DEFAULT_USERS = [
   {
-    id: 'u-admin',
-    usuario: 'admin',
-    senha: '1455',
-    nome: 'Guilherme',
-    perfil: 'admin',
-    setor: 'Administração',
+    id: "u-admin",
+    usuario: "admin",
+    senha: "1455",
+    nome: "Guilherme",
+    perfil: "admin",
+    setor: "Administração",
     ativo: true,
-    permissions: PROFILE_PRESETS.admin,
+    permissions:
+      PROFILE_PRESETS.admin,
   },
   {
-    id: 'u-manutencao',
-    usuario: 'manutencao',
-    senha: '1234',
-    nome: 'Líder Manutenção',
-    perfil: 'lider',
-    setor: 'Manutenção',
+    id: "u-manutencao",
+    usuario: "manutencao",
+    senha: "1234",
+    nome: "Líder Manutenção",
+    perfil: "lider",
+    setor: "Manutenção",
     ativo: true,
-    permissions: PROFILE_PRESETS.lider,
+    permissions:
+      PROFILE_PRESETS.lider,
   },
   {
-    id: 'u-limpeza',
-    usuario: 'limpeza',
-    senha: '1234',
-    nome: 'Líder Limpeza',
-    perfil: 'lider',
-    setor: 'Limpeza',
+    id: "u-limpeza",
+    usuario: "limpeza",
+    senha: "1234",
+    nome: "Líder Limpeza",
+    perfil: "lider",
+    setor: "Limpeza",
     ativo: true,
-    permissions: PROFILE_PRESETS.lider,
+    permissions:
+      PROFILE_PRESETS.lider,
   },
   {
-    id: 'u-bms',
-    usuario: 'bms',
-    senha: '1234',
-    nome: 'Líder BMS',
-    perfil: 'lider',
-    setor: 'BMS',
+    id: "u-bms",
+    usuario: "bms",
+    senha: "1234",
+    nome: "Líder BMS",
+    perfil: "lider",
+    setor: "BMS",
     ativo: true,
-    permissions: PROFILE_PRESETS.lider,
+    permissions:
+      PROFILE_PRESETS.lider,
   },
 ];
+
+// =========================================================
+// HELPERS
+// =========================================================
 
 function uid() {
   return crypto.randomUUID
     ? crypto.randomUUID()
-    : String(Date.now() + Math.random());
+    : String(
+        Date.now() +
+          Math.random()
+      );
 }
 
-function normalizarPerfil(perfil) {
-  const p = String(perfil || '').toLowerCase();
+function normalizarPerfil(
+  perfil
+) {
+  const perfilNormalizado =
+    String(
+      perfil || ""
+    ).toLowerCase();
 
-  if (p === 'administrador') return 'admin';
+  if (
+    perfilNormalizado ===
+    "administrador"
+  ) {
+    return "admin";
+  }
 
-  return p || 'lider';
+  return (
+    perfilNormalizado ||
+    "lider"
+  );
 }
 
-function normalizarPermissoes(permissoes = [], perfil = '') {
-  const perfilNormalizado = normalizarPerfil(perfil);
+function normalizarPermissoes(
+  permissoes = [],
+  perfil = ""
+) {
+  const perfilNormalizado =
+    normalizarPerfil(
+      perfil
+    );
 
-  if (perfilNormalizado === 'admin') {
+  if (
+    perfilNormalizado ===
+    "admin"
+  ) {
     return PROFILE_PRESETS.admin;
   }
 
   const mapa = {
-    energia: 'locatarios',
-    calculos_tecnicos: 'tecnicos',
-    rateio_agua: 'rateioAgua',
+    energia:
+      "locatarios",
+    calculos_tecnicos:
+      "tecnicos",
+    rateio_agua:
+      "rateioAgua",
+    mapa_cotacao:
+      "mapaCotacao",
+    mapa_3d:
+      "mapa3d",
+    consulta_jk1455:
+      "jk1455",
   };
 
-  const lista = Array.isArray(permissoes) ? permissoes : [];
-  const normalizadas = lista.map((p) => mapa[p] || p);
+  const lista =
+    Array.isArray(
+      permissoes
+    )
+      ? permissoes
+      : [];
 
-  if (normalizadas.length > 0) {
-    return normalizadas;
+  const normalizadas =
+    lista
+      .map(
+        (permissao) =>
+          mapa[permissao] ||
+          permissao
+      )
+      .filter(Boolean);
+
+  if (
+    normalizadas.length >
+    0
+  ) {
+    return [
+      ...new Set(
+        normalizadas
+      ),
+    ];
   }
 
-  return PROFILE_PRESETS[perfilNormalizado] || ['solicitacoes'];
+  return (
+    PROFILE_PRESETS[
+      perfilNormalizado
+    ] || [
+      "solicitacoes",
+    ]
+  );
 }
 
-function normalizarUsuario(user) {
-  if (!user) return null;
+function normalizarUsuario(
+  user
+) {
+  if (!user) {
+    return null;
+  }
 
-  const perfil = normalizarPerfil(user.perfil);
+  const perfil =
+    normalizarPerfil(
+      user.perfil
+    );
 
-  const permissions = normalizarPermissoes(
-    user.permissions || user.permissoes || [],
-    perfil
-  );
+  const permissions =
+    normalizarPermissoes(
+      user.permissions ||
+        user.permissoes ||
+        [],
+      perfil
+    );
 
   return {
     ...user,
     perfil,
     permissions,
-    permissoes: permissions,
+    permissoes:
+      permissions,
   };
 }
 
-export function getItem(key, fallback = []) {
+// =========================================================
+// LOCAL STORAGE
+// =========================================================
+
+export function getItem(
+  key,
+  fallback = []
+) {
   try {
-    const raw = localStorage.getItem(PREFIX + key);
-    return raw ? JSON.parse(raw) : fallback;
+    const raw =
+      localStorage.getItem(
+        PREFIX + key
+      );
+
+    return raw
+      ? JSON.parse(
+          raw
+        )
+      : fallback;
   } catch {
     return fallback;
   }
 }
 
-export function setItem(key, value) {
-  localStorage.setItem(PREFIX + key, JSON.stringify(value));
+export function setItem(
+  key,
+  value
+) {
+  localStorage.setItem(
+    PREFIX + key,
+    JSON.stringify(
+      value
+    )
+  );
 }
 
-export function addItem(key, item) {
-  const list = getItem(key, []);
+export function addItem(
+  key,
+  item
+) {
+  const list =
+    getItem(
+      key,
+      []
+    );
+
   const novo = {
     id: uid(),
-    criadoEm: new Date().toISOString(),
+    criadoEm:
+      new Date().toISOString(),
     ...item,
   };
 
-  setItem(key, [novo, ...list]);
-  return novo;
-}
-
-export function updateItem(key, id, patch) {
-  const list = getItem(key, []);
-
-  const updated = list.map((item) =>
-    item.id === id
-      ? {
-          ...item,
-          ...patch,
-          atualizadoEm: new Date().toISOString(),
-        }
-      : item
-  );
-
-  setItem(key, updated);
-  return updated;
-}
-
-export function deleteItem(key, id) {
-  const list = getItem(key, []);
   setItem(
     key,
-    list.filter((item) => item.id !== id)
+    [
+      novo,
+      ...list,
+    ]
   );
-}
 
-export function clearKey(key) {
-  localStorage.removeItem(PREFIX + key);
-}
-
-export function getUsers() {
-  const users = getItem('users', null);
-
-  if (!users || !Array.isArray(users) || users.length === 0) {
-    setItem('users', DEFAULT_USERS);
-    return DEFAULT_USERS.map(normalizarUsuario);
-  }
-
-  return users.map((u) =>
-    normalizarUsuario({
-      ativo: true,
-      permissions: PROFILE_PRESETS[normalizarPerfil(u.perfil)] || ['solicitacoes'],
-      ...u,
-    })
-  );
-}
-
-export function saveUsers(users) {
-  setItem('users', users.map(normalizarUsuario));
-}
-
-export function createUser(data) {
-  const users = getUsers();
-
-  const novo = normalizarUsuario({
-    id: uid(),
-    criadoEm: new Date().toISOString(),
-    ativo: true,
-    ...data,
-  });
-
-  saveUsers([novo, ...users]);
   return novo;
 }
 
-export function updateUser(id, patch) {
-  const users = getUsers();
+export function updateItem(
+  key,
+  id,
+  patch
+) {
+  const list =
+    getItem(
+      key,
+      []
+    );
 
-  const updated = users.map((u) =>
-    u.id === id
-      ? normalizarUsuario({
-          ...u,
-          ...patch,
-          atualizadoEm: new Date().toISOString(),
-        })
-      : u
+  const updated =
+    list.map(
+      (item) =>
+        item.id === id
+          ? {
+              ...item,
+              ...patch,
+              atualizadoEm:
+                new Date().toISOString(),
+            }
+          : item
+    );
+
+  setItem(
+    key,
+    updated
   );
 
-  saveUsers(updated);
+  return updated;
+}
 
-  const session = getSession();
+export function deleteItem(
+  key,
+  id
+) {
+  const list =
+    getItem(
+      key,
+      []
+    );
 
-  if (session?.id === id) {
-    const novoSession = sanitizeSession(updated.find((u) => u.id === id));
-    setItem('session', novoSession);
+  setItem(
+    key,
+    list.filter(
+      (item) =>
+        item.id !== id
+    )
+  );
+}
+
+export function clearKey(
+  key
+) {
+  localStorage.removeItem(
+    PREFIX + key
+  );
+}
+
+// =========================================================
+// USUÁRIOS
+// =========================================================
+
+export function getUsers() {
+  const users =
+    getItem(
+      "users",
+      null
+    );
+
+  if (
+    !users ||
+    !Array.isArray(
+      users
+    ) ||
+    users.length === 0
+  ) {
+    setItem(
+      "users",
+      DEFAULT_USERS
+    );
+
+    return DEFAULT_USERS.map(
+      normalizarUsuario
+    );
+  }
+
+  return users.map(
+    (user) =>
+      normalizarUsuario({
+        ativo: true,
+        permissions:
+          PROFILE_PRESETS[
+            normalizarPerfil(
+              user.perfil
+            )
+          ] || [
+            "solicitacoes",
+          ],
+        ...user,
+      })
+  );
+}
+
+export function saveUsers(
+  users
+) {
+  setItem(
+    "users",
+    users.map(
+      normalizarUsuario
+    )
+  );
+}
+
+export function createUser(
+  data
+) {
+  const users =
+    getUsers();
+
+  const novo =
+    normalizarUsuario({
+      id: uid(),
+      criadoEm:
+        new Date().toISOString(),
+      ativo: true,
+      ...data,
+    });
+
+  saveUsers([
+    novo,
+    ...users,
+  ]);
+
+  return novo;
+}
+
+export function updateUser(
+  id,
+  patch
+) {
+  const users =
+    getUsers();
+
+  const updated =
+    users.map(
+      (user) =>
+        user.id === id
+          ? normalizarUsuario({
+              ...user,
+              ...patch,
+              atualizadoEm:
+                new Date().toISOString(),
+            })
+          : user
+    );
+
+  saveUsers(
+    updated
+  );
+
+  const session =
+    getSession();
+
+  if (
+    session?.id === id
+  ) {
+    const novoSession =
+      sanitizeSession(
+        updated.find(
+          (user) =>
+            user.id === id
+        )
+      );
+
+    setItem(
+      "session",
+      novoSession
+    );
   }
 
   return updated;
 }
 
-export function deleteUser(id) {
-  const users = getUsers();
-  const updated = users.filter((u) => u.id !== id);
-  saveUsers(updated);
+export function deleteUser(
+  id
+) {
+  const users =
+    getUsers();
+
+  const updated =
+    users.filter(
+      (user) =>
+        user.id !== id
+    );
+
+  saveUsers(
+    updated
+  );
 }
 
 export function resetUsers() {
-  saveUsers(DEFAULT_USERS);
+  saveUsers(
+    DEFAULT_USERS
+  );
+
   logout();
 }
 
-/* =========================
-   NOTIFICAÇÕES
-========================= */
+// =========================================================
+// NOTIFICAÇÕES
+// =========================================================
 
-function notificationBelongsToUser(n, user) {
-  const usuarioNormalizado = normalizarUsuario(user);
-
-  if (!usuarioNormalizado) return false;
+function notificationBelongsToUser(
+  notification,
+  user
+) {
+  const usuarioNormalizado =
+    normalizarUsuario(
+      user
+    );
 
   if (
-    usuarioNormalizado.perfil === 'admin' ||
-    usuarioNormalizado.perfil === 'administrador'
+    !usuarioNormalizado
+  ) {
+    return false;
+  }
+
+  if (
+    usuarioNormalizado.perfil ===
+      "admin" ||
+    usuarioNormalizado.perfil ===
+      "administrador"
   ) {
     return true;
   }
 
   return (
-    n.destinatario === usuarioNormalizado.nome ||
-    n.destinatarioSetor === usuarioNormalizado.setor ||
-    n.destinatarioUsuario === usuarioNormalizado.usuario ||
-    n.destinatarioUsuario === usuarioNormalizado.id ||
-    n.usuarioId === usuarioNormalizado.id ||
-    n.usuario === usuarioNormalizado.usuario
+    notification.destinatario ===
+      usuarioNormalizado.nome ||
+    notification.destinatarioSetor ===
+      usuarioNormalizado.setor ||
+    notification.destinatarioUsuario ===
+      usuarioNormalizado.usuario ||
+    notification.destinatarioUsuario ===
+      usuarioNormalizado.id ||
+    notification.usuarioId ===
+      usuarioNormalizado.id ||
+    notification.usuario ===
+      usuarioNormalizado.usuario
   );
 }
 
-function normalizarNotificacao(notification = {}) {
+function normalizarNotificacao(
+  notification = {}
+) {
   const titulo =
     notification.titulo ||
     notification.title ||
-    'Notificação do sistema';
+    "Notificação do sistema";
 
   const mensagem =
     notification.mensagem ||
     notification.message ||
-    '';
+    "";
 
   const tipo =
     notification.tipo ||
     notification.categoria ||
-    'sistema';
+    "sistema";
 
   return {
-    id: notification.id || uid(),
-    criadoEm: notification.criadoEm || new Date().toISOString(),
-    lida: !!notification.lida,
+    id:
+      notification.id ||
+      uid(),
+    criadoEm:
+      notification.criadoEm ||
+      new Date().toISOString(),
+    lida:
+      Boolean(
+        notification.lida
+      ),
     tipo,
     titulo,
     mensagem,
@@ -298,139 +647,296 @@ function normalizarNotificacao(notification = {}) {
   };
 }
 
-export function getNotifications(user) {
-  const list = getItem('notificacoes', []);
-  const usuarioNormalizado = normalizarUsuario(user);
+export function getNotifications(
+  user
+) {
+  const list =
+    getItem(
+      "notificacoes",
+      []
+    );
 
-  if (!usuarioNormalizado) return [];
+  const usuarioNormalizado =
+    normalizarUsuario(
+      user
+    );
+
+  if (
+    !usuarioNormalizado
+  ) {
+    return [];
+  }
 
   return list
-    .map(normalizarNotificacao)
-    .filter((n) => notificationBelongsToUser(n, usuarioNormalizado))
-    .sort((a, b) => new Date(b.criadoEm) - new Date(a.criadoEm));
+    .map(
+      normalizarNotificacao
+    )
+    .filter(
+      (notification) =>
+        notificationBelongsToUser(
+          notification,
+          usuarioNormalizado
+        )
+    )
+    .sort(
+      (a, b) =>
+        new Date(
+          b.criadoEm
+        ) -
+        new Date(
+          a.criadoEm
+        )
+    );
 }
 
-export function addNotification(notification) {
-  const list = getItem('notificacoes', []);
+export function addNotification(
+  notification
+) {
+  const list =
+    getItem(
+      "notificacoes",
+      []
+    );
 
-  const novo = normalizarNotificacao({
-    ...notification,
-    id: uid(),
-    criadoEm: new Date().toISOString(),
-    lida: false,
-  });
+  const novo =
+    normalizarNotificacao({
+      ...notification,
+      id: uid(),
+      criadoEm:
+        new Date().toISOString(),
+      lida: false,
+    });
 
-  setItem('notificacoes', [novo, ...list]);
+  setItem(
+    "notificacoes",
+    [
+      novo,
+      ...list,
+    ]
+  );
+
   return novo;
 }
 
-export function markNotificationRead(id) {
-  const list = getItem('notificacoes', []);
+export function markNotificationRead(
+  id
+) {
+  const list =
+    getItem(
+      "notificacoes",
+      []
+    );
 
   setItem(
-    'notificacoes',
-    list.map((n) =>
-      n.id === id
-        ? {
-            ...n,
-            lida: true,
-            lidaEm: new Date().toISOString(),
-          }
-        : n
+    "notificacoes",
+    list.map(
+      (notification) =>
+        notification.id ===
+        id
+          ? {
+              ...notification,
+              lida: true,
+              lidaEm:
+                new Date().toISOString(),
+            }
+          : notification
     )
   );
 }
 
-export function markAllNotificationsRead(user) {
-  const list = getItem('notificacoes', []);
-  const usuarioNormalizado = normalizarUsuario(user);
+export function markAllNotificationsRead(
+  user
+) {
+  const list =
+    getItem(
+      "notificacoes",
+      []
+    );
+
+  const usuarioNormalizado =
+    normalizarUsuario(
+      user
+    );
 
   setItem(
-    'notificacoes',
-    list.map((n) => {
-      const belongs = notificationBelongsToUser(n, usuarioNormalizado);
+    "notificacoes",
+    list.map(
+      (notification) => {
+        const belongs =
+          notificationBelongsToUser(
+            notification,
+            usuarioNormalizado
+          );
 
-      return belongs
-        ? {
-            ...n,
-            lida: true,
-            lidaEm: new Date().toISOString(),
-          }
-        : n;
-    })
+        return belongs
+          ? {
+              ...notification,
+              lida: true,
+              lidaEm:
+                new Date().toISOString(),
+            }
+          : notification;
+      }
+    )
   );
 }
 
-export function deleteNotification(id) {
-  const list = getItem('notificacoes', []);
+export function deleteNotification(
+  id
+) {
+  const list =
+    getItem(
+      "notificacoes",
+      []
+    );
+
   setItem(
-    'notificacoes',
-    list.filter((n) => n.id !== id)
+    "notificacoes",
+    list.filter(
+      (notification) =>
+        notification.id !==
+        id
+    )
   );
 }
 
-export function clearNotifications(user) {
-  const list = getItem('notificacoes', []);
-  const usuarioNormalizado = normalizarUsuario(user);
+export function clearNotifications(
+  user
+) {
+  const list =
+    getItem(
+      "notificacoes",
+      []
+    );
+
+  const usuarioNormalizado =
+    normalizarUsuario(
+      user
+    );
 
   setItem(
-    'notificacoes',
-    list.filter((n) => !notificationBelongsToUser(n, usuarioNormalizado))
+    "notificacoes",
+    list.filter(
+      (notification) =>
+        !notificationBelongsToUser(
+          notification,
+          usuarioNormalizado
+        )
+    )
   );
 }
 
-/* =========================
-   PERMISSÕES / LOGIN
-========================= */
+// =========================================================
+// PERMISSÕES E LOGIN
+// =========================================================
 
-export function hasPermission(user, pageId) {
-  const usuarioNormalizado = normalizarUsuario(user);
-
-  if (!usuarioNormalizado) return false;
+export function hasPermission(
+  user,
+  pageId
+) {
+  const usuarioNormalizado =
+    normalizarUsuario(
+      user
+    );
 
   if (
-    usuarioNormalizado.usuario === 'admin' ||
-    usuarioNormalizado.perfil === 'admin' ||
-    usuarioNormalizado.perfil === 'administrador'
+    !usuarioNormalizado
+  ) {
+    return false;
+  }
+
+  if (
+    usuarioNormalizado.usuario ===
+      "admin" ||
+    usuarioNormalizado.perfil ===
+      "admin" ||
+    usuarioNormalizado.perfil ===
+      "administrador"
   ) {
     return true;
   }
 
   return (
-    Array.isArray(usuarioNormalizado.permissions) &&
-    usuarioNormalizado.permissions.includes(pageId)
+    Array.isArray(
+      usuarioNormalizado.permissions
+    ) &&
+    usuarioNormalizado.permissions.includes(
+      pageId
+    )
   );
 }
 
-function sanitizeSession(user) {
-  const usuarioNormalizado = normalizarUsuario(user);
+function sanitizeSession(
+  user
+) {
+  const usuarioNormalizado =
+    normalizarUsuario(
+      user
+    );
 
-  if (!usuarioNormalizado) return null;
+  if (
+    !usuarioNormalizado
+  ) {
+    return null;
+  }
 
-  const { senha, ...session } = usuarioNormalizado;
+  const {
+    senha,
+    ...session
+  } =
+    usuarioNormalizado;
 
   return {
     ...session,
-    logadoEm: new Date().toISOString(),
+    logadoEm:
+      new Date().toISOString(),
   };
 }
 
-export function login(usuario, senha) {
-  const found = getUsers().find(
-    (u) => u.usuario === usuario && u.senha === senha && u.ativo !== false
+export function login(
+  usuario,
+  senha
+) {
+  const found =
+    getUsers().find(
+      (user) =>
+        user.usuario ===
+          usuario &&
+        user.senha ===
+          senha &&
+        user.ativo !==
+          false
+    );
+
+  if (!found) {
+    return null;
+  }
+
+  const session =
+    sanitizeSession(
+      found
+    );
+
+  setItem(
+    "session",
+    session
   );
 
-  if (!found) return null;
-
-  const session = sanitizeSession(found);
-  setItem('session', session);
   return session;
 }
 
 export function getSession() {
-  return normalizarUsuario(getItem('session', null));
+  return normalizarUsuario(
+    getItem(
+      "session",
+      null
+    )
+  );
 }
 
 export function logout() {
-  localStorage.removeItem(PREFIX + 'session');
+  localStorage.removeItem(
+    PREFIX +
+      "session"
+  );
 }
