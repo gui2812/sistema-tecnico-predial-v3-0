@@ -127,4 +127,95 @@ export default function Sidebar({
         w-full md:w-72
         md:h-screen md:sticky md:top-0 md:left-0
         p-3 md:p-5
-        flex md
+        flex md:flex-col
+        gap-3 md:gap-6
+        overflow-x-auto md:overflow-hidden
+        no-scrollbar
+        z-30
+      "
+    >
+      <div className="hidden md:flex items-center gap-3 shrink-0">
+        <div className="w-12 h-12 rounded-2xl bg-teal-500/15 flex items-center justify-center">
+          <BuildingLogo
+            size={38}
+          />
+        </div>
+
+        <div>
+          <h1 className="font-bold leading-tight">
+            Sistema Técnico
+            <br />
+            Predial
+          </h1>
+
+          <p className="text-xs text-slate-400 mt-1">
+            Edifício JK 1455
+          </p>
+        </div>
+      </div>
+
+      <nav
+        className="
+          flex md:flex-col
+          gap-2
+          shrink-0 md:grow
+          overflow-x-auto md:overflow-y-auto
+          md:overflow-x-hidden
+          md:pr-1
+          no-scrollbar
+          max-w-full
+        "
+      >
+        {visibleItems.map(
+          (item) => {
+            const Icon =
+              item.icon;
+
+            const active =
+              page ===
+              item.id;
+
+            return (
+              <button
+                key={
+                  item.id
+                }
+                type="button"
+                onClick={() =>
+                  setPage(
+                    item.id
+                  )
+                }
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium whitespace-nowrap transition shrink-0 ${
+                  active
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30"
+                    : "text-slate-300 hover:bg-white/10"
+                }`}
+              >
+                <Icon
+                  size={18}
+                />
+
+                {item.label}
+              </button>
+            );
+          }
+        )}
+      </nav>
+
+      <div className="hidden md:block shrink-0 pt-3 border-t border-white/10">
+        <button
+          type="button"
+          onClick={sair}
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-slate-300 hover:bg-white/10"
+        >
+          <LogOut
+            size={18}
+          />
+
+          Sair
+        </button>
+      </div>
+    </aside>
+  );
+}
