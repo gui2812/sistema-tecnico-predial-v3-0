@@ -3,6 +3,42 @@ import { supabase } from "./supabaseClient";
 const BUCKET_MAPA3D = "mapa3d-arquivos";
 
 // =========================================================
+// HELPERS
+// =========================================================
+
+function agoraIso() {
+  return new Date().toISOString();
+}
+
+function normalizarIdOpcional(valor) {
+  if (
+    valor === undefined ||
+    valor === null ||
+    valor === ""
+  ) {
+    return null;
+  }
+
+  return valor;
+}
+
+function ordenarLocais(lista = []) {
+  return [...lista].sort((a, b) => {
+    const ordemA = Number(a.ordem || 0);
+    const ordemB = Number(b.ordem || 0);
+
+    if (ordemA !== ordemB) {
+      return ordemA - ordemB;
+    }
+
+    return String(a.nome || "").localeCompare(
+      String(b.nome || ""),
+      "pt-BR"
+    );
+  });
+}
+
+// =========================================================
 // NORMALIZAÇÃO
 // =========================================================
 
@@ -31,12 +67,14 @@ function normalizarLocal(row) {
   return {
     id: row.id,
     andarId: row.andar_id || "",
+    localPaiId: row.local_pai_id || null,
     nome: row.nome || "",
     tipo: row.tipo || "Local",
     descricao: row.descricao || "",
     observacao: row.observacao || "",
     responsavel: row.responsavel || "",
     status: row.status || "Ativo",
+    ordem: Number(row.ordem || 0),
     ativo: row.ativo !== false,
     criadoEm: row.criado_em,
     atualizadoEm: row.atualizado_em,
@@ -191,7 +229,7 @@ export async function criarAndarMapa3D({
     titulo_curto: tituloCurto,
     mostrar_rotulo: Boolean(mostrarRotulo),
     ativo: true,
-    atualizado_em: new Date().toISOString(),
+    atualizado_em: agoraIso(),
   };
 
   const { data, error } =
@@ -218,7 +256,7 @@ export async function atualizarAndarMapa3D(
   dados = {}
 ) {
   const payload = {
-    atualizado_em: new Date().toISOString(),
+    atualizado_em: agoraIso(),
   };
 
   if (dados.nome !== undefined) {
@@ -290,8 +328,7 @@ export async function excluirAndarMapa3D(id) {
       .from("mapa3d_andares")
       .update({
         ativo: false,
-        atualizado_em:
-          new Date().toISOString(),
+        atualizado_em: agoraIso(),
       })
       .eq("id", id);
 
@@ -308,7 +345,7 @@ export async function excluirAndarMapa3D(id) {
 }
 
 // =========================================================
-// LOCAIS, EQUIPAMENTOS E LOCATÁRIOS
+// LOCAIS, AMBIENTES, EQUIPAMENTOS E LOCATÁRIOS
 // =========================================================
 
 export async function listarLocaisMapa3D() {
@@ -317,6 +354,9 @@ export async function listarLocaisMapa3D() {
       .from("mapa3d_locais")
       .select("*")
       .eq("ativo", true)
+      .order("ordem", {
+        ascending: true,
+      })
       .order("nome", {
         ascending: true,
       });
@@ -330,9 +370,11 @@ export async function listarLocaisMapa3D() {
     throw new Error(error.message);
   }
 
-  return (data || [])
-    .map(normalizarLocal)
-    .filter(Boolean);
+  return ordenarLocais(
+    (data || [])
+      .map(normalizarLocal)
+      .filter(Boolean)
+  );
 }
 
 export async function listarLocaisPorAndarMapa3D(
@@ -344,6 +386,9 @@ export async function listarLocaisPorAndarMapa3D(
       .select("*")
       .eq("andar_id", andarId)
       .eq("ativo", true)
+      .order("ordem", {
+        ascending: true,
+      })
       .order("nome", {
         ascending: true,
       });
@@ -357,30 +402,155 @@ export async function listarLocaisPorAndarMapa3D(
     throw new Error(error.message);
   }
 
-  return (data || [])
-    .map(normalizarLocal)
-    .filter(Boolean);
+  return ordenarLocais(
+    (data || [])
+      .map(normalizarLocal)
+      .filter(Boolean)
+  );
 }
 
+/**
+ * Lista apenas os itens diretamente ligados ao pavimento.
+ *
+ * Exemplo:
+ * 9º Andar
+ * ├── Hall social
+ * ├── Hall de serviço
+ * └── Sala técnica
+ *
+ * Não inclui Fan coil quando ele estiver dentro de Hall social.
+ */
+export async function listarLocaisRaizPorAndarMapa3D(
+  andarId
+) {
+  const { data, error } =
+    await supabase
+      .from("mapa3d_locais")
+      .select("*")
+      .eq("andar_id", andarId)
+      .is("local_pai_id", null)
+      .eq("ativo", true)
+      .order("ordem", {
+        ascending: true,
+      })
+      .order("nome", {
+        ascending: true,
+      });
+
+  if (error) {
+    console.error(
+      "Erro ao listar ambientes raiz do andar:",
+      error
+    );
+
+    throw new Error(error.message);
+  }
+
+  return ordenarLocais(
+    (data || [])
+      .map(normalizarLocal)
+      .filter(Boolean)
+  );
+}
+
+/**
+ * Lista os itens internos de um ambiente.
+ *
+ * Exemplo:
+ * Hall social
+ * ├── Fan coil
+ * ├── Sensor
+ * └── Quadro de iluminação
+ */
+export async function listarLocaisFilhosMapa3D(
+  localPaiId
+) {
+  const { data, error } =
+    await supabase
+      .from("mapa3d_locais")
+      .select("*")
+      .eq("local_pai_id", localPaiId)
+      .eq("ativo", true)
+      .order("ordem", {
+        ascending: true,
+      })
+      .order("nome", {
+        ascending: true,
+      });
+
+  if (error) {
+    console.error(
+      "Erro ao listar itens internos:",
+      error
+    );
+
+    throw new Error(error.message);
+  }
+
+  return ordenarLocais(
+    (data || [])
+      .map(normalizarLocal)
+      .filter(Boolean)
+  );
+}
+
+/**
+ * Busca um ambiente ou equipamento específico.
+ */
+export async function buscarLocalMapa3D(id) {
+  const { data, error } =
+    await supabase
+      .from("mapa3d_locais")
+      .select("*")
+      .eq("id", id)
+      .eq("ativo", true)
+      .maybeSingle();
+
+  if (error) {
+    console.error(
+      "Erro ao buscar local:",
+      error
+    );
+
+    throw new Error(error.message);
+  }
+
+  return normalizarLocal(data);
+}
+
+/**
+ * Cria ambiente, locatário ou equipamento.
+ *
+ * Para criar diretamente no andar:
+ * localPaiId: null
+ *
+ * Para criar Fan coil dentro de Hall social:
+ * localPaiId: id do Hall social
+ */
 export async function criarLocalMapa3D({
   andarId,
+  localPaiId = null,
   nome,
   tipo = "Local",
   descricao = "",
   observacao = "",
   responsavel = "",
   status = "Ativo",
+  ordem = 0,
 }) {
   const payload = {
     andar_id: andarId,
+    local_pai_id:
+      normalizarIdOpcional(localPaiId),
     nome,
     tipo,
     descricao,
     observacao,
     responsavel,
     status,
+    ordem: Number(ordem || 0),
     ativo: true,
-    atualizado_em: new Date().toISOString(),
+    atualizado_em: agoraIso(),
   };
 
   const { data, error } =
@@ -407,11 +577,19 @@ export async function atualizarLocalMapa3D(
   dados = {}
 ) {
   const payload = {
-    atualizado_em: new Date().toISOString(),
+    atualizado_em: agoraIso(),
   };
 
   if (dados.andarId !== undefined) {
-    payload.andar_id = dados.andarId;
+    payload.andar_id =
+      dados.andarId;
+  }
+
+  if (dados.localPaiId !== undefined) {
+    payload.local_pai_id =
+      normalizarIdOpcional(
+        dados.localPaiId
+      );
   }
 
   if (dados.nome !== undefined) {
@@ -438,7 +616,13 @@ export async function atualizarLocalMapa3D(
   }
 
   if (dados.status !== undefined) {
-    payload.status = dados.status;
+    payload.status =
+      dados.status;
+  }
+
+  if (dados.ordem !== undefined) {
+    payload.ordem =
+      Number(dados.ordem || 0);
   }
 
   if (dados.ativo !== undefined) {
@@ -466,27 +650,204 @@ export async function atualizarLocalMapa3D(
   return normalizarLocal(data);
 }
 
+/**
+ * Retorna todos os descendentes de um ambiente.
+ *
+ * Exemplo:
+ * Hall social
+ * └── Fan coil
+ *     └── Motor
+ */
+export function obterIdsDescendentesLocaisMapa3D(
+  locais = [],
+  localPaiId
+) {
+  const ids = [];
+
+  function percorrer(paiId) {
+    locais
+      .filter(
+        (local) =>
+          local.localPaiId === paiId
+      )
+      .forEach((filho) => {
+        ids.push(filho.id);
+        percorrer(filho.id);
+      });
+  }
+
+  percorrer(localPaiId);
+
+  return ids;
+}
+
+/**
+ * Exclusão lógica do ambiente selecionado e de seus itens internos.
+ *
+ * Assim, ao remover Hall social, um Fan coil vinculado a ele
+ * não fica solto no sistema.
+ */
 export async function excluirLocalMapa3D(id) {
+  const locaisAtivos =
+    await listarLocaisMapa3D();
+
+  const descendentes =
+    obterIdsDescendentesLocaisMapa3D(
+      locaisAtivos,
+      id
+    );
+
+  const idsParaDesativar = [
+    id,
+    ...descendentes,
+  ];
+
   const { error } =
     await supabase
       .from("mapa3d_locais")
       .update({
         ativo: false,
-        atualizado_em:
-          new Date().toISOString(),
+        atualizado_em: agoraIso(),
       })
-      .eq("id", id);
+      .in("id", idsParaDesativar);
 
   if (error) {
     console.error(
-      "Erro ao excluir local:",
+      "Erro ao excluir ambiente e itens internos:",
       error
     );
 
     throw new Error(error.message);
   }
 
-  return true;
+  return {
+    sucesso: true,
+    idsDesativados:
+      idsParaDesativar,
+  };
+}
+
+/**
+ * Monta uma árvore pronta para renderização.
+ *
+ * Entrada:
+ * lista simples de locais
+ *
+ * Saída:
+ * [
+ *   {
+ *     nome: "Hall social",
+ *     filhos: [
+ *       {
+ *         nome: "Fan coil",
+ *         filhos: []
+ *       }
+ *     ]
+ *   }
+ * ]
+ */
+export function montarArvoreLocaisMapa3D(
+  locais = []
+) {
+  const mapa =
+    new Map();
+
+  const raizes = [];
+
+  ordenarLocais(locais)
+    .forEach((local) => {
+      mapa.set(
+        local.id,
+        {
+          ...local,
+          filhos: [],
+        }
+      );
+    });
+
+  mapa.forEach((local) => {
+    if (
+      local.localPaiId &&
+      mapa.has(local.localPaiId)
+    ) {
+      mapa
+        .get(local.localPaiId)
+        .filhos
+        .push(local);
+
+      return;
+    }
+
+    raizes.push(local);
+  });
+
+  function ordenarRecursivamente(lista) {
+    return ordenarLocais(lista)
+      .map((local) => ({
+        ...local,
+        filhos:
+          ordenarRecursivamente(
+            local.filhos || []
+          ),
+      }));
+  }
+
+  return ordenarRecursivamente(
+    raizes
+  );
+}
+
+/**
+ * Retorna o caminho completo do item.
+ *
+ * Exemplo:
+ * [
+ *   Hall social,
+ *   Fan coil,
+ *   Motor
+ * ]
+ */
+export function montarTrilhaLocalMapa3D(
+  locais = [],
+  localId
+) {
+  const mapa =
+    new Map(
+      locais.map((local) => [
+        local.id,
+        local,
+      ])
+    );
+
+  const trilha = [];
+
+  let atual =
+    mapa.get(localId);
+
+  const idsVisitados =
+    new Set();
+
+  while (
+    atual &&
+    !idsVisitados.has(atual.id)
+  ) {
+    idsVisitados.add(
+      atual.id
+    );
+
+    trilha.unshift(
+      atual
+    );
+
+    atual =
+      atual.localPaiId
+        ? mapa.get(
+            atual.localPaiId
+          )
+        : null;
+  }
+
+  return trilha;
 }
 
 // =========================================================
@@ -557,7 +918,7 @@ export async function criarItemExternoMapa3D({
       Number(profundidade || 0.8),
     ordem: Number(ordem || 99),
     ativo: true,
-    atualizado_em: new Date().toISOString(),
+    atualizado_em: agoraIso(),
   };
 
   const { data, error } =
@@ -584,7 +945,7 @@ export async function atualizarItemExternoMapa3D(
   dados = {}
 ) {
   const payload = {
-    atualizado_em: new Date().toISOString(),
+    atualizado_em: agoraIso(),
   };
 
   if (dados.nome !== undefined) {
@@ -621,7 +982,8 @@ export async function atualizarItemExternoMapa3D(
   }
 
   if (dados.status !== undefined) {
-    payload.status = dados.status;
+    payload.status =
+      dados.status;
   }
 
   if (dados.cor !== undefined) {
@@ -629,15 +991,18 @@ export async function atualizarItemExternoMapa3D(
   }
 
   if (dados.x !== undefined) {
-    payload.x = Number(dados.x || 0);
+    payload.x =
+      Number(dados.x || 0);
   }
 
   if (dados.y !== undefined) {
-    payload.y = Number(dados.y || 0);
+    payload.y =
+      Number(dados.y || 0);
   }
 
   if (dados.z !== undefined) {
-    payload.z = Number(dados.z || 0);
+    payload.z =
+      Number(dados.z || 0);
   }
 
   if (dados.largura !== undefined) {
@@ -691,8 +1056,7 @@ export async function excluirItemExternoMapa3D(id) {
       .from("mapa3d_itens_externos")
       .update({
         ativo: false,
-        atualizado_em:
-          new Date().toISOString(),
+        atualizado_em: agoraIso(),
       })
       .eq("id", id);
 
@@ -741,6 +1105,15 @@ export async function listarArquivosMapa3DPorEntidade(
     .filter(Boolean);
 }
 
+/**
+ * O mesmo método atende:
+ *
+ * entidadeTipo: "andar"
+ * entidadeTipo: "item_externo"
+ * entidadeTipo: "local"
+ *
+ * Dessa forma, Hall social e Fan coil terão arquivos próprios.
+ */
 export async function criarArquivoMapa3D({
   entidadeTipo,
   entidadeId,
@@ -761,11 +1134,13 @@ export async function criarArquivoMapa3D({
     nome: upload.nome,
     caminho_storage:
       upload.caminhoStorage,
-    url_publica: upload.urlPublica,
-    mime_type: upload.mimeType,
+    url_publica:
+      upload.urlPublica,
+    mime_type:
+      upload.mimeType,
     legenda,
     ativo: true,
-    atualizado_em: new Date().toISOString(),
+    atualizado_em: agoraIso(),
   };
 
   const { data, error } =
@@ -795,7 +1170,9 @@ export async function excluirArquivoMapa3D(
     const { error: storageError } =
       await supabase.storage
         .from(BUCKET_MAPA3D)
-        .remove([caminhoStorage]);
+        .remove([
+          caminhoStorage,
+        ]);
 
     if (storageError) {
       console.warn(
@@ -810,8 +1187,7 @@ export async function excluirArquivoMapa3D(
       .from("mapa3d_arquivos")
       .update({
         ativo: false,
-        atualizado_em:
-          new Date().toISOString(),
+        atualizado_em: agoraIso(),
       })
       .eq("id", id);
 
@@ -865,7 +1241,9 @@ export async function excluirArquivoProtegidoMapa3D(
     );
 
   if (!senhaValida) {
-    throw new Error("Senha incorreta.");
+    throw new Error(
+      "Senha incorreta."
+    );
   }
 
   return excluirArquivoMapa3D(
