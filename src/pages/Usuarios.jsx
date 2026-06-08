@@ -21,7 +21,8 @@ const PERMISSIONS = [
   { id: "dashboard", label: "Dashboard" },
   { id: "pendencias", label: "Pendências" },
   { id: "solicitacoes", label: "Solicitação de Material" },
-  { id: "mapa3d", label: "Mapa 3D" },
+  { id: "mapa3d", label: "Mapa 3D — Gestão completa" },
+  { id: "jk1455", label: "JK 1455 — Consulta técnica" },
   { id: "climas", label: "Climas" },
   { id: "calculadora", label: "Calculadora Elétrica" },
   { id: "tecnicos", label: "Cálculos Técnicos" },
@@ -86,11 +87,13 @@ function configuracoesSolicitacao(permissoes = []) {
 const PROFILE_PRESETS = {
   admin: PERMISSIONS.map((p) => p.id),
   administrador: PERMISSIONS.map((p) => p.id),
+
   lider: ["solicitacoes"],
+
   tecnico: [
     "dashboard",
     "pendencias",
-    "mapa3d",
+    "jk1455",
     "climas",
     "calculadora",
     "tecnicos",
@@ -99,7 +102,13 @@ const PROFILE_PRESETS = {
     "historico",
     "relatorios",
   ],
-  consulta: ["dashboard", "mapa3d", "historico", "relatorios"],
+
+  consulta: [
+    "dashboard",
+    "jk1455",
+    "historico",
+    "relatorios",
+  ],
 };
 
 const USUARIO_VAZIO = {
