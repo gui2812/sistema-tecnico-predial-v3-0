@@ -7,6 +7,7 @@ import {
   CloudSun,
   Droplets,
   Eye,
+  FileSpreadsheet,
   FileText,
   Fuel,
   History,
@@ -37,6 +38,11 @@ const items = [
     id: "solicitacoes",
     label: "Solicitação Material",
     icon: PackagePlus,
+  },
+  {
+    id: "mapaCotacao",
+    label: "Mapa de Cotação",
+    icon: FileSpreadsheet,
   },
   {
     id: "mapa3d",
