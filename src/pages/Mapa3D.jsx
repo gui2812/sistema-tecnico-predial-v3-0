@@ -12,6 +12,7 @@ import {
   ImagePlus,
   Loader2,
   MapPin,
+  Minus,
   MousePointer2,
   Plus,
   RefreshCcw,
@@ -54,19 +55,28 @@ import {
 } from "../services/mapa3dSupabaseService";
 
 /**
- * MAPA 3D JK 1455 — V13
+ * MAPA 3D JK 1455 — V14
  *
- * Correções:
- * - malha dos vidros nos quatro lados;
+ * Melhorias:
+ * - vidro detalhado nos quatro lados;
  * - 1º e 2º pavimentos técnicos em pedra;
- * - 3º andar e Ferrero com vidro e pilastras de pedra nos quatro lados;
+ * - 3º andar e Ferrero com vidro e pilastras nos quatro lados;
  * - coluna de pavimentos minimizável;
- * - card flutuante para andares, subsolos e itens externos;
- * - fotos, câmera e PDFs no card;
- * - gerenciamento de pavimentos, locatários e equipamentos preservado;
- * - 13º andar oculto;
- * - 1º subsolo mais afastado da laje da rua.
+ * - card flutuante móvel;
+ * - card flutuante redimensionável;
+ * - card flutuante minimizável;
+ * - rótulos menores e abaixo do card;
+ * - fotos, câmera, plantas e PDFs;
+ * - exclusão protegida por senha;
+ * - gerenciamento de pavimentos, locatários e equipamentos;
+ * - itens externos editáveis;
+ * - 13º andar removido visualmente;
+ * - primeiro subsolo visível.
  */
+
+// =========================================================
+// CONSTANTES
+// =========================================================
 
 const CAMADAS = [
   ["geral", "Visão geral"],
@@ -121,6 +131,10 @@ const MODOS_IMPLANTACAO = [
   ["subterraneo", "Dentro da terra / subterrâneo"],
 ];
 
+// =========================================================
+// HELPERS
+// =========================================================
+
 function ordenarAndares(lista = []) {
   return [...lista].sort(
     (a, b) =>
@@ -143,7 +157,8 @@ function locaisDoAndar(
 ) {
   return locais.filter(
     (local) =>
-      local.andarId === andarId
+      local.andarId ===
+      andarId
   );
 }
 
@@ -155,6 +170,20 @@ function itemEhEstacionamento(
       ?.trim()
       .toLowerCase() ===
     "estacionamento externo"
+  );
+}
+
+function limitar(
+  valor,
+  minimo,
+  maximo
+) {
+  return Math.min(
+    Math.max(
+      valor,
+      minimo
+    ),
+    maximo
   );
 }
 
@@ -210,7 +239,7 @@ function itemExternoVazio() {
 }
 
 // =========================================================
-// COMPONENTES BÁSICOS 3D
+// COMPONENTES 3D BÁSICOS
 // =========================================================
 
 function Box({
@@ -229,7 +258,9 @@ function Box({
       receiveShadow
       onClick={onClick}
     >
-      <boxGeometry args={size} />
+      <boxGeometry
+        args={size}
+      />
 
       <meshStandardMaterial
         color={color}
@@ -237,8 +268,12 @@ function Box({
           opacity < 1
         }
         opacity={opacity}
-        roughness={roughness}
-        metalness={metalness}
+        roughness={
+          roughness
+        }
+        metalness={
+          metalness
+        }
       />
     </mesh>
   );
@@ -255,7 +290,9 @@ function GlassBox({
       castShadow
       receiveShadow
     >
-      <boxGeometry args={size} />
+      <boxGeometry
+        args={size}
+      />
 
       <meshPhysicalMaterial
         color={color}
@@ -299,26 +336,26 @@ function Label({
       center
       distanceFactor={18}
       zIndexRange={[
-        100,
+        10,
         0,
       ]}
     >
       <button
         type="button"
         onClick={onClick}
-        className={`min-w-[116px] rounded-2xl border px-3 py-2 text-left shadow-lg backdrop-blur ${
+        className={`pointer-events-auto max-w-[128px] min-w-[96px] rounded-xl border px-2 py-1.5 text-left shadow-md backdrop-blur transition ${
           ativo
             ? "border-cyan-300 bg-cyan-500 text-white"
-            : "border-slate-200 bg-white/95 text-slate-800"
+            : "border-slate-200 bg-white/95 text-slate-800 hover:bg-white"
         }`}
       >
-        <span className="block text-[11px] font-black leading-tight">
+        <span className="block break-words text-[10px] font-black leading-[1.05]">
           {titulo}
         </span>
 
         {subtitulo && (
           <span
-            className={`mt-0.5 block text-[9px] font-bold ${
+            className={`mt-0.5 block break-words text-[8px] font-bold leading-[1.05] ${
               ativo
                 ? "text-cyan-50"
                 : "text-slate-400"
@@ -350,9 +387,11 @@ function MoldurasHorizontais({
           0,
         ]}
         size={[
-          largura + 0.54,
+          largura +
+            0.54,
           0.12,
-          profundidade + 0.52,
+          profundidade +
+            0.52,
         ]}
         color={cor}
       />
@@ -366,9 +405,11 @@ function MoldurasHorizontais({
           0,
         ]}
         size={[
-          largura + 0.54,
+          largura +
+            0.54,
           0.12,
-          profundidade + 0.52,
+          profundidade +
+            0.52,
         ]}
         color={cor}
       />
@@ -440,7 +481,7 @@ function PilastrasQuatroLados({
           x
         ) => (
           <group
-            key={`frente-${x}`}
+            key={`pilastra-frente-${x}`}
           >
             <Box
               position={[
@@ -457,7 +498,9 @@ function PilastrasQuatroLados({
               ]}
               color={cor}
               roughness={0.82}
-              onClick={onClick}
+              onClick={
+                onClick
+              }
             />
 
             <Box
@@ -475,7 +518,9 @@ function PilastrasQuatroLados({
               ]}
               color={cor}
               roughness={0.82}
-              onClick={onClick}
+              onClick={
+                onClick
+              }
             />
           </group>
         )
@@ -486,7 +531,7 @@ function PilastrasQuatroLados({
           z
         ) => (
           <group
-            key={`lateral-${z}`}
+            key={`pilastra-lateral-${z}`}
           >
             <Box
               position={[
@@ -502,7 +547,9 @@ function PilastrasQuatroLados({
               ]}
               color={cor}
               roughness={0.82}
-              onClick={onClick}
+              onClick={
+                onClick
+              }
             />
 
             <Box
@@ -520,7 +567,9 @@ function PilastrasQuatroLados({
               ]}
               color={cor}
               roughness={0.82}
-              onClick={onClick}
+              onClick={
+                onClick
+              }
             />
           </group>
         )
@@ -596,7 +645,8 @@ function MalhaVidroQuatroLados({
               position={[
                 x,
                 baseY +
-                  altura / 2,
+                  altura /
+                    2,
                 profundidade /
                   2 +
                   0.015,
@@ -613,7 +663,8 @@ function MalhaVidroQuatroLados({
               position={[
                 x,
                 baseY +
-                  altura / 2,
+                  altura /
+                    2,
                 -profundidade /
                   2 -
                   0.015,
@@ -638,10 +689,12 @@ function MalhaVidroQuatroLados({
           >
             <Linha
               position={[
-                largura / 2 +
+                largura /
+                  2 +
                   0.015,
                 baseY +
-                  altura / 2,
+                  altura /
+                    2,
                 z,
               ]}
               size={[
@@ -658,7 +711,8 @@ function MalhaVidroQuatroLados({
                   2 -
                   0.015,
                 baseY +
-                  altura / 2,
+                  altura /
+                    2,
                 z,
               ]}
               size={[
@@ -696,7 +750,8 @@ function FaixasHorizontaisQuatroLados({
         ) => {
           const y =
             baseY +
-            index * passo;
+            index *
+              passo;
 
           return (
             <group
@@ -736,7 +791,8 @@ function FaixasHorizontaisQuatroLados({
 
               <Linha
                 position={[
-                  largura / 2 +
+                  largura /
+                    2 +
                     0.034,
                   y,
                   0,
@@ -824,7 +880,8 @@ function PavimentoPedra({
         }
         y={y}
         altura={
-          altura * 0.68
+          altura *
+          0.68
         }
         cor="#b9aa92"
         quantidadeFrente={8}
@@ -894,7 +951,8 @@ function PavimentoVidroComPedra({
         }
         baseY={
           y -
-          altura / 2
+          altura /
+            2
         }
         altura={altura}
         quantidadeFrente={11}
@@ -908,7 +966,8 @@ function PavimentoVidroComPedra({
         }
         y={y}
         altura={
-          altura + 0.08
+          altura +
+          0.08
         }
         cor="#d8ccb6"
         quantidadeFrente={11}
@@ -934,8 +993,10 @@ function PavimentoVidroComPedra({
           0,
         ]}
         size={[
-          largura + 0.05,
-          altura + 0.05,
+          largura +
+            0.05,
+          altura +
+            0.05,
           profundidade +
             0.05,
         ]}
@@ -1179,11 +1240,13 @@ function EstacionamentoFundos({
             key={`vaga-a-${index}`}
             x={
               1.1 +
-              index * 0.83
+              index *
+                0.83
             }
             z={-6.08}
             ocupada={
-              index % 3 ===
+              index %
+                3 ===
               0
             }
           />
@@ -1202,11 +1265,13 @@ function EstacionamentoFundos({
             key={`vaga-b-${index}`}
             x={
               1.1 +
-              index * 0.83
+              index *
+                0.83
             }
             z={-4.82}
             ocupada={
-              index % 4 ===
+              index %
+                4 ===
               1
             }
           />
@@ -1221,7 +1286,9 @@ function EstacionamentoFundos({
         ]}
         titulo="Estacionamento externo"
         subtitulo="Fundos do edifício"
-        ativo={selecionado}
+        ativo={
+          selecionado
+        }
         onClick={() =>
           item &&
           onSelect(
@@ -1424,17 +1491,20 @@ function posicaoItem(
 ) {
   const x =
     Number(
-      item.x || 0
+      item.x ||
+        0
     );
 
   const y =
     Number(
-      item.y || 0
+      item.y ||
+        0
     );
 
   const z =
     Number(
-      item.z || 0
+      item.z ||
+        0
     );
 
   if (
@@ -1515,7 +1585,8 @@ function offsetsPorClique(
       y: 0.1,
       z: Number(
         (
-          z + 4.6
+          z +
+          4.6
         ).toFixed(
           2
         )
@@ -1530,7 +1601,8 @@ function offsetsPorClique(
     return {
       x: Number(
         (
-          x + 5.7
+          x +
+          5.7
         ).toFixed(
           2
         )
@@ -1547,7 +1619,8 @@ function offsetsPorClique(
     return {
       x: Number(
         (
-          x - 7.1
+          x -
+          7.1
         ).toFixed(
           2
         )
@@ -1621,7 +1694,8 @@ function ItemExternoVisual({
     subterraneo
       ? -0.04
       : yBase +
-        altura / 2;
+        altura /
+          2;
 
   function clicar(
     event
@@ -1652,8 +1726,10 @@ function ItemExternoVisual({
         >
           <cylinderGeometry
             args={[
-              largura / 2,
-              largura / 2,
+              largura /
+                2,
+              largura /
+                2,
               subterraneo
                 ? 0.08
                 : altura,
@@ -1677,7 +1753,8 @@ function ItemExternoVisual({
           }
           position={[
             0,
-            altura / 2,
+            altura /
+              2,
             0,
           ]}
           castShadow
@@ -1686,11 +1763,13 @@ function ItemExternoVisual({
             args={[
               Math.max(
                 0.05,
-                largura / 7
+                largura /
+                  7
               ),
               Math.max(
                 0.05,
-                largura / 7
+                largura /
+                  7
               ),
               altura,
               20,
@@ -1723,7 +1802,9 @@ function ItemExternoVisual({
             "#64748b"
           }
           roughness={0.74}
-          onClick={clicar}
+          onClick={
+            clicar
+          }
         />
       )}
 
@@ -1777,7 +1858,8 @@ function PlanoPosicionamento({
         0,
       ]}
       rotation={[
-        -Math.PI / 2,
+        -Math.PI /
+          2,
         0,
         0,
       ]}
@@ -2011,9 +2093,12 @@ function TorrePrincipal({
           );
 
         return (
-          ordem >= 4 &&
-          ordem <= 15 &&
-          ordem !== 13
+          ordem >=
+            4 &&
+          ordem <=
+            15 &&
+          ordem !==
+            13
         );
       }
     );
@@ -2043,7 +2128,9 @@ function TorrePrincipal({
           selecionado?.id ===
           primeiroTecnico?.id
         }
-        onSelect={onSelect}
+        onSelect={
+          onSelect
+        }
       />
 
       <PavimentoPedra
@@ -2055,11 +2142,15 @@ function TorrePrincipal({
           selecionado?.id ===
           segundoTecnico?.id
         }
-        onSelect={onSelect}
+        onSelect={
+          onSelect
+        }
       />
 
       <PavimentoVidroComPedra
-        andar={terceiro}
+        andar={
+          terceiro
+        }
         y={3.83}
         selecionado={
           selecionado?.id ===
@@ -2067,7 +2158,9 @@ function TorrePrincipal({
         }
         titulo="3º Andar"
         subtitulo="Vidro com pilastras de pedra"
-        onSelect={onSelect}
+        onSelect={
+          onSelect
+        }
       />
 
       <GlassBox
@@ -2086,22 +2179,30 @@ function TorrePrincipal({
       />
 
       <MalhaVidroQuatroLados
-        largura={largura}
+        largura={
+          largura
+        }
         profundidade={
           profundidade
         }
-        baseY={baseVidroY}
+        baseY={
+          baseVidroY
+        }
         altura={
           alturaVidro
         }
       />
 
       <FaixasHorizontaisQuatroLados
-        largura={largura}
+        largura={
+          largura
+        }
         profundidade={
           profundidade
         }
-        baseY={baseVidroY}
+        baseY={
+          baseVidroY
+        }
         quantidade={
           corporativos.length
         }
@@ -2137,7 +2238,8 @@ function TorrePrincipal({
                 0,
               ]}
               size={[
-                largura + 0.05,
+                largura +
+                  0.05,
                 alturaPiso *
                   0.94,
                 profundidade +
@@ -2177,7 +2279,8 @@ function TorrePrincipal({
           0,
         ]}
         size={[
-          largura + 0.72,
+          largura +
+            0.72,
           0.16,
           profundidade +
             0.68,
@@ -2186,7 +2289,9 @@ function TorrePrincipal({
       />
 
       <PavimentoVidroComPedra
-        andar={ferrero}
+        andar={
+          ferrero
+        }
         y={
           topoVidroY +
           0.62
@@ -2197,7 +2302,9 @@ function TorrePrincipal({
         }
         titulo="16º Andar — Ferrero"
         subtitulo="Último pavimento comercial"
-        onSelect={onSelect}
+        onSelect={
+          onSelect
+        }
       />
     </group>
   );
@@ -2287,16 +2394,16 @@ function AreasTecnicasSuperiores({
         ) => (
           <group
             key={
-              nivel
-                .andar
-                .id
+              nivel.andar.id
             }
           >
             <PavimentoPedra
               andar={
                 nivel.andar
               }
-              y={nivel.y}
+              y={
+                nivel.y
+              }
               largura={9.52}
               profundidade={7.94}
               altura={0.7}
@@ -2389,7 +2496,8 @@ function AreasTecnicasSuperiores({
           0,
         ]}
         rotation={[
-          -Math.PI / 2,
+          -Math.PI /
+            2,
           0,
           0,
         ]}
@@ -2631,7 +2739,9 @@ function Subsolos({
                   )
                 }
                 subtitulo={`${quantidade} local(is)`}
-                ativo={ativo}
+                ativo={
+                  ativo
+                }
                 onClick={() =>
                   onSelect(
                     andar
@@ -2754,7 +2864,9 @@ function ModeloJK1455({
       )}
 
       <Embasamento
-        terreo={terreo}
+        terreo={
+          terreo
+        }
         selecionado={
           andarSelecionado?.id ===
           terreo?.id
@@ -2762,35 +2874,51 @@ function ModeloJK1455({
         onSelect={
           onSelectAndar
         }
-        camada={camada}
+        camada={
+          camada
+        }
       />
 
       <TorrePrincipal
-        andares={andares}
+        andares={
+          andares
+        }
         selecionado={
           andarSelecionado
         }
         onSelect={
           onSelectAndar
         }
-        camada={camada}
+        camada={
+          camada
+        }
       />
 
       <AreasTecnicasSuperiores
-        andares={andares}
+        andares={
+          andares
+        }
         selecionado={
           andarSelecionado
         }
         onSelect={
           onSelectAndar
         }
-        camada={camada}
+        camada={
+          camada
+        }
       />
 
       <Subsolos
-        andares={andares}
-        locais={locais}
-        camada={camada}
+        andares={
+          andares
+        }
+        locais={
+          locais
+        }
+        camada={
+          camada
+        }
         selecionado={
           andarSelecionado
         }
@@ -2815,7 +2943,7 @@ function ModeloJK1455({
 }
 
 // =========================================================
-// ARQUIVOS E CARD FLUTUANTE
+// ARQUIVOS
 // =========================================================
 
 function Resumo({
@@ -2843,10 +2971,13 @@ function BotaoArquivo({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={
+        onClick
+      }
       className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-left text-sm font-black text-slate-700 hover:bg-slate-50"
     >
       {icon}
+
       {texto}
     </button>
   );
@@ -2899,8 +3030,7 @@ function ArquivosEntidade({
     tipo
   ) {
     const arquivo =
-      event.target
-        .files?.[0];
+      event.target.files?.[0];
 
     if (
       arquivo
@@ -2931,9 +3061,7 @@ function ArquivosEntidade({
 
           <h3 className="mt-1 font-black text-slate-900">
             {
-              entidade
-                .dados
-                .nome
+              entidade.dados.nome
             }
           </h3>
         </div>
@@ -2960,9 +3088,7 @@ function ArquivosEntidade({
               }
               texto="Abrir câmera"
               onClick={() =>
-                cameraInput
-                  .current
-                  ?.click()
+                cameraInput.current?.click()
               }
             />
 
@@ -2974,9 +3100,7 @@ function ArquivosEntidade({
               }
               texto="Adicionar foto"
               onClick={() =>
-                fotoInput
-                  .current
-                  ?.click()
+                fotoInput.current?.click()
               }
             />
 
@@ -2988,9 +3112,7 @@ function ArquivosEntidade({
               }
               texto="Adicionar planta ou PDF"
               onClick={() =>
-                plantaInput
-                  .current
-                  ?.click()
+                plantaInput.current?.click()
               }
             />
 
@@ -3104,6 +3226,7 @@ function ArquivosEntidade({
                         )
                       }
                       className="absolute right-1 top-1 rounded-lg bg-rose-600 p-1.5 text-white shadow"
+                      title="Excluir foto"
                     >
                       <Trash2
                         size={13}
@@ -3170,6 +3293,7 @@ function ArquivosEntidade({
                         )
                       }
                       className="rounded-lg bg-rose-50 p-1.5 text-rose-700"
+                      title="Excluir planta"
                     >
                       <Trash2
                         size={14}
@@ -3190,6 +3314,10 @@ function ArquivosEntidade({
   );
 }
 
+// =========================================================
+// CARD FLUTUANTE MÓVEL E REDIMENSIONÁVEL
+// =========================================================
+
 function CardFlutuante({
   entidade,
   andar,
@@ -3204,6 +3332,334 @@ function CardFlutuante({
   onFechar,
   onEditarExterno,
 }) {
+  const cardRef =
+    useRef(null);
+
+  const interacaoRef =
+    useRef(null);
+
+  const [
+    minimizado,
+    setMinimizado,
+  ] =
+    useState(false);
+
+  const [
+    posicao,
+    setPosicao,
+  ] =
+    useState({
+      x: null,
+      y: 16,
+    });
+
+  const [
+    tamanho,
+    setTamanho,
+  ] =
+    useState({
+      largura: 390,
+      altura: 670,
+    });
+
+  function obterLimites() {
+    const pai =
+      cardRef.current?.parentElement;
+
+    const larguraPai =
+      pai?.clientWidth ||
+      window.innerWidth;
+
+    const alturaPai =
+      pai?.clientHeight ||
+      window.innerHeight;
+
+    return {
+      larguraPai,
+      alturaPai,
+      larguraMaxima:
+        Math.max(
+          300,
+          larguraPai -
+            24
+        ),
+      alturaMaxima:
+        Math.max(
+          260,
+          alturaPai -
+            24
+        ),
+    };
+  }
+
+  function ajustarDentroDaTela(
+    proximaPosicao,
+    proximoTamanho =
+      tamanho
+  ) {
+    const {
+      larguraPai,
+      alturaPai,
+    } =
+      obterLimites();
+
+    const larguraAtual =
+      Math.min(
+        proximoTamanho.largura,
+        larguraPai -
+          24
+      );
+
+    const alturaAtual =
+      minimizado
+        ? 68
+        : Math.min(
+            proximoTamanho.altura,
+            alturaPai -
+              24
+          );
+
+    return {
+      x: limitar(
+        proximaPosicao.x,
+        12,
+        Math.max(
+          12,
+          larguraPai -
+            larguraAtual -
+            12
+        )
+      ),
+      y: limitar(
+        proximaPosicao.y,
+        12,
+        Math.max(
+          12,
+          alturaPai -
+            alturaAtual -
+            12
+        )
+      ),
+    };
+  }
+
+  useEffect(() => {
+    const pai =
+      cardRef.current?.parentElement;
+
+    if (
+      !pai
+    ) {
+      return;
+    }
+
+    setPosicao(
+      (
+        atual
+      ) => {
+        if (
+          atual.x !==
+          null
+        ) {
+          return ajustarDentroDaTela(
+            atual
+          );
+        }
+
+        return {
+          x: Math.max(
+            12,
+            pai.clientWidth -
+              tamanho.largura -
+              18
+          ),
+          y: 16,
+        };
+      }
+    );
+  }, []);
+
+  useEffect(() => {
+    setMinimizado(
+      false
+    );
+  }, [
+    entidade?.dados?.id,
+  ]);
+
+  useEffect(() => {
+    function mover(
+      event
+    ) {
+      const interacao =
+        interacaoRef.current;
+
+      if (
+        !interacao
+      ) {
+        return;
+      }
+
+      const deltaX =
+        event.clientX -
+        interacao.clientXInicial;
+
+      const deltaY =
+        event.clientY -
+        interacao.clientYInicial;
+
+      if (
+        interacao.tipo ===
+        "arrastar"
+      ) {
+        setPosicao(
+          ajustarDentroDaTela({
+            x:
+              interacao.xInicial +
+              deltaX,
+            y:
+              interacao.yInicial +
+              deltaY,
+          })
+        );
+
+        return;
+      }
+
+      if (
+        interacao.tipo ===
+        "redimensionar"
+      ) {
+        const {
+          larguraMaxima,
+          alturaMaxima,
+        } =
+          obterLimites();
+
+        const novaLargura =
+          limitar(
+            interacao.larguraInicial -
+              deltaX,
+            300,
+            larguraMaxima
+          );
+
+        const novaAltura =
+          limitar(
+            interacao.alturaInicial +
+              deltaY,
+            260,
+            alturaMaxima
+          );
+
+        const novoTamanho = {
+          largura:
+            novaLargura,
+          altura:
+            novaAltura,
+        };
+
+        setTamanho(
+          novoTamanho
+        );
+
+        setPosicao(
+          ajustarDentroDaTela(
+            {
+              x:
+                interacao.xInicial +
+                (
+                  interacao.larguraInicial -
+                  novaLargura
+                ),
+              y:
+                interacao.yInicial,
+            },
+            novoTamanho
+          )
+        );
+      }
+    }
+
+    function finalizar() {
+      interacaoRef.current =
+        null;
+
+      document.body.style.userSelect =
+        "";
+    }
+
+    window.addEventListener(
+      "pointermove",
+      mover
+    );
+
+    window.addEventListener(
+      "pointerup",
+      finalizar
+    );
+
+    window.addEventListener(
+      "pointercancel",
+      finalizar
+    );
+
+    return () => {
+      window.removeEventListener(
+        "pointermove",
+        mover
+      );
+
+      window.removeEventListener(
+        "pointerup",
+        finalizar
+      );
+
+      window.removeEventListener(
+        "pointercancel",
+        finalizar
+      );
+    };
+  }, [
+    tamanho,
+    minimizado,
+  ]);
+
+  useEffect(() => {
+    function ajustarAoRedimensionarTela() {
+      setPosicao(
+        (
+          atual
+        ) => {
+          if (
+            atual.x ===
+            null
+          ) {
+            return atual;
+          }
+
+          return ajustarDentroDaTela(
+            atual
+          );
+        }
+      );
+    }
+
+    window.addEventListener(
+      "resize",
+      ajustarAoRedimensionarTela
+    );
+
+    return () =>
+      window.removeEventListener(
+        "resize",
+        ajustarAoRedimensionarTela
+      );
+  }, [
+    tamanho,
+    minimizado,
+  ]);
+
   if (
     !entidade
   ) {
@@ -3231,183 +3687,326 @@ function CardFlutuante({
   const primeiraPlanta =
     plantas[0];
 
+  function iniciarArraste(
+    event
+  ) {
+    if (
+      event.target.closest(
+        "button, input, textarea, select, a"
+      )
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+
+    document.body.style.userSelect =
+      "none";
+
+    interacaoRef.current = {
+      tipo:
+        "arrastar",
+      clientXInicial:
+        event.clientX,
+      clientYInicial:
+        event.clientY,
+      xInicial:
+        posicao.x ??
+        12,
+      yInicial:
+        posicao.y ??
+        12,
+    };
+  }
+
+  function iniciarRedimensionamento(
+    event
+  ) {
+    event.preventDefault();
+
+    event.stopPropagation();
+
+    document.body.style.userSelect =
+      "none";
+
+    interacaoRef.current = {
+      tipo:
+        "redimensionar",
+      clientXInicial:
+        event.clientX,
+      clientYInicial:
+        event.clientY,
+      xInicial:
+        posicao.x ??
+        12,
+      yInicial:
+        posicao.y ??
+        12,
+      larguraInicial:
+        tamanho.largura,
+      alturaInicial:
+        tamanho.altura,
+    };
+  }
+
   return (
-    <section className="pointer-events-auto absolute right-3 top-3 z-30 max-h-[calc(100%-24px)] w-[min(390px,calc(100%-24px))] overflow-y-auto rounded-3xl border border-white/70 bg-white/95 p-4 shadow-2xl backdrop-blur xl:right-5 xl:top-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-black uppercase text-blue-600">
+    <section
+      ref={
+        cardRef
+      }
+      style={{
+        left:
+          posicao.x ===
+          null
+            ? "auto"
+            : `${posicao.x}px`,
+        right:
+          posicao.x ===
+          null
+            ? "16px"
+            : "auto",
+        top:
+          `${posicao.y}px`,
+        width:
+          `${Math.min(
+            tamanho.largura,
+            window.innerWidth -
+              24
+          )}px`,
+        height:
+          minimizado
+            ? "auto"
+            : `${tamanho.altura}px`,
+      }}
+      className="pointer-events-auto absolute z-[999] flex max-w-[calc(100%-24px)] flex-col overflow-hidden rounded-3xl border border-white/80 bg-white/95 shadow-2xl backdrop-blur"
+    >
+      <div
+        onPointerDown={
+          iniciarArraste
+        }
+        className="flex cursor-move touch-none items-start justify-between gap-3 border-b border-slate-100 bg-slate-50/95 px-4 py-3"
+      >
+        <div className="min-w-0">
+          <p className="text-[10px] font-black uppercase tracking-wide text-blue-600">
             {andar
               ? "Pavimento selecionado"
               : "Ambiente externo selecionado"}
           </p>
 
-          <h2 className="mt-1 text-xl font-black text-slate-900">
+          <h2 className="mt-1 truncate text-base font-black text-slate-900">
             {
-              entidade
-                .dados
-                .nome
+              entidade.dados.nome
             }
           </h2>
+        </div>
 
-          <p className="mt-1 text-sm text-slate-500">
+        <div className="flex shrink-0 gap-1">
+          <button
+            type="button"
+            onClick={() =>
+              setMinimizado(
+                (
+                  atual
+                ) =>
+                  !atual
+              )
+            }
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-200"
+            title={
+              minimizado
+                ? "Restaurar"
+                : "Minimizar"
+            }
+          >
+            {minimizado ? (
+              <Plus
+                size={17}
+              />
+            ) : (
+              <Minus
+                size={17}
+              />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={
+              onFechar
+            }
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-200"
+            title="Fechar"
+          >
+            <X
+              size={17}
+            />
+          </button>
+        </div>
+      </div>
+
+      {!minimizado && (
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          <p className="text-sm text-slate-500">
             {entidade.dados.observacao ||
               entidade.dados.descricao ||
               "Sem observações cadastradas."}
           </p>
-        </div>
 
-        <button
-          type="button"
-          onClick={onFechar}
-          className="rounded-xl p-2 text-slate-600 hover:bg-slate-100"
-        >
-          <X
-            size={18}
-          />
-        </button>
-      </div>
+          {andar && (
+            <>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                <Resumo
+                  rotulo="Locais"
+                  valor={
+                    locais.length
+                  }
+                />
 
-      {andar && (
-        <>
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            <Resumo
-              rotulo="Locais"
-              valor={
-                locais.length
+                <Resumo
+                  rotulo="Fotos"
+                  valor={
+                    fotos.length
+                  }
+                />
+
+                <Resumo
+                  rotulo="Plantas"
+                  valor={
+                    plantas.length
+                  }
+                />
+              </div>
+
+              <button
+                type="button"
+                disabled={
+                  !primeiraPlanta
+                }
+                onClick={() =>
+                  primeiraPlanta &&
+                  window.open(
+                    primeiraPlanta.urlPublica,
+                    "_blank",
+                    "noopener,noreferrer"
+                  )
+                }
+                className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
+              >
+                <FileText
+                  size={17}
+                />
+
+                Abrir planta
+              </button>
+
+              <p className="mt-5 text-sm font-black text-slate-800">
+                Locais, locatários e equipamentos
+              </p>
+
+              {locais.length ? (
+                <div className="mt-2 max-h-[210px] space-y-2 overflow-auto">
+                  {locais.map(
+                    (
+                      local
+                    ) => (
+                      <div
+                        key={
+                          local.id
+                        }
+                        className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
+                      >
+                        <p className="text-sm font-black text-slate-800">
+                          {
+                            local.nome
+                          }
+                        </p>
+
+                        <p className="mt-1 text-xs font-bold text-blue-700">
+                          {
+                            local.tipo
+                          }
+                        </p>
+
+                        {local.descricao && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            {
+                              local.descricao
+                            }
+                          </p>
+                        )}
+                      </div>
+                    )
+                  )}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-slate-400">
+                  Nenhum local cadastrado.
+                </p>
+              )}
+            </>
+          )}
+
+          {itemExterno && (
+            <button
+              type="button"
+              onClick={
+                onEditarExterno
               }
-            />
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700"
+            >
+              <Edit3
+                size={16}
+              />
 
-            <Resumo
-              rotulo="Fotos"
-              valor={
-                fotos.length
+              Editar item externo
+            </button>
+          )}
+
+          <div className="mt-5">
+            <ArquivosEntidade
+              entidade={
+                entidade
               }
-            />
-
-            <Resumo
-              rotulo="Plantas"
-              valor={
-                plantas.length
+              arquivos={
+                arquivos
+              }
+              salvando={
+                salvando
+              }
+              aberto={
+                arquivosAbertos
+              }
+              onAlternar={
+                onAlternarArquivos
+              }
+              onUpload={
+                onUpload
+              }
+              onExcluir={
+                onExcluirArquivo
               }
             />
           </div>
-
-          <button
-            type="button"
-            disabled={
-              !primeiraPlanta
-            }
-            onClick={() =>
-              primeiraPlanta &&
-              window.open(
-                primeiraPlanta.urlPublica,
-                "_blank",
-                "noopener,noreferrer"
-              )
-            }
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-black text-white disabled:opacity-40"
-          >
-            <FileText
-              size={17}
-            />
-
-            Abrir planta
-          </button>
-
-          <p className="mt-5 text-sm font-black text-slate-800">
-            Locais, locatários e equipamentos
-          </p>
-
-          {locais.length ? (
-            <div className="mt-2 max-h-[210px] space-y-2 overflow-auto">
-              {locais.map(
-                (
-                  local
-                ) => (
-                  <div
-                    key={
-                      local.id
-                    }
-                    className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
-                  >
-                    <p className="text-sm font-black text-slate-800">
-                      {
-                        local.nome
-                      }
-                    </p>
-
-                    <p className="mt-1 text-xs font-bold text-blue-700">
-                      {
-                        local.tipo
-                      }
-                    </p>
-
-                    {local.descricao && (
-                      <p className="mt-1 text-xs text-slate-500">
-                        {
-                          local.descricao
-                        }
-                      </p>
-                    )}
-                  </div>
-                )
-              )}
-            </div>
-          ) : (
-            <p className="mt-2 text-sm text-slate-400">
-              Nenhum local cadastrado.
-            </p>
-          )}
-        </>
+        </div>
       )}
 
-      {itemExterno && (
+      {!minimizado && (
         <button
           type="button"
-          onClick={
-            onEditarExterno
+          aria-label="Redimensionar janela"
+          title="Arraste para ajustar o tamanho"
+          onPointerDown={
+            iniciarRedimensionamento
           }
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-black text-blue-700"
-        >
-          <Edit3
-            size={16}
-          />
-
-          Editar item externo
-        </button>
-      )}
-
-      <div className="mt-5">
-        <ArquivosEntidade
-          entidade={
-            entidade
-          }
-          arquivos={
-            arquivos
-          }
-          salvando={
-            salvando
-          }
-          aberto={
-            arquivosAbertos
-          }
-          onAlternar={
-            onAlternarArquivos
-          }
-          onUpload={
-            onUpload
-          }
-          onExcluir={
-            onExcluirArquivo
-          }
+          className="absolute bottom-0 left-0 h-7 w-7 cursor-nesw-resize touch-none rounded-tr-2xl border-r-2 border-t-2 border-blue-400 bg-blue-50/90"
         />
-      </div>
+      )}
     </section>
   );
 }
 
 // =========================================================
-// CADASTRO EXTERNO
+// CADASTRO DE ITEM EXTERNO
 // =========================================================
 
 function CamposNumericos({
@@ -3442,9 +4041,7 @@ function CamposNumericos({
                 alterar(
                   campo,
                   Number(
-                    event
-                      .target
-                      .value
+                    event.target.value
                   )
                 )
               }
@@ -3521,7 +4118,7 @@ function CadastroItemExterno({
   }
 
   return (
-    <section className="fixed inset-x-3 bottom-3 top-20 z-[95] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl md:left-auto md:w-[430px]">
+    <section className="fixed inset-x-3 bottom-3 top-20 z-[1100] overflow-y-auto rounded-3xl bg-white p-5 shadow-2xl md:left-auto md:w-[430px]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-black text-slate-900">
@@ -3849,7 +4446,7 @@ function CadastroItemExterno({
 }
 
 // =========================================================
-// MODAL DE GERENCIAMENTO
+// GERENCIAMENTO DE ANDARES E LOCAIS
 // =========================================================
 
 function ModalGerenciar({
@@ -3937,7 +4534,7 @@ function ModalGerenciar({
   ]);
 
   return (
-    <div className="fixed inset-0 z-[120] overflow-y-auto bg-slate-950/50 p-3 md:p-6">
+    <div className="fixed inset-0 z-[1200] overflow-y-auto bg-slate-950/50 p-3 md:p-6">
       <div className="mx-auto max-w-6xl rounded-[2rem] bg-white p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -4438,10 +5035,13 @@ function BotaoTopo({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={
+        onClick
+      }
       className="flex items-center gap-2 rounded-2xl border border-slate-200 px-3 py-2 text-sm font-black text-slate-700 hover:bg-slate-50"
     >
       {icon}
+
       {texto}
     </button>
   );
@@ -5146,8 +5746,7 @@ export default function Mapa3D() {
           entidadeTipo:
             entidadeSelecionada.tipo,
           entidadeId:
-            entidadeSelecionada
-              .dados.id,
+            entidadeSelecionada.dados.id,
           tipoArquivo,
           arquivo,
         });
@@ -5304,7 +5903,8 @@ export default function Mapa3D() {
                   (
                     valor
                   ) =>
-                    valor + 1
+                    valor +
+                    1
                 )
               }
             />
