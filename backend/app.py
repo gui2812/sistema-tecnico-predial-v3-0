@@ -7,12 +7,14 @@ import shutil
 import subprocess
 import tempfile
 import unicodedata
+from copy import copy
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
+from openpyxl.styles import Alignment
 from pypdf import PdfReader, PdfWriter
 
 
@@ -27,7 +29,7 @@ TEMPLATE_EXCEL = (
 
 app = FastAPI(
     title="Sistema Técnico Predial — Backend",
-    version="2.0.0",
+    version="2.1.0",
 )
 
 app.add_middleware(
@@ -77,10 +79,20 @@ def nome_seguro(valor: Any) -> str:
 
 
 def numero_decimal(valor: Any) -> float:
-    if isinstance(valor, (int, float)):
-        return float(valor)
+    if isinstance(
+        valor,
+        (
+            int,
+            float,
+        ),
+    ):
+        return float(
+            valor
+        )
 
-    valor = texto(valor)
+    valor = texto(
+        valor
+    )
 
     if not valor:
         return 0.0
@@ -92,17 +104,30 @@ def numero_decimal(valor: Any) -> float:
     )
 
     if "," in valor:
-        valor = valor.replace(".", "")
-        valor = valor.replace(",", ".")
+        valor = valor.replace(
+            ".",
+            "",
+        )
+
+        valor = valor.replace(
+            ",",
+            ".",
+        )
 
     try:
-        return float(valor)
+        return float(
+            valor
+        )
     except ValueError:
         return 0.0
 
 
-def valor_frete_excel(valor: Any) -> Any:
-    valor_texto = texto(valor)
+def valor_frete_excel(
+    valor: Any,
+) -> Any:
+    valor_texto = texto(
+        valor
+    )
 
     if not valor_texto:
         return "N/A"
@@ -122,15 +147,23 @@ def valor_frete_excel(valor: Any) -> Any:
     )
 
 
-def data_br(valor: Any) -> str:
-    valor = texto(valor)
+def data_br(
+    valor: Any,
+) -> str:
+    valor = texto(
+        valor
+    )
 
     if not valor:
         return ""
 
-    partes = valor.split("-")
+    partes = valor.split(
+        "-"
+    )
 
-    if len(partes) == 3:
+    if len(
+        partes
+    ) == 3:
         return (
             f"{partes[2]}"
             f"/{partes[1]}"
@@ -140,13 +173,19 @@ def data_br(valor: Any) -> str:
     return valor
 
 
-def codigo_mapa(dados: dict[str, Any]) -> str:
+def codigo_mapa(
+    dados: dict[str, Any],
+) -> str:
     ano = texto(
-        dados.get("ano")
+        dados.get(
+            "ano"
+        )
     )
 
     numero = texto(
-        dados.get("numeroMapa")
+        dados.get(
+            "numeroMapa"
+        )
     )
 
     numero = re.sub(
@@ -155,29 +194,43 @@ def codigo_mapa(dados: dict[str, Any]) -> str:
         numero,
     )
 
-    # Evita duplicação quando o usuário digitar:
+    # Evita duplicação:
     # Ano: 2026
-    # Número: 2026070
-    if ano and numero.startswith(ano):
+    # Número digitado: 2026070
+    if (
+        ano
+        and numero.startswith(
+            ano
+        )
+    ):
         return numero
 
-    return f"{ano}{numero}"
+    return (
+        f"{ano}"
+        f"{numero}"
+    )
 
 
 def nome_base_mapa(
     dados: dict[str, Any],
 ) -> str:
     fornecedores = (
-        dados.get("fornecedores")
+        dados.get(
+            "fornecedores"
+        )
         or []
     )
 
     empresa = (
         nome_seguro(
-            dados.get("empresaAprovada")
+            dados.get(
+                "empresaAprovada"
+            )
         )
         or nome_seguro(
-            fornecedores[0].get("empresa")
+            fornecedores[0].get(
+                "empresa"
+            )
             if fornecedores
             else ""
         )
@@ -186,10 +239,14 @@ def nome_base_mapa(
 
     identificacao = (
         nome_seguro(
-            dados.get("identificacaoMapa")
+            dados.get(
+                "identificacaoMapa"
+            )
         )
         or nome_seguro(
-            dados.get("descricaoItem")
+            dados.get(
+                "descricaoItem"
+            )
         )
         or "Cotacao"
     )
@@ -208,14 +265,17 @@ def serializar_arquivo_base64(
 
     return {
         "nome": caminho.name,
+
         "base64": base64.b64encode(
             conteudo
-        ).decode("ascii"),
+        ).decode(
+            "ascii"
+        ),
     }
 
 
 # =========================================================
-# PREENCHIMENTO DO TEMPLATE EXCEL
+# CÁLCULOS
 # =========================================================
 
 def obter_preco_unitario(
@@ -223,11 +283,15 @@ def obter_preco_unitario(
     quantidade: float,
 ) -> float:
     preco_unitario = numero_decimal(
-        fornecedor.get("precoUnitario")
+        fornecedor.get(
+            "precoUnitario"
+        )
     )
 
     preco_total = numero_decimal(
-        fornecedor.get("precoTotal")
+        fornecedor.get(
+            "precoTotal"
+        )
     )
 
     if (
@@ -235,10 +299,51 @@ def obter_preco_unitario(
         and preco_total > 0
         and quantidade > 0
     ):
-        return preco_total / quantidade
+        return (
+            preco_total
+            / quantidade
+        )
 
     return preco_unitario
 
+
+def calcular_total_fornecedor(
+    fornecedor: dict[str, Any],
+    quantidade: float,
+) -> float:
+    preco_total_informado = numero_decimal(
+        fornecedor.get(
+            "precoTotal"
+        )
+    )
+
+    preco_unitario = obter_preco_unitario(
+        fornecedor,
+        quantidade,
+    )
+
+    frete = numero_decimal(
+        fornecedor.get(
+            "frete"
+        )
+    )
+
+    subtotal = (
+        preco_total_informado
+        if preco_total_informado > 0
+        else quantidade
+        * preco_unitario
+    )
+
+    return (
+        subtotal
+        + frete
+    )
+
+
+# =========================================================
+# PREENCHIMENTO DOS FORNECEDORES
+# =========================================================
 
 def preencher_fornecedor(
     ws,
@@ -256,49 +361,91 @@ def preencher_fornecedor(
         indice
     ]
 
-    ws[f"{coluna}5"] = texto(
-        fornecedor.get("empresa")
+    ws[
+        f"{coluna}5"
+    ] = texto(
+        fornecedor.get(
+            "empresa"
+        )
     )
 
-    ws[f"{coluna}6"] = texto(
-        fornecedor.get("contato")
+    ws[
+        f"{coluna}6"
+    ] = texto(
+        fornecedor.get(
+            "contato"
+        )
     )
 
-    ws[f"{coluna}7"] = texto(
-        fornecedor.get("telefone")
+    ws[
+        f"{coluna}7"
+    ] = texto(
+        fornecedor.get(
+            "telefone"
+        )
     )
 
-    ws[f"{coluna}8"] = texto(
-        fornecedor.get("email")
+    ws[
+        f"{coluna}8"
+    ] = texto(
+        fornecedor.get(
+            "email"
+        )
     )
 
-    ws[f"{coluna}9"] = data_br(
-        fornecedor.get("dataProposta")
+    ws[
+        f"{coluna}9"
+    ] = data_br(
+        fornecedor.get(
+            "dataProposta"
+        )
     )
 
-    ws[f"{coluna}12"] = obter_preco_unitario(
+    ws[
+        f"{coluna}12"
+    ] = obter_preco_unitario(
         fornecedor,
         quantidade,
     )
 
-    ws[f"{coluna}22"] = valor_frete_excel(
-        fornecedor.get("frete")
+    ws[
+        f"{coluna}22"
+    ] = valor_frete_excel(
+        fornecedor.get(
+            "frete"
+        )
     )
 
-    ws[f"{coluna}23"] = texto(
-        fornecedor.get("prazoEntrega")
+    ws[
+        f"{coluna}23"
+    ] = texto(
+        fornecedor.get(
+            "prazoEntrega"
+        )
     )
 
-    ws[f"{coluna}24"] = texto(
-        fornecedor.get("validadeProposta")
+    ws[
+        f"{coluna}24"
+    ] = texto(
+        fornecedor.get(
+            "validadeProposta"
+        )
     )
 
-    ws[f"{coluna}25"] = texto(
-        fornecedor.get("condicaoPagamento")
+    ws[
+        f"{coluna}25"
+    ] = texto(
+        fornecedor.get(
+            "condicaoPagamento"
+        )
     )
 
-    ws[f"{coluna}26"] = texto(
-        fornecedor.get("garantia")
+    ws[
+        f"{coluna}26"
+    ] = texto(
+        fornecedor.get(
+            "garantia"
+        )
     )
 
 
@@ -323,16 +470,156 @@ def limpar_fornecedor(
         8,
         9,
     ]:
-        ws[f"{coluna}{linha}"] = ""
+        ws[
+            f"{coluna}{linha}"
+        ] = ""
 
-    ws[f"{coluna}12"] = 0
+    ws[
+        f"{coluna}12"
+    ] = 0
 
-    ws[f"{coluna}22"] = "N/A"
-    ws[f"{coluna}23"] = ""
-    ws[f"{coluna}24"] = ""
-    ws[f"{coluna}25"] = ""
-    ws[f"{coluna}26"] = ""
+    ws[
+        f"{coluna}22"
+    ] = "N/A"
 
+    ws[
+        f"{coluna}23"
+    ] = ""
+
+    ws[
+        f"{coluna}24"
+    ] = ""
+
+    ws[
+        f"{coluna}25"
+    ] = ""
+
+    ws[
+        f"{coluna}26"
+    ] = ""
+
+
+# =========================================================
+# FORMATAÇÃO FINAL
+# =========================================================
+
+def aplicar_formatacao_final(
+    ws,
+    fornecedores: list[dict[str, Any]],
+    quantidade: float,
+) -> None:
+    # ==========================================
+    # TÍTULO OBSERVAÇÕES
+    # Área mesclada B30:S30
+    # ==========================================
+
+    ws[
+        "B30"
+    ].alignment = Alignment(
+        horizontal="center",
+        vertical="center",
+        wrap_text=True,
+    )
+
+    # ==========================================
+    # TEXTO DAS OBSERVAÇÕES
+    # Área mesclada B31:S32
+    # ==========================================
+
+    ws[
+        "B31"
+    ].alignment = Alignment(
+        horizontal="center",
+        vertical="center",
+        wrap_text=True,
+    )
+
+    # ==========================================
+    # TOTAL DOS FORNECEDORES
+    # Faixas mescladas:
+    # L28:M28
+    # O28:P28
+    # R28:S28
+    # ==========================================
+
+    celulas_totais = [
+        "L28",
+        "O28",
+        "R28",
+    ]
+
+    for indice, celula in enumerate(
+        celulas_totais
+    ):
+        fornecedor = (
+            fornecedores[
+                indice
+            ]
+            if indice
+            < len(
+                fornecedores
+            )
+            else {}
+        )
+
+        total = calcular_total_fornecedor(
+            fornecedor,
+            quantidade,
+        )
+
+        ws[
+            celula
+        ] = (
+            total
+            if total > 0
+            else 0
+        )
+
+        ws[
+            celula
+        ].number_format = (
+            'R$ #,##0.00'
+        )
+
+        ws[
+            celula
+        ].alignment = Alignment(
+            horizontal="center",
+            vertical="center",
+        )
+
+        fonte = copy(
+            ws[
+                celula
+            ].font
+        )
+
+        fonte.bold = True
+        fonte.color = (
+            "FFFFFF"
+        )
+
+        ws[
+            celula
+        ].font = fonte
+
+    # ==========================================
+    # EMPRESA APROVADA
+    # Área mesclada O37:S40
+    # ==========================================
+
+    ws[
+        "O37"
+    ].alignment = Alignment(
+        horizontal="center",
+        vertical="center",
+        wrap_text=True,
+    )
+
+
+# =========================================================
+# PREENCHIMENTO DO TEMPLATE EXCEL
+# =========================================================
 
 def preencher_excel(
     dados: dict[str, Any],
@@ -351,55 +638,109 @@ def preencher_excel(
         "Mapa de Cotação"
     ]
 
-    # Dados gerais.
-    ws["E5"] = texto(
-        dados.get("empreendimento")
+    # ==========================================
+    # DADOS GERAIS
+    # ==========================================
+
+    ws[
+        "E5"
+    ] = texto(
+        dados.get(
+            "empreendimento"
+        )
     )
 
-    ws["E6"] = texto(
-        dados.get("departamento")
+    ws[
+        "E6"
+    ] = texto(
+        dados.get(
+            "departamento"
+        )
     )
 
-    ws["E7"] = texto(
-        dados.get("contratante")
+    ws[
+        "E7"
+    ] = texto(
+        dados.get(
+            "contratante"
+        )
     )
 
-    ws["E8"] = texto(
-        dados.get("contaOrcamentaria")
+    ws[
+        "E8"
+    ] = texto(
+        dados.get(
+            "contaOrcamentaria"
+        )
     )
 
-    ws["E9"] = texto(
-        dados.get("gerenciaResponsavel")
+    ws[
+        "E9"
+    ] = texto(
+        dados.get(
+            "gerenciaResponsavel"
+        )
     )
 
-    # Primeiro item da tabela.
+    # ==========================================
+    # PRIMEIRO ITEM DA TABELA
+    # ==========================================
+
     quantidade = numero_decimal(
-        dados.get("quantidade")
+        dados.get(
+            "quantidade"
+        )
     )
 
-    ws["B12"] = texto(
-        dados.get("descricaoItem")
+    ws[
+        "B12"
+    ] = texto(
+        dados.get(
+            "descricaoItem"
+        )
     )
 
-    ws["I12"] = quantidade
+    ws[
+        "I12"
+    ] = quantidade
 
-    ws["J12"] = texto(
-        dados.get("unidade")
+    ws[
+        "J12"
+    ] = texto(
+        dados.get(
+            "unidade"
+        )
     )
 
-    # Limpa linhas adicionais para evitar resíduos antigos.
+    # Limpa linhas adicionais para evitar resíduos.
     for linha in range(
         13,
         21,
     ):
-        ws[f"B{linha}"] = ""
-        ws[f"I{linha}"] = ""
-        ws[f"J{linha}"] = ""
+        ws[
+            f"B{linha}"
+        ] = ""
+
+        ws[
+            f"I{linha}"
+        ] = ""
+
+        ws[
+            f"J{linha}"
+        ] = ""
+
+    # ==========================================
+    # FORNECEDORES
+    # ==========================================
 
     fornecedores = (
-        dados.get("fornecedores")
+        dados.get(
+            "fornecedores"
+        )
         or []
-    )[:3]
+    )[
+        :3
+    ]
 
     for indice in range(
         3
@@ -421,14 +762,42 @@ def preencher_excel(
                 indice,
             )
 
-    # Área mesclada B31:S32.
-    ws["B31"] = texto(
-        dados.get("observacoes")
+    # ==========================================
+    # OBSERVAÇÕES
+    # Área mesclada B31:S32
+    # ==========================================
+
+    ws[
+        "B31"
+    ] = texto(
+        dados.get(
+            "observacoes"
+        )
     )
 
-    # Área mesclada O37:S40.
-    ws["O37"] = texto(
-        dados.get("empresaAprovada")
+    # ==========================================
+    # EMPRESA APROVADA
+    # Área mesclada O37:S40
+    # ==========================================
+
+    empresa_aprovada = texto(
+        dados.get(
+            "empresaAprovada"
+        )
+    )
+
+    ws[
+        "O37"
+    ] = (
+        empresa_aprovada
+        if empresa_aprovada
+        else None
+    )
+
+    aplicar_formatacao_final(
+        ws,
+        fornecedores,
+        quantidade,
     )
 
     # Solicita recálculo ao abrir no Excel ou LibreOffice.
@@ -491,7 +860,8 @@ def converter_excel_para_pdf(
     )
 
     if (
-        resultado.returncode != 0
+        resultado.returncode
+        != 0
         or not caminho_pdf.exists()
     ):
         raise RuntimeError(
@@ -531,6 +901,7 @@ def unir_pdfs(
                 writer.add_page(
                     pagina
                 )
+
         except Exception as erro:
             raise RuntimeError(
                 (
@@ -598,7 +969,7 @@ def inicio():
     return {
         "servico": "Sistema Técnico Predial — Backend",
         "status": "online",
-        "versao": "2.0.0",
+        "versao": "2.1.0",
     }
 
 
@@ -606,14 +977,20 @@ def inicio():
 def health_check():
     return {
         "status": "ok",
-        "template_excel_encontrado": TEMPLATE_EXCEL.exists(),
-        "template_excel": str(
-            TEMPLATE_EXCEL
-        ),
+
+        "template_excel_encontrado":
+            TEMPLATE_EXCEL.exists(),
+
+        "template_excel":
+            str(
+                TEMPLATE_EXCEL
+            ),
     }
 
 
-@app.post("/api/mapa-cotacao/gerar")
+@app.post(
+    "/api/mapa-cotacao/gerar"
+)
 async def gerar_mapa_cotacao(
     dados_json: str = Form(...),
     proposta1: UploadFile | None = File(None),
@@ -624,6 +1001,7 @@ async def gerar_mapa_cotacao(
         dados = json.loads(
             dados_json
         )
+
     except json.JSONDecodeError as erro:
         raise HTTPException(
             status_code=400,
@@ -641,10 +1019,14 @@ async def gerar_mapa_cotacao(
 
         identificacao = (
             nome_seguro(
-                dados.get("identificacaoMapa")
+                dados.get(
+                    "identificacaoMapa"
+                )
             )
             or nome_seguro(
-                dados.get("descricaoItem")
+                dados.get(
+                    "descricaoItem"
+                )
             )
             or "Cotacao"
         )
@@ -703,17 +1085,21 @@ async def gerar_mapa_cotacao(
         )
 
         return {
-            "nomeBase": nome_base,
+            "nomeBase":
+                nome_base,
 
-            "excel": serializar_arquivo_base64(
-                caminho_excel
-            ),
+            "excel":
+                serializar_arquivo_base64(
+                    caminho_excel
+                ),
 
-            "pdfMapa": serializar_arquivo_base64(
-                caminho_pdf_mapa
-            ),
+            "pdfMapa":
+                serializar_arquivo_base64(
+                    caminho_pdf_mapa
+                ),
 
-            "pdfCompleto": serializar_arquivo_base64(
-                caminho_pdf_completo
-            ),
+            "pdfCompleto":
+                serializar_arquivo_base64(
+                    caminho_pdf_completo
+                ),
         }
