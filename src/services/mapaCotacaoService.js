@@ -2,6 +2,7 @@ import XlsxPopulate from "xlsx-populate/browser/xlsx-populate";
 import {
   PDFDocument,
   StandardFonts,
+  degrees,
   rgb,
 } from "pdf-lib";
 import { saveAs } from "file-saver";
@@ -12,434 +13,9 @@ const TEMPLATE_EXCEL =
 const TEMPLATE_PDF =
   "/templates/Modelo - Mapa de Cotação.pdf";
 
-/**
- * O template não é redesenhado.
- * O sistema abre o arquivo oficial e preenche somente os campos existentes.
- *
- * Após o primeiro teste, caso algum campo precise subir ou descer poucos
- * pixels, alteraremos somente este bloco de coordenadas.
- */
-const CELULAS_EXCEL = {
-  empreendimento: "B4",
-  departamento: "B5",
-  contratante: "B6",
-  contaOrcamentaria: "B7",
-  gerenciaResponsavel: "B8",
-
-  descricaoItem: "B13",
-  quantidade: "E13",
-  unidade: "F13",
-
-  observacoes: "B30",
-  empresaAprovada: "K35",
-
-  fornecedores: [
-    {
-      empresa: "H4",
-      contato: "H5",
-      telefone: "H6",
-      email: "H7",
-      dataProposta: "H8",
-      precoUnitario: "H13",
-      precoTotal: "I13",
-      frete: "H22",
-      prazoEntrega: "H23",
-      validadeProposta: "H24",
-      condicaoPagamento: "H25",
-      garantia: "H26",
-      total: "I27",
-    },
-    {
-      empresa: "K4",
-      contato: "K5",
-      telefone: "K6",
-      email: "K7",
-      dataProposta: "K8",
-      precoUnitario: "K13",
-      precoTotal: "L13",
-      frete: "K22",
-      prazoEntrega: "K23",
-      validadeProposta: "K24",
-      condicaoPagamento: "K25",
-      garantia: "K26",
-      total: "L27",
-    },
-    {
-      empresa: "N4",
-      contato: "N5",
-      telefone: "N6",
-      email: "N7",
-      dataProposta: "N8",
-      precoUnitario: "N13",
-      precoTotal: "O13",
-      frete: "N22",
-      prazoEntrega: "N23",
-      validadeProposta: "N24",
-      condicaoPagamento: "N25",
-      garantia: "N26",
-      total: "O27",
-    },
-  ],
-};
-
-/**
- * Coordenadas relativas ao PDF.
- * x e y variam entre 0 e 1.
- * O PDF original permanece como fundo, preservando integralmente o layout.
- */
-const CAMPOS_PDF = {
-  empreendimento: {
-    x: 0.125,
-    y: 0.878,
-    size: 8,
-    largura: 150,
-  },
-
-  departamento: {
-    x: 0.125,
-    y: 0.848,
-    size: 8,
-    largura: 150,
-  },
-
-  contratante: {
-    x: 0.125,
-    y: 0.818,
-    size: 8,
-    largura: 150,
-  },
-
-  contaOrcamentaria: {
-    x: 0.125,
-    y: 0.788,
-    size: 8,
-    largura: 150,
-  },
-
-  gerenciaResponsavel: {
-    x: 0.125,
-    y: 0.758,
-    size: 8,
-    largura: 150,
-  },
-
-  descricaoItem: {
-    x: 0.07,
-    y: 0.622,
-    size: 7.4,
-    largura: 275,
-  },
-
-  quantidade: {
-    x: 0.42,
-    y: 0.622,
-    size: 7.4,
-    largura: 40,
-  },
-
-  unidade: {
-    x: 0.468,
-    y: 0.622,
-    size: 7.4,
-    largura: 40,
-  },
-
-  observacoes: {
-    x: 0.075,
-    y: 0.255,
-    size: 7,
-    largura: 610,
-    linhas: 4,
-  },
-
-  empresaAprovada: {
-    x: 0.69,
-    y: 0.102,
-    size: 8,
-    largura: 190,
-  },
-
-  fornecedores: [
-    {
-      empresa: {
-        x: 0.545,
-        y: 0.878,
-        size: 7,
-        largura: 90,
-      },
-
-      contato: {
-        x: 0.545,
-        y: 0.848,
-        size: 7,
-        largura: 90,
-      },
-
-      telefone: {
-        x: 0.545,
-        y: 0.818,
-        size: 7,
-        largura: 90,
-      },
-
-      email: {
-        x: 0.545,
-        y: 0.788,
-        size: 6.2,
-        largura: 100,
-      },
-
-      dataProposta: {
-        x: 0.545,
-        y: 0.758,
-        size: 7,
-        largura: 90,
-      },
-
-      precoUnitario: {
-        x: 0.548,
-        y: 0.622,
-        size: 7,
-        largura: 65,
-      },
-
-      precoTotal: {
-        x: 0.617,
-        y: 0.622,
-        size: 7,
-        largura: 65,
-      },
-
-      frete: {
-        x: 0.548,
-        y: 0.438,
-        size: 7,
-        largura: 85,
-      },
-
-      prazoEntrega: {
-        x: 0.548,
-        y: 0.408,
-        size: 7,
-        largura: 85,
-      },
-
-      validadeProposta: {
-        x: 0.548,
-        y: 0.378,
-        size: 7,
-        largura: 85,
-      },
-
-      condicaoPagamento: {
-        x: 0.548,
-        y: 0.348,
-        size: 7,
-        largura: 85,
-      },
-
-      garantia: {
-        x: 0.548,
-        y: 0.318,
-        size: 7,
-        largura: 85,
-      },
-
-      total: {
-        x: 0.617,
-        y: 0.285,
-        size: 7.4,
-        largura: 70,
-      },
-    },
-
-    {
-      empresa: {
-        x: 0.704,
-        y: 0.878,
-        size: 7,
-        largura: 90,
-      },
-
-      contato: {
-        x: 0.704,
-        y: 0.848,
-        size: 7,
-        largura: 90,
-      },
-
-      telefone: {
-        x: 0.704,
-        y: 0.818,
-        size: 7,
-        largura: 90,
-      },
-
-      email: {
-        x: 0.704,
-        y: 0.788,
-        size: 6.2,
-        largura: 100,
-      },
-
-      dataProposta: {
-        x: 0.704,
-        y: 0.758,
-        size: 7,
-        largura: 90,
-      },
-
-      precoUnitario: {
-        x: 0.707,
-        y: 0.622,
-        size: 7,
-        largura: 65,
-      },
-
-      precoTotal: {
-        x: 0.776,
-        y: 0.622,
-        size: 7,
-        largura: 65,
-      },
-
-      frete: {
-        x: 0.707,
-        y: 0.438,
-        size: 7,
-        largura: 85,
-      },
-
-      prazoEntrega: {
-        x: 0.707,
-        y: 0.408,
-        size: 7,
-        largura: 85,
-      },
-
-      validadeProposta: {
-        x: 0.707,
-        y: 0.378,
-        size: 7,
-        largura: 85,
-      },
-
-      condicaoPagamento: {
-        x: 0.707,
-        y: 0.348,
-        size: 7,
-        largura: 85,
-      },
-
-      garantia: {
-        x: 0.707,
-        y: 0.318,
-        size: 7,
-        largura: 85,
-      },
-
-      total: {
-        x: 0.776,
-        y: 0.285,
-        size: 7.4,
-        largura: 70,
-      },
-    },
-
-    {
-      empresa: {
-        x: 0.862,
-        y: 0.878,
-        size: 7,
-        largura: 90,
-      },
-
-      contato: {
-        x: 0.862,
-        y: 0.848,
-        size: 7,
-        largura: 90,
-      },
-
-      telefone: {
-        x: 0.862,
-        y: 0.818,
-        size: 7,
-        largura: 90,
-      },
-
-      email: {
-        x: 0.862,
-        y: 0.788,
-        size: 6.2,
-        largura: 100,
-      },
-
-      dataProposta: {
-        x: 0.862,
-        y: 0.758,
-        size: 7,
-        largura: 90,
-      },
-
-      precoUnitario: {
-        x: 0.865,
-        y: 0.622,
-        size: 7,
-        largura: 65,
-      },
-
-      precoTotal: {
-        x: 0.934,
-        y: 0.622,
-        size: 7,
-        largura: 65,
-      },
-
-      frete: {
-        x: 0.865,
-        y: 0.438,
-        size: 7,
-        largura: 85,
-      },
-
-      prazoEntrega: {
-        x: 0.865,
-        y: 0.408,
-        size: 7,
-        largura: 85,
-      },
-
-      validadeProposta: {
-        x: 0.865,
-        y: 0.378,
-        size: 7,
-        largura: 85,
-      },
-
-      condicaoPagamento: {
-        x: 0.865,
-        y: 0.348,
-        size: 7,
-        largura: 85,
-      },
-
-      garantia: {
-        x: 0.865,
-        y: 0.318,
-        size: 7,
-        largura: 85,
-      },
-
-      total: {
-        x: 0.934,
-        y: 0.285,
-        size: 7.4,
-        largura: 70,
-      },
-    },
-  ],
-};
+// =========================================================
+// UTILIDADES GERAIS
+// =========================================================
 
 function texto(valor) {
   return String(
@@ -448,7 +24,33 @@ function texto(valor) {
   ).trim();
 }
 
-function numero(valor) {
+function normalizar(
+  valor
+) {
+  return texto(
+    valor
+  )
+    .normalize(
+      "NFD"
+    )
+    .replace(
+      /[\u0300-\u036f]/g,
+      ""
+    )
+    .replace(
+      /[:.]/g,
+      ""
+    )
+    .replace(
+      /\s+/g,
+      " "
+    )
+    .toLowerCase();
+}
+
+function numero(
+  valor
+) {
   if (
     typeof valor ===
     "number"
@@ -460,18 +62,26 @@ function numero(valor) {
       : 0;
   }
 
-  const normalizado =
-    String(
-      valor ??
-        ""
+  const limpo =
+    texto(
+      valor
     )
-      .replace(/[^\d,.-]/g, "")
-      .replace(/\./g, "")
-      .replace(",", ".");
+      .replace(
+        /[^\d,.-]/g,
+        ""
+      )
+      .replace(
+        /\./g,
+        ""
+      )
+      .replace(
+        ",",
+        "."
+      );
 
   const resultado =
     Number(
-      normalizado
+      limpo
     );
 
   return Number.isFinite(
@@ -481,14 +91,19 @@ function numero(valor) {
     : 0;
 }
 
-function moeda(valor) {
+function moeda(
+  valor
+) {
   return numero(
     valor
   ).toLocaleString(
     "pt-BR",
     {
-      style: "currency",
-      currency: "BRL",
+      style:
+        "currency",
+
+      currency:
+        "BRL",
     }
   );
 }
@@ -501,9 +116,11 @@ function formatarData(
   }
 
   const partes =
-    String(
+    texto(
       valor
-    ).split("-");
+    ).split(
+      "-"
+    );
 
   if (
     partes.length !==
@@ -594,18 +211,124 @@ async function carregarArrayBuffer(
   return response.arrayBuffer();
 }
 
-function escreverCelula(
+// =========================================================
+// EXCEL — LOCALIZAÇÃO AUTOMÁTICA DAS CÉLULAS
+// =========================================================
+
+function obterMatriz(
+  planilha
+) {
+  const faixa =
+    planilha.usedRange();
+
+  const inicio =
+    faixa.startCell();
+
+  return {
+    valores:
+      faixa.value(),
+
+    linhaInicial:
+      inicio.rowNumber(),
+
+    colunaInicial:
+      inicio.columnNumber(),
+  };
+}
+
+function localizarCelulas(
   planilha,
-  endereco,
+  termo
+) {
+  const {
+    valores,
+    linhaInicial,
+    colunaInicial,
+  } =
+    obterMatriz(
+      planilha
+    );
+
+  const procurado =
+    normalizar(
+      termo
+    );
+
+  const resultados =
+    [];
+
+  valores.forEach(
+    (
+      linha,
+      indiceLinha
+    ) => {
+      linha.forEach(
+        (
+          valor,
+          indiceColuna
+        ) => {
+          const atual =
+            normalizar(
+              valor
+            );
+
+          if (
+            atual &&
+            (
+              atual ===
+                procurado ||
+              atual.includes(
+                procurado
+              )
+            )
+          ) {
+            resultados.push({
+              linha:
+                linhaInicial +
+                indiceLinha,
+
+              coluna:
+                colunaInicial +
+                indiceColuna,
+
+              valor,
+            });
+          }
+        }
+      );
+    }
+  );
+
+  return resultados;
+}
+
+function localizarPrimeira(
+  planilha,
+  termo
+) {
+  return localizarCelulas(
+    planilha,
+    termo
+  )[0];
+}
+
+function escrever(
+  planilha,
+  linha,
+  coluna,
   valor
 ) {
-  if (!endereco) {
+  if (
+    !linha ||
+    !coluna
+  ) {
     return;
   }
 
   planilha
     .cell(
-      endereco
+      linha,
+      coluna
     )
     .value(
       valor ??
@@ -613,27 +336,247 @@ function escreverCelula(
     );
 }
 
-function limparFornecedoresExcel(
+function escreverAoLado(
+  planilha,
+  titulo,
+  valor,
+  deslocamentoColuna = 1
+) {
+  const referencia =
+    localizarPrimeira(
+      planilha,
+      titulo
+    );
+
+  if (
+    !referencia
+  ) {
+    return;
+  }
+
+  escrever(
+    planilha,
+    referencia.linha,
+    referencia.coluna +
+      deslocamentoColuna,
+    valor
+  );
+}
+
+function localizarCabecalhosOrcamentos(
   planilha
 ) {
-  CELULAS_EXCEL.fornecedores.forEach(
+  return [
+    localizarPrimeira(
+      planilha,
+      "Orçamento 1"
+    ),
+
+    localizarPrimeira(
+      planilha,
+      "Orçamento 2"
+    ),
+
+    localizarPrimeira(
+      planilha,
+      "Orçamento 3"
+    ),
+  ];
+}
+
+function localizarNaLinha(
+  planilha,
+  termo
+) {
+  return localizarPrimeira(
+    planilha,
+    termo
+  )?.linha;
+}
+
+function preencherFornecedorExcel(
+  planilha,
+  fornecedor,
+  indice,
+  cabecalhos
+) {
+  const cabecalho =
+    cabecalhos[
+      indice
+    ];
+
+  if (
+    !cabecalho
+  ) {
+    return;
+  }
+
+  const coluna =
+    cabecalho.coluna;
+
+  const campos = [
+    [
+      "Empresa",
+      fornecedor.empresa,
+    ],
+
+    [
+      "Contato",
+      fornecedor.contato,
+    ],
+
+    [
+      "Telefone",
+      fornecedor.telefone,
+    ],
+
+    [
+      "E-mail",
+      fornecedor.email,
+    ],
+
+    [
+      "Data da proposta",
+      formatarData(
+        fornecedor.dataProposta
+      ),
+    ],
+  ];
+
+  campos.forEach(
     (
-      mapa
+      [
+        titulo,
+        valor,
+      ]
     ) => {
-      Object.values(
-        mapa
-      ).forEach(
-        (
-          endereco
-        ) => {
-          escreverCelula(
-            planilha,
-            endereco,
-            ""
-          );
-        }
+      const linha =
+        localizarNaLinha(
+          planilha,
+          titulo
+        );
+
+      escrever(
+        planilha,
+        linha,
+        coluna,
+        valor
       );
     }
+  );
+
+  const precosUnitarios =
+    localizarCelulas(
+      planilha,
+      "Preço Unit"
+    );
+
+  const precosTotais =
+    localizarCelulas(
+      planilha,
+      "Preço Total"
+    );
+
+  const cabecalhoUnitario =
+    precosUnitarios[
+      indice
+    ];
+
+  const cabecalhoTotal =
+    precosTotais[
+      indice
+    ];
+
+  if (
+    cabecalhoUnitario
+  ) {
+    escrever(
+      planilha,
+      cabecalhoUnitario.linha +
+        1,
+      cabecalhoUnitario.coluna,
+      numero(
+        fornecedor.precoUnitario
+      )
+    );
+  }
+
+  if (
+    cabecalhoTotal
+  ) {
+    escrever(
+      planilha,
+      cabecalhoTotal.linha +
+        1,
+      cabecalhoTotal.coluna,
+      numero(
+        fornecedor.precoTotal
+      )
+    );
+  }
+
+  const comerciais = [
+    [
+      "Frete",
+      fornecedor.frete,
+    ],
+
+    [
+      "Prazo de Entrega",
+      fornecedor.prazoEntrega,
+    ],
+
+    [
+      "Validade da Proposta",
+      fornecedor.validadeProposta,
+    ],
+
+    [
+      "Condições de Pagamento",
+      fornecedor.condicaoPagamento,
+    ],
+
+    [
+      "Garantia",
+      fornecedor.garantia,
+    ],
+  ];
+
+  comerciais.forEach(
+    (
+      [
+        titulo,
+        valor,
+      ]
+    ) => {
+      const linha =
+        localizarNaLinha(
+          planilha,
+          titulo
+        );
+
+      escrever(
+        planilha,
+        linha,
+        coluna,
+        valor
+      );
+    }
+  );
+
+  const linhaTotal =
+    localizarNaLinha(
+      planilha,
+      "Total"
+    );
+
+  escrever(
+    planilha,
+    linhaTotal,
+    coluna,
+    numero(
+      fornecedor.precoTotal
+    )
   );
 }
 
@@ -655,71 +598,132 @@ export async function gerarExcelPreenchido(
       0
     );
 
-  escreverCelula(
+  escreverAoLado(
     planilha,
-    CELULAS_EXCEL.empreendimento,
+    "Empreendimento",
     dados.empreendimento
   );
 
-  escreverCelula(
+  escreverAoLado(
     planilha,
-    CELULAS_EXCEL.departamento,
+    "Departamento",
     dados.departamento
   );
 
-  escreverCelula(
+  escreverAoLado(
     planilha,
-    CELULAS_EXCEL.contratante,
+    "Contratante",
     dados.contratante
   );
 
-  escreverCelula(
+  escreverAoLado(
     planilha,
-    CELULAS_EXCEL.contaOrcamentaria,
+    "Conta Orçamentária",
     dados.contaOrcamentaria
   );
 
-  escreverCelula(
+  escreverAoLado(
     planilha,
-    CELULAS_EXCEL.gerenciaResponsavel,
+    "Gerência Responsável",
     dados.gerenciaResponsavel
   );
 
-  escreverCelula(
-    planilha,
-    CELULAS_EXCEL.descricaoItem,
-    dados.descricaoItem
-  );
+  const descricao =
+    localizarPrimeira(
+      planilha,
+      "Descrição"
+    );
 
-  escreverCelula(
-    planilha,
-    CELULAS_EXCEL.quantidade,
-    numero(
-      dados.quantidade
-    )
-  );
+  if (
+    descricao
+  ) {
+    escrever(
+      planilha,
+      descricao.linha +
+        1,
+      descricao.coluna,
+      dados.descricaoItem
+    );
+  }
 
-  escreverCelula(
-    planilha,
-    CELULAS_EXCEL.unidade,
-    dados.unidade
-  );
+  const quantidade =
+    localizarPrimeira(
+      planilha,
+      "Quantidade"
+    );
 
-  escreverCelula(
-    planilha,
-    CELULAS_EXCEL.observacoes,
-    dados.observacoes
-  );
+  if (
+    quantidade
+  ) {
+    escrever(
+      planilha,
+      quantidade.linha +
+        1,
+      quantidade.coluna,
+      numero(
+        dados.quantidade
+      )
+    );
+  }
 
-  escreverCelula(
-    planilha,
-    CELULAS_EXCEL.empresaAprovada,
-    dados.empresaAprovada
-  );
+  const unidade =
+    localizarPrimeira(
+      planilha,
+      "Unidade"
+    );
 
-  limparFornecedoresExcel(
-    planilha
-  );
+  if (
+    unidade
+  ) {
+    escrever(
+      planilha,
+      unidade.linha +
+        1,
+      unidade.coluna,
+      dados.unidade
+    );
+  }
+
+  const observacoes =
+    localizarPrimeira(
+      planilha,
+      "Observações"
+    );
+
+  if (
+    observacoes
+  ) {
+    escrever(
+      planilha,
+      observacoes.linha +
+        1,
+      observacoes.coluna,
+      dados.observacoes
+    );
+  }
+
+  const empresaAprovada =
+    localizarPrimeira(
+      planilha,
+      "Empresa Aprovada"
+    );
+
+  if (
+    empresaAprovada
+  ) {
+    escrever(
+      planilha,
+      empresaAprovada.linha +
+        1,
+      empresaAprovada.coluna,
+      dados.empresaAprovada
+    );
+  }
+
+  const cabecalhos =
+    localizarCabecalhosOrcamentos(
+      planilha
+    );
 
   (
     dados.fornecedores ||
@@ -734,102 +738,238 @@ export async function gerarExcelPreenchido(
         fornecedor,
         indice
       ) => {
-        const mapa =
-          CELULAS_EXCEL.fornecedores[
-            indice
-          ];
-
-        escreverCelula(
+        preencherFornecedorExcel(
           planilha,
-          mapa.empresa,
-          fornecedor.empresa
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.contato,
-          fornecedor.contato
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.telefone,
-          fornecedor.telefone
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.email,
-          fornecedor.email
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.dataProposta,
-          formatarData(
-            fornecedor.dataProposta
-          )
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.precoUnitario,
-          numero(
-            fornecedor.precoUnitario
-          )
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.precoTotal,
-          numero(
-            fornecedor.precoTotal
-          )
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.frete,
-          fornecedor.frete
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.prazoEntrega,
-          fornecedor.prazoEntrega
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.validadeProposta,
-          fornecedor.validadeProposta
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.condicaoPagamento,
-          fornecedor.condicaoPagamento
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.garantia,
-          fornecedor.garantia
-        );
-
-        escreverCelula(
-          planilha,
-          mapa.total,
-          numero(
-            fornecedor.precoTotal
-          )
+          fornecedor,
+          indice,
+          cabecalhos
         );
       }
     );
 
   return workbook.outputAsync({
-    type: "blob",
+    type:
+      "blob",
   });
+}
+
+// =========================================================
+// PDF — COORDENADAS VISUAIS
+// =========================================================
+
+/**
+ * As coordenadas abaixo representam a página já visualizada na horizontal.
+ * A função de desenho corrige automaticamente PDFs internamente rotacionados.
+ */
+const PDF = {
+  empreendimento: [
+    0.226,
+    0.824,
+    0.130,
+  ],
+
+  departamento: [
+    0.226,
+    0.795,
+    0.130,
+  ],
+
+  contratante: [
+    0.226,
+    0.766,
+    0.130,
+  ],
+
+  contaOrcamentaria: [
+    0.226,
+    0.737,
+    0.130,
+  ],
+
+  gerenciaResponsavel: [
+    0.226,
+    0.708,
+    0.130,
+  ],
+
+  descricaoItem: [
+    0.112,
+    0.625,
+    0.235,
+  ],
+
+  quantidade: [
+    0.386,
+    0.625,
+    0.045,
+  ],
+
+  unidade: [
+    0.449,
+    0.625,
+    0.045,
+  ],
+
+  observacoes: [
+    0.112,
+    0.241,
+    0.765,
+  ],
+
+  empresaAprovada: [
+    0.690,
+    0.085,
+    0.175,
+  ],
+
+  fornecedores: [
+    {
+      x:
+        0.526,
+    },
+
+    {
+      x:
+        0.686,
+    },
+
+    {
+      x:
+        0.846,
+    },
+  ],
+};
+
+function dimensoesVisuais(
+  page
+) {
+  const {
+    width,
+    height,
+  } =
+    page.getSize();
+
+  const angulo =
+    (
+      page
+        .getRotation()
+        .angle %
+        360 +
+      360
+    ) %
+    360;
+
+  const girado =
+    angulo ===
+      90 ||
+    angulo ===
+      270;
+
+  return {
+    brutoWidth:
+      width,
+
+    brutoHeight:
+      height,
+
+    visualWidth:
+      girado
+        ? height
+        : width,
+
+    visualHeight:
+      girado
+        ? width
+        : height,
+
+    angulo,
+  };
+}
+
+function transformarPonto(
+  page,
+  xVisual,
+  yVisual
+) {
+  const {
+    brutoWidth,
+    brutoHeight,
+    angulo,
+  } =
+    dimensoesVisuais(
+      page
+    );
+
+  if (
+    angulo ===
+    90
+  ) {
+    return {
+      x:
+        brutoWidth -
+        yVisual,
+
+      y:
+        xVisual,
+
+      rotacao:
+        degrees(
+          90
+        ),
+    };
+  }
+
+  if (
+    angulo ===
+    180
+  ) {
+    return {
+      x:
+        brutoWidth -
+        xVisual,
+
+      y:
+        brutoHeight -
+        yVisual,
+
+      rotacao:
+        degrees(
+          180
+        ),
+    };
+  }
+
+  if (
+    angulo ===
+    270
+  ) {
+    return {
+      x:
+        yVisual,
+
+      y:
+        brutoHeight -
+        xVisual,
+
+      rotacao:
+        degrees(
+          270
+        ),
+    };
+  }
+
+  return {
+    x:
+      xVisual,
+
+    y:
+      yVisual,
+
+    rotacao:
+      degrees(
+        0
+      ),
+  };
 }
 
 function cortarTexto(
@@ -867,22 +1007,100 @@ function cortarTexto(
     resultado.length >
       3
   ) {
-    resultado =
-      `${resultado.slice(
-        0,
-        -3
-      )}...`;
+    return `${resultado.slice(
+      0,
+      -3
+    )}...`;
   }
 
   return resultado;
 }
 
-function quebrarLinhas(
-  valor,
+function desenharTexto(
+  page,
   font,
-  tamanho,
-  larguraMaxima,
-  limite
+  valor,
+  xRelativo,
+  yRelativo,
+  larguraRelativa,
+  tamanho = 7
+) {
+  if (
+    !texto(
+      valor
+    )
+  ) {
+    return;
+  }
+
+  const {
+    visualWidth,
+    visualHeight,
+  } =
+    dimensoesVisuais(
+      page
+    );
+
+  const xVisual =
+    visualWidth *
+    xRelativo;
+
+  const yVisual =
+    visualHeight *
+    yRelativo;
+
+  const largura =
+    visualWidth *
+    larguraRelativa;
+
+  const ponto =
+    transformarPonto(
+      page,
+      xVisual,
+      yVisual
+    );
+
+  page.drawText(
+    cortarTexto(
+      valor,
+      font,
+      tamanho,
+      largura
+    ),
+    {
+      x:
+        ponto.x,
+
+      y:
+        ponto.y,
+
+      size:
+        tamanho,
+
+      font,
+
+      rotate:
+        ponto.rotacao,
+
+      color:
+        rgb(
+          0,
+          0,
+          0
+        ),
+    }
+  );
+}
+
+function desenharLinhas(
+  page,
+  font,
+  valor,
+  xRelativo,
+  yRelativo,
+  larguraRelativa,
+  tamanho = 7,
+  limite = 4
 ) {
   const palavras =
     texto(
@@ -894,6 +1112,17 @@ function quebrarLinhas(
       .filter(
         Boolean
       );
+
+  const {
+    visualWidth,
+  } =
+    dimensoesVisuais(
+      page
+    );
+
+  const largura =
+    visualWidth *
+    larguraRelativa;
 
   const linhas =
     [];
@@ -916,7 +1145,7 @@ function quebrarLinhas(
           tentativa,
           tamanho
         ) <=
-          larguraMaxima
+          largura
       ) {
         atual =
           tentativa;
@@ -941,119 +1170,177 @@ function quebrarLinhas(
     );
   }
 
-  return linhas.slice(
-    0,
-    limite
-  );
-}
-
-function desenharCampo(
-  page,
-  font,
-  configuracao,
-  valor
-) {
-  if (
-    !configuracao ||
-    !texto(
-      valor
+  linhas
+    .slice(
+      0,
+      limite
     )
-  ) {
-    return;
-  }
-
-  const {
-    width,
-    height,
-  } =
-    page.getSize();
-
-  const x =
-    width *
-    configuracao.x;
-
-  const y =
-    height *
-    configuracao.y;
-
-  const tamanho =
-    configuracao.size ||
-    8;
-
-  const largura =
-    configuracao.largura ||
-    100;
-
-  if (
-    configuracao.linhas
-  ) {
-    const linhas =
-      quebrarLinhas(
-        valor,
-        font,
-        tamanho,
-        largura,
-        configuracao.linhas
-      );
-
-    linhas.forEach(
+    .forEach(
       (
         linha,
         indice
       ) => {
-        page.drawText(
+        desenharTexto(
+          page,
+          font,
           linha,
-          {
-            x,
-
-            y:
-              y -
-              indice *
-                (
-                  tamanho +
-                  2
-                ),
-
-            size:
-              tamanho,
-
-            font,
-
-            color:
-              rgb(
-                0,
-                0,
-                0
-              ),
-          }
+          xRelativo,
+          yRelativo -
+            indice *
+              0.018,
+          larguraRelativa,
+          tamanho
         );
       }
     );
+}
 
+function preencherFornecedorPdf(
+  page,
+  font,
+  fornecedor,
+  indice
+) {
+  const bloco =
+    PDF.fornecedores[
+      indice
+    ];
+
+  if (
+    !bloco
+  ) {
     return;
   }
 
-  page.drawText(
-    cortarTexto(
-      valor,
-      font,
-      tamanho,
-      largura
-    ),
-    {
-      x,
-      y,
-      size:
-        tamanho,
-      font,
+  const x =
+    bloco.x;
 
-      color:
-        rgb(
-          0,
-          0,
-          0
-        ),
-    }
+  desenharTexto(
+    page,
+    font,
+    fornecedor.empresa,
+    x,
+    0.824,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    fornecedor.contato,
+    x,
+    0.795,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    fornecedor.telefone,
+    x,
+    0.766,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    fornecedor.email,
+    x,
+    0.737,
+    0.135,
+    6
+  );
+
+  desenharTexto(
+    page,
+    font,
+    formatarData(
+      fornecedor.dataProposta
+    ),
+    x,
+    0.708,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    moeda(
+      fornecedor.precoUnitario
+    ),
+    x,
+    0.625,
+    0.068
+  );
+
+  desenharTexto(
+    page,
+    font,
+    moeda(
+      fornecedor.precoTotal
+    ),
+    x +
+      0.071,
+    0.625,
+    0.068
+  );
+
+  desenharTexto(
+    page,
+    font,
+    fornecedor.frete,
+    x,
+    0.438,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    fornecedor.prazoEntrega,
+    x,
+    0.409,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    fornecedor.validadeProposta,
+    x,
+    0.380,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    fornecedor.condicaoPagamento,
+    x,
+    0.351,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    fornecedor.garantia,
+    x,
+    0.322,
+    0.135
+  );
+
+  desenharTexto(
+    page,
+    font,
+    moeda(
+      fornecedor.precoTotal
+    ),
+    x,
+    0.286,
+    0.135,
+    7.5
   );
 }
 
@@ -1078,74 +1365,75 @@ export async function gerarPdfMapaPreenchido(
       StandardFonts.Helvetica
     );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.empreendimento,
-    dados.empreendimento
+    dados.empreendimento,
+    ...PDF.empreendimento
   );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.departamento,
-    dados.departamento
+    dados.departamento,
+    ...PDF.departamento
   );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.contratante,
-    dados.contratante
+    dados.contratante,
+    ...PDF.contratante
   );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.contaOrcamentaria,
-    dados.contaOrcamentaria
+    dados.contaOrcamentaria,
+    ...PDF.contaOrcamentaria
   );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.gerenciaResponsavel,
-    dados.gerenciaResponsavel
+    dados.gerenciaResponsavel,
+    ...PDF.gerenciaResponsavel
   );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.descricaoItem,
-    dados.descricaoItem
+    dados.descricaoItem,
+    ...PDF.descricaoItem
   );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.quantidade,
-    dados.quantidade
+    dados.quantidade,
+    ...PDF.quantidade
   );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.unidade,
-    dados.unidade
+    dados.unidade,
+    ...PDF.unidade
   );
 
-  desenharCampo(
+  desenharLinhas(
     page,
     font,
-    CAMPOS_PDF.observacoes,
-    dados.observacoes
+    dados.observacoes,
+    ...PDF.observacoes
   );
 
-  desenharCampo(
+  desenharTexto(
     page,
     font,
-    CAMPOS_PDF.empresaAprovada,
-    dados.empresaAprovada
+    dados.empresaAprovada,
+    ...PDF.empresaAprovada,
+    8
   );
 
   (
@@ -1161,114 +1449,21 @@ export async function gerarPdfMapaPreenchido(
         fornecedor,
         indice
       ) => {
-        const mapa =
-          CAMPOS_PDF.fornecedores[
-            indice
-          ];
-
-        desenharCampo(
+        preencherFornecedorPdf(
           page,
           font,
-          mapa.empresa,
-          fornecedor.empresa
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.contato,
-          fornecedor.contato
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.telefone,
-          fornecedor.telefone
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.email,
-          fornecedor.email
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.dataProposta,
-          formatarData(
-            fornecedor.dataProposta
-          )
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.precoUnitario,
-          moeda(
-            fornecedor.precoUnitario
-          )
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.precoTotal,
-          moeda(
-            fornecedor.precoTotal
-          )
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.frete,
-          fornecedor.frete
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.prazoEntrega,
-          fornecedor.prazoEntrega
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.validadeProposta,
-          fornecedor.validadeProposta
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.condicaoPagamento,
-          fornecedor.condicaoPagamento
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.garantia,
-          fornecedor.garantia
-        );
-
-        desenharCampo(
-          page,
-          font,
-          mapa.total,
-          moeda(
-            fornecedor.precoTotal
-          )
+          fornecedor,
+          indice
         );
       }
     );
 
   return pdf.save();
 }
+
+// =========================================================
+// UNIÃO DO PDF COM AS PROPOSTAS
+// =========================================================
 
 export async function gerarPdfComPropostas(
   pdfMapaBytes,
@@ -1292,10 +1487,11 @@ export async function gerarPdfComPropostas(
   paginasMapa.forEach(
     (
       pagina
-    ) =>
+    ) => {
       pdfFinal.addPage(
         pagina
-      )
+      );
+    }
   );
 
   for (
@@ -1325,7 +1521,7 @@ export async function gerarPdfComPropostas(
         `A proposta de "${
           fornecedor.empresa ||
           "fornecedor"
-        }" não é um PDF.`
+        }" precisa ser um arquivo PDF.`
       );
     }
 
@@ -1346,15 +1542,20 @@ export async function gerarPdfComPropostas(
     paginas.forEach(
       (
         pagina
-      ) =>
+      ) => {
         pdfFinal.addPage(
           pagina
-        )
+        );
+      }
     );
   }
 
   return pdfFinal.save();
 }
+
+// =========================================================
+// GERAÇÃO DOS TRÊS ARQUIVOS
+// =========================================================
 
 export async function gerarArquivosMapaCotacao(
   dados
