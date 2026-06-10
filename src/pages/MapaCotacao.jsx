@@ -8,6 +8,7 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  X,
 } from "lucide-react";
 import {
   useMemo,
@@ -18,6 +19,10 @@ import {
   gerarArquivosMapaCotacao,
 } from "../services/mapaCotacaoService";
 
+// =========================================================
+// VALORES PADRÃO
+// =========================================================
+
 function fornecedorVazio() {
   return {
     empresa: "",
@@ -27,11 +32,13 @@ function fornecedorVazio() {
     dataProposta: "",
     precoUnitario: "",
     precoTotal: "",
-    frete: "",
-    prazoEntrega: "",
-    validadeProposta: "",
-    condicaoPagamento: "",
-    garantia: "",
+
+    frete: "N/A",
+    prazoEntrega: "10 DIAS",
+    validadeProposta: "15 DIAS",
+    condicaoPagamento: "28DDL",
+    garantia: "SIM",
+
     arquivo: null,
   };
 }
@@ -52,9 +59,14 @@ function dadosIniciais() {
     departamento:
       "Administração",
 
-    contratante: "",
-    contaOrcamentaria: "",
-    gerenciaResponsavel: "",
+    contratante:
+      "Marcos Gonçalves",
+
+    contaOrcamentaria:
+      "",
+
+    gerenciaResponsavel:
+      "Ronaldo Vanni",
 
     descricaoItem: "",
     quantidade: "1",
@@ -76,6 +88,10 @@ function dadosIniciais() {
   };
 }
 
+// =========================================================
+// COMPONENTES DE FORMULÁRIO
+// =========================================================
+
 function Campo({
   label,
   value,
@@ -83,6 +99,7 @@ function Campo({
   type = "text",
   placeholder = "",
   className = "",
+  inputMode,
 }) {
   return (
     <label
@@ -97,6 +114,9 @@ function Campo({
       <input
         type={type}
         value={value}
+        inputMode={
+          inputMode
+        }
         onChange={(
           event
         ) =>
@@ -145,11 +165,16 @@ function CampoTexto({
   );
 }
 
+// =========================================================
+// CARD DE FORNECEDOR
+// =========================================================
+
 function CardFornecedor({
   indice,
   fornecedor,
   onAlterar,
   onArquivo,
+  onRemoverArquivo,
 }) {
   const numero =
     indice + 1;
@@ -217,6 +242,7 @@ function CardFornecedor({
               valor
             )
           }
+          placeholder="Nome do contato"
         />
 
         <Campo
@@ -232,6 +258,7 @@ function CardFornecedor({
               valor
             )
           }
+          placeholder="Ex: 11 99999-9999"
         />
 
         <Campo
@@ -248,6 +275,7 @@ function CardFornecedor({
               valor
             )
           }
+          placeholder="Ex: comercial@empresa.com.br"
         />
 
         <Campo
@@ -271,6 +299,7 @@ function CardFornecedor({
           value={
             fornecedor.precoUnitario
           }
+          inputMode="decimal"
           onChange={(
             valor
           ) =>
@@ -279,7 +308,7 @@ function CardFornecedor({
               valor
             )
           }
-          placeholder="Ex: 7031,13"
+          placeholder="Ex: 7.031,13"
         />
 
         <Campo
@@ -287,6 +316,7 @@ function CardFornecedor({
           value={
             fornecedor.precoTotal
           }
+          inputMode="decimal"
           onChange={(
             valor
           ) =>
@@ -295,7 +325,7 @@ function CardFornecedor({
               valor
             )
           }
-          placeholder="Ex: 7031,13"
+          placeholder="Ex: 7.031,13"
         />
 
         <Campo
@@ -311,7 +341,7 @@ function CardFornecedor({
               valor
             )
           }
-          placeholder="Ex: CIF"
+          placeholder="Ex: N/A, CIF ou 150,00"
         />
 
         <Campo
@@ -327,7 +357,7 @@ function CardFornecedor({
               valor
             )
           }
-          placeholder="Ex: Imediato"
+          placeholder="Ex: 10 DIAS"
         />
 
         <Campo
@@ -343,7 +373,7 @@ function CardFornecedor({
               valor
             )
           }
-          placeholder="Ex: 15 dias"
+          placeholder="Ex: 15 DIAS"
         />
 
         <Campo
@@ -359,7 +389,7 @@ function CardFornecedor({
               valor
             )
           }
-          placeholder="Ex: 28 DDL"
+          placeholder="Ex: 28DDL"
         />
 
         <Campo
@@ -375,39 +405,61 @@ function CardFornecedor({
               valor
             )
           }
-          placeholder="Ex: 12 meses"
+          placeholder="Ex: SIM"
           className="md:col-span-2"
         />
       </div>
 
-      <label className="mt-4 flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-blue-200 bg-white px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-50">
-        <Paperclip
-          size={17}
-        />
+      <div className="mt-4 flex flex-col gap-2">
+        <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-blue-200 bg-white px-4 py-3 text-sm font-black text-blue-700 hover:bg-blue-50">
+          <Paperclip
+            size={17}
+          />
 
-        {fornecedor.arquivo
-          ? "Trocar PDF da proposta"
-          : "Anexar PDF da proposta"}
+          {fornecedor.arquivo
+            ? "Trocar PDF da proposta"
+            : "Anexar PDF da proposta"}
 
-        <input
-          type="file"
-          accept="application/pdf,.pdf"
-          className="hidden"
-          onChange={(
-            event
-          ) =>
-            onArquivo(
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            className="hidden"
+            onChange={(
               event
-                .target
-                .files?.[0] ||
-                null
-            )
-          }
-        />
-      </label>
+            ) =>
+              onArquivo(
+                event
+                  .target
+                  .files?.[0] ||
+                  null
+              )
+            }
+          />
+        </label>
+
+        {fornecedor.arquivo && (
+          <button
+            type="button"
+            onClick={
+              onRemoverArquivo
+            }
+            className="flex items-center justify-center gap-2 rounded-2xl border border-red-100 bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50"
+          >
+            <X
+              size={16}
+            />
+
+            Remover PDF anexado
+          </button>
+        )}
+      </div>
     </section>
   );
 }
+
+// =========================================================
+// PÁGINA PRINCIPAL
+// =========================================================
 
 export default function MapaCotacao() {
   const [
@@ -508,6 +560,14 @@ export default function MapaCotacao() {
       (
         atual
       ) => {
+        const empresaAnterior =
+          atual
+            .fornecedores[
+              indice
+            ]
+            ?.empresa ||
+          "";
+
         const fornecedores =
           atual.fornecedores.map(
             (
@@ -525,9 +585,34 @@ export default function MapaCotacao() {
                 : fornecedor
           );
 
+        const fornecedorUnicoAtivo =
+          atual.fornecedorUnico ||
+          Number(
+            atual.quantidadeFornecedores
+          ) ===
+            1;
+
+        const atualizarEmpresaAprovada =
+          campo ===
+            "empresa" &&
+          indice ===
+            0 &&
+          fornecedorUnicoAtivo &&
+          (
+            !atual.empresaAprovada ||
+            atual.empresaAprovada ===
+              empresaAnterior
+          );
+
         return {
           ...atual,
+
           fornecedores,
+
+          empresaAprovada:
+            atualizarEmpresaAprovada
+              ? valor
+              : atual.empresaAprovada,
         };
       }
     );
@@ -537,24 +622,105 @@ export default function MapaCotacao() {
     );
   }
 
+  function alterarArquivo(
+    indice,
+    arquivo
+  ) {
+    alterarFornecedor(
+      indice,
+      "arquivo",
+      arquivo
+    );
+  }
+
+  function removerArquivo(
+    indice
+  ) {
+    alterarFornecedor(
+      indice,
+      "arquivo",
+      null
+    );
+  }
+
   function alternarFornecedorUnico() {
     setDados(
       (
         atual
-      ) => ({
-        ...atual,
+      ) => {
+        const novoValor =
+          !atual.fornecedorUnico;
 
-        fornecedorUnico:
-          !atual.fornecedorUnico,
+        const primeiraEmpresa =
+          atual
+            .fornecedores[
+              0
+            ]
+            ?.empresa ||
+          "";
 
-        quantidadeFornecedores:
-          !atual.fornecedorUnico
-            ? 1
-            : Math.max(
-                2,
-                atual.quantidadeFornecedores
-              ),
-      })
+        return {
+          ...atual,
+
+          fornecedorUnico:
+            novoValor,
+
+          quantidadeFornecedores:
+            novoValor
+              ? 1
+              : Math.max(
+                  2,
+                  atual.quantidadeFornecedores
+                ),
+
+          empresaAprovada:
+            novoValor &&
+            primeiraEmpresa
+              ? primeiraEmpresa
+              : atual.empresaAprovada,
+        };
+      }
+    );
+
+    setResultado(
+      null
+    );
+  }
+
+  function alterarQuantidadeFornecedores(
+    valor
+  ) {
+    const quantidade =
+      Number(
+        valor
+      );
+
+    setDados(
+      (
+        atual
+      ) => {
+        const primeiraEmpresa =
+          atual
+            .fornecedores[
+              0
+            ]
+            ?.empresa ||
+          "";
+
+        return {
+          ...atual,
+
+          quantidadeFornecedores:
+            quantidade,
+
+          empresaAprovada:
+            quantidade ===
+              1 &&
+            primeiraEmpresa
+              ? primeiraEmpresa
+              : atual.empresaAprovada,
+        };
+      }
     );
 
     setResultado(
@@ -609,6 +775,13 @@ export default function MapaCotacao() {
       return "Informe a conta orçamentária.";
     }
 
+    if (
+      fornecedoresVisiveis.length ===
+      0
+    ) {
+      return "Inclua pelo menos um fornecedor.";
+    }
+
     for (
       let indice = 0;
       indice <
@@ -631,9 +804,10 @@ export default function MapaCotacao() {
       }
 
       if (
+        !fornecedor.precoUnitario.trim() &&
         !fornecedor.precoTotal.trim()
       ) {
-        return `Informe o preço total do Orçamento ${
+        return `Informe o preço unitário ou o preço total do Orçamento ${
           indice +
           1
         }.`;
@@ -702,7 +876,7 @@ export default function MapaCotacao() {
   function limparFormulario() {
     if (
       !window.confirm(
-        "Limpar todos os dados preenchidos?"
+        "Limpar os dados preenchidos e restaurar os valores padrão?"
       )
     ) {
       return;
@@ -822,9 +996,15 @@ export default function MapaCotacao() {
       </section>
 
       <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
-        <h2 className="font-black text-slate-900">
-          Dados gerais
-        </h2>
+        <div>
+          <h2 className="font-black text-slate-900">
+            Dados gerais
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            Os dados recorrentes já estão preenchidos. Altere apenas quando necessário.
+          </p>
+        </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <Campo
@@ -885,6 +1065,7 @@ export default function MapaCotacao() {
                 valor
               )
             }
+            placeholder="Preenchimento obrigatório"
           />
 
           <Campo
@@ -989,6 +1170,7 @@ export default function MapaCotacao() {
             value={
               dados.quantidade
             }
+            inputMode="decimal"
             onChange={(
               valor
             ) =>
@@ -1044,7 +1226,7 @@ export default function MapaCotacao() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Preencha até três propostas. O fornecedor único limita o mapa ao Orçamento 1.
+              Preencha até três propostas. Os dados comerciais padrão permanecem editáveis.
             </p>
           </div>
 
@@ -1074,11 +1256,8 @@ export default function MapaCotacao() {
                   onChange={(
                     event
                   ) =>
-                    alterarCampo(
-                      "quantidadeFornecedores",
-                      Number(
-                        event.target.value
-                      )
+                    alterarQuantidadeFornecedores(
+                      event.target.value
                     )
                   }
                   className="rounded-xl border border-slate-200 bg-white px-3 py-2"
@@ -1129,10 +1308,14 @@ export default function MapaCotacao() {
                 onArquivo={(
                   arquivo
                 ) =>
-                  alterarFornecedor(
+                  alterarArquivo(
                     indice,
-                    "arquivo",
                     arquivo
+                  )
+                }
+                onRemoverArquivo={() =>
+                  removerArquivo(
+                    indice
                   )
                 }
               />
