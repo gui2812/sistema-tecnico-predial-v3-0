@@ -26,15 +26,12 @@ TEMPLATE_EXCEL = (
     / "Modelo - Mapa de Cotação.xlsx"
 )
 
-NOME_PLANILHA =
-    "Mapa de Cotação"
-
-MAX_ITENS =
-    9
+NOME_PLANILHA = "Mapa de Cotação"
+MAX_ITENS = 9
 
 app = FastAPI(
     title="Sistema Técnico Predial — Backend",
-    version="3.3.0",
+    version="3.3.2",
 )
 
 app.add_middleware(
@@ -76,8 +73,7 @@ def nome_seguro(
         for caractere in valor
         if unicodedata.category(
             caractere
-        )
-        != "Mn"
+        ) != "Mn"
     )
 
     valor = re.sub(
@@ -298,8 +294,7 @@ def nome_base_mapa(
 def serializar_arquivo_base64(
     caminho: Path,
 ) -> dict[str, str]:
-    conteudo =
-        caminho.read_bytes()
+    conteudo = caminho.read_bytes()
 
     return {
         "nome":
@@ -363,6 +358,8 @@ def normalizar_itens(
             ]
         ]
 
+    # Compatibilidade com mapas criados antes
+    # da inclusão de múltiplos itens.
     return [
         {
             "descricao":
@@ -393,7 +390,7 @@ def obter_preco_item(
     fornecedor: dict[str, Any],
     indice_item: int,
 ) -> dict[str, Any]:
-    precos = (
+    precos_itens = (
         fornecedor.get(
             "precosItens"
         )
@@ -401,21 +398,23 @@ def obter_preco_item(
     )
 
     if (
-        indice_item <
-        len(
-            precos
+        indice_item
+        < len(
+            precos_itens
         )
     ):
         return (
-            precos[
+            precos_itens[
                 indice_item
             ]
             or {}
         )
 
+    # Compatibilidade com versão antiga:
+    # preço direto no fornecedor.
     if (
-        indice_item ==
-        0
+        indice_item
+        == 0
     ):
         return {
             "precoUnitario":
@@ -461,12 +460,9 @@ def obter_preco_unitario_item(
     )
 
     if (
-        preco_unitario ==
-        0
-        and preco_total >
-        0
-        and quantidade >
-        0
+        preco_unitario == 0
+        and preco_total > 0
+        and quantidade > 0
     ):
         return (
             preco_total
@@ -578,7 +574,7 @@ def aplicar_formatacao_dinamica(
     )
 
     # Observações:
-    # título à esquerda.
+    # título no canto esquerdo.
 
     alinhar_sem_perder_estilo(
         ws,
@@ -597,8 +593,7 @@ def aplicar_formatacao_dinamica(
         quebrar_texto=True,
     )
 
-    # Empresa aprovada:
-    # centralizada.
+    # Empresa aprovada centralizada.
 
     alinhar_sem_perder_estilo(
         ws,
@@ -609,7 +604,7 @@ def aplicar_formatacao_dinamica(
 
 
 # =========================================================
-# PREENCHIMENTO DOS FORNECEDORES
+# FORNECEDORES
 # =========================================================
 
 def limpar_fornecedor(
@@ -622,10 +617,9 @@ def limpar_fornecedor(
         "R",
     ]
 
-    coluna =
-        colunas[
-            indice
-        ]
+    coluna = colunas[
+        indice
+    ]
 
     for linha in [
         5,
@@ -679,10 +673,9 @@ def preencher_fornecedor(
         "R",
     ]
 
-    coluna =
-        colunas[
-            indice
-        ]
+    coluna = colunas[
+        indice
+    ]
 
     ws[
         f"{coluna}5"
@@ -724,11 +717,16 @@ def preencher_fornecedor(
         )
     )
 
+    # Preços unitários dos itens:
+    # linhas 12 até 20.
+
     for indice_item, item in enumerate(
         itens
     ):
-        linha =
-            12 + indice_item
+        linha = (
+            12
+            + indice_item
+        )
 
         ws[
             f"{coluna}{linha}"
@@ -738,8 +736,11 @@ def preencher_fornecedor(
             indice_item,
         )
 
+    # Limpa linhas não utilizadas.
+
     for linha in range(
-        12 + len(
+        12
+        + len(
             itens
         ),
         21,
@@ -790,7 +791,7 @@ def preencher_fornecedor(
 
 
 # =========================================================
-# EXCEL PRINCIPAL
+# EXCEL PRINCIPAL PARA DOWNLOAD
 # =========================================================
 
 def preencher_excel(
@@ -802,17 +803,15 @@ def preencher_excel(
             "Template Excel não encontrado."
         )
 
-    workbook =
-        load_workbook(
-            TEMPLATE_EXCEL
-        )
+    workbook = load_workbook(
+        TEMPLATE_EXCEL
+    )
 
-    ws =
-        workbook[
-            NOME_PLANILHA
-        ]
+    ws = workbook[
+        NOME_PLANILHA
+    ]
 
-    # Dados fixos preservados:
+    # Preserva os dados fixos existentes no template:
     #
     # E5 = Empreendimento
     # E6 = Departamento
@@ -829,29 +828,30 @@ def preencher_excel(
         )
     )
 
-    itens =
-        normalizar_itens(
-            dados
-        )
+    itens = normalizar_itens(
+        dados
+    )
 
-    # Preenche as linhas 12 até 20.
+    # Linhas disponíveis no template:
+    # linha 12 até linha 20.
 
     for indice_item in range(
         MAX_ITENS
     ):
-        linha =
-            12 + indice_item
+        linha = (
+            12
+            + indice_item
+        )
 
         if (
-            indice_item <
-            len(
+            indice_item
+            < len(
                 itens
             )
         ):
-            item =
-                itens[
-                    indice_item
-                ]
+            item = itens[
+                indice_item
+            ]
 
             ws[
                 f"B{linha}"
@@ -897,8 +897,8 @@ def preencher_excel(
         3
     ):
         if (
-            indice <
-            len(
+            indice
+            < len(
                 fornecedores
             )
         ):
@@ -955,7 +955,7 @@ def preencher_excel(
 
 
 # =========================================================
-# EXCEL TEMPORÁRIO PARA PDF
+# EXCEL TEMPORÁRIO USADO SOMENTE PARA GERAR O PDF
 # =========================================================
 
 def preparar_excel_para_pdf(
@@ -963,25 +963,30 @@ def preparar_excel_para_pdf(
     caminho_excel_pdf: Path,
     dados: dict[str, Any],
 ) -> None:
+    """
+    O PDF nasce exclusivamente de uma cópia do Excel preenchido.
+
+    A cópia temporária recebe subtotais e totais consolidados
+    numericamente para evitar divergências de recálculo durante
+    a conversão automática pelo LibreOffice.
+    """
+
     shutil.copy2(
         caminho_excel_origem,
         caminho_excel_pdf,
     )
 
-    workbook =
-        load_workbook(
-            caminho_excel_pdf
-        )
+    workbook = load_workbook(
+        caminho_excel_pdf
+    )
 
-    ws =
-        workbook[
-            NOME_PLANILHA
-        ]
+    ws = workbook[
+        NOME_PLANILHA
+    ]
 
-    itens =
-        normalizar_itens(
-            dados
-        )
+    itens = normalizar_itens(
+        dados
+    )
 
     fornecedores = (
         dados.get(
@@ -1017,60 +1022,58 @@ def preparar_excel_para_pdf(
             fornecedores[
                 indice_fornecedor
             ]
-            if indice_fornecedor <
-            len(
+            if indice_fornecedor
+            < len(
                 fornecedores
             )
             else {}
         )
 
-        coluna_unitario =
+        coluna_unitario = (
             colunas_preco_unitario[
                 indice_fornecedor
             ]
+        )
 
-        coluna_subtotal =
+        coluna_subtotal = (
             colunas_subtotal[
                 indice_fornecedor
             ]
+        )
 
         for indice_item in range(
             MAX_ITENS
         ):
-            linha =
-                12 + indice_item
+            linha = (
+                12
+                + indice_item
+            )
 
             if (
-                indice_item <
-                len(
+                indice_item
+                < len(
                     itens
                 )
             ):
-                item =
-                    itens[
-                        indice_item
-                    ]
+                item = itens[
+                    indice_item
+                ]
 
-                unitario =
-                    obter_preco_unitario_item(
-                        fornecedor,
-                        item,
-                        indice_item,
-                    )
+                unitario = obter_preco_unitario_item(
+                    fornecedor,
+                    item,
+                    indice_item,
+                )
 
-                subtotal =
-                    calcular_subtotal_item(
-                        fornecedor,
-                        item,
-                        indice_item,
-                    )
+                subtotal = calcular_subtotal_item(
+                    fornecedor,
+                    item,
+                    indice_item,
+                )
 
             else:
-                unitario =
-                    0
-
-                subtotal =
-                    0
+                unitario = 0
+                subtotal = 0
 
             ws[
                 f"{coluna_unitario}{linha}"
@@ -1099,7 +1102,7 @@ def preparar_excel_para_pdf(
 
 
 # =========================================================
-# CONVERSÃO EXCEL PARA PDF
+# CONVERSÃO DO EXCEL PARA PDF
 # =========================================================
 
 def converter_excel_para_pdf(
@@ -1136,14 +1139,13 @@ def converter_excel_para_pdf(
         ),
     ]
 
-    resultado =
-        subprocess.run(
-            comando,
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
+    resultado = subprocess.run(
+        comando,
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
 
     caminho_pdf = (
         pasta_saida
@@ -1151,8 +1153,7 @@ def converter_excel_para_pdf(
     )
 
     if (
-        resultado.returncode !=
-        0
+        resultado.returncode != 0
         or not caminho_pdf.exists()
     ):
         raise RuntimeError(
@@ -1173,8 +1174,7 @@ def unir_pdfs(
     pdfs_propostas: list[Path],
     caminho_saida: Path,
 ) -> None:
-    writer =
-        PdfWriter()
+    writer = PdfWriter()
 
     caminhos = [
         pdf_mapa,
@@ -1183,12 +1183,11 @@ def unir_pdfs(
 
     for caminho in caminhos:
         try:
-            reader =
-                PdfReader(
-                    str(
-                        caminho
-                    )
+            reader = PdfReader(
+                str(
+                    caminho
                 )
+            )
 
             for pagina in reader.pages:
                 writer.add_page(
@@ -1263,7 +1262,7 @@ def inicio():
             "online",
 
         "versao":
-            "3.3.0",
+            "3.3.2",
 
         "itens_por_mapa":
             MAX_ITENS,
@@ -1313,10 +1312,9 @@ async def gerar_mapa_cotacao(
     proposta3: UploadFile | None = File(None),
 ):
     try:
-        dados =
-            json.loads(
-                dados_json
-            )
+        dados = json.loads(
+            dados_json
+        )
 
     except json.JSONDecodeError as erro:
         raise HTTPException(
@@ -1325,15 +1323,13 @@ async def gerar_mapa_cotacao(
         ) from erro
 
     with tempfile.TemporaryDirectory() as pasta_temporaria:
-        pasta =
-            Path(
-                pasta_temporaria
-            )
+        pasta = Path(
+            pasta_temporaria
+        )
 
-        nome_base =
-            nome_base_mapa(
-                dados
-            )
+        nome_base = nome_base_mapa(
+            dados
+        )
 
         identificacao = (
             nome_seguro(
@@ -1368,11 +1364,10 @@ async def gerar_mapa_cotacao(
             dados,
         )
 
-        caminho_pdf_convertido =
-            converter_excel_para_pdf(
-                caminho_excel_pdf,
-                pasta,
-            )
+        caminho_pdf_convertido = converter_excel_para_pdf(
+            caminho_excel_pdf,
+            pasta,
+        )
 
         caminho_pdf_mapa = (
             pasta
@@ -1396,12 +1391,11 @@ async def gerar_mapa_cotacao(
             propostas_upload,
             start=1,
         ):
-            pdf =
-                await salvar_upload_pdf(
-                    upload,
-                    pasta,
-                    indice,
-                )
+            pdf = await salvar_upload_pdf(
+                upload,
+                pasta,
+                indice,
+            )
 
             if pdf:
                 pdfs_propostas.append(
