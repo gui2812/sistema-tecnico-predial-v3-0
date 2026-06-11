@@ -2,21 +2,25 @@ from __future__ import annotations
 
 import base64
 import json
+import posixpath
 import re
 import shutil
 import subprocess
 import tempfile
 import unicodedata
-from copy import copy
+import zipfile
 from pathlib import Path
 from typing import Any
+from xml.etree import ElementTree as ET
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from pypdf import PdfReader, PdfWriter
 
+
+# =========================================================
+# CONFIGURAÇÕES
+# =========================================================
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -28,11 +32,41 @@ TEMPLATE_EXCEL = (
 )
 
 NOME_PLANILHA = "Mapa de Cotação"
+
 MAX_ITENS = 9
+
+NS_MAIN = (
+    "http://schemas.openxmlformats.org/"
+    "spreadsheetml/2006/main"
+)
+
+NS_REL_OFFICE = (
+    "http://schemas.openxmlformats.org/"
+    "officeDocument/2006/relationships"
+)
+
+NS_REL_PACKAGE = (
+    "http://schemas.openxmlformats.org/"
+    "package/2006/relationships"
+)
+
+NS_XML = (
+    "http://www.w3.org/XML/1998/namespace"
+)
+
+ET.register_namespace(
+    "",
+    NS_MAIN,
+)
+
+ET.register_namespace(
+    "r",
+    NS_REL_OFFICE,
+)
 
 app = FastAPI(
     title="Sistema Técnico Predial — Backend",
-    version="3.3.3",
+    version="4.0.0",
 )
 
 app.add_middleware(
@@ -45,8 +79,18 @@ app.add_middleware(
 
 
 # =========================================================
-# UTILIDADES
+# UTILIDADES GERAIS
 # =========================================================
+
+def qname(
+    namespace: str,
+    nome: str,
+) -> str:
+    return (
+        f"{{{namespace}}}"
+        f"{nome}"
+    )
+
 
 def texto(
     valor: Any,
@@ -74,7 +118,8 @@ def nome_seguro(
         for caractere in valor
         if unicodedata.category(
             caractere
-        ) != "Mn"
+        )
+        != "Mn"
     )
 
     valor = re.sub(
@@ -137,6 +182,26 @@ def numero_decimal(
 
     except ValueError:
         return 0.0
+
+
+def numero_xml(
+    valor: Any,
+) -> str:
+    numero = numero_decimal(
+        valor
+    )
+
+    if numero.is_integer():
+        return str(
+            int(
+                numero
+            )
+        )
+
+    return format(
+        numero,
+        ".15g",
+    )
 
 
 def valor_frete_excel(
@@ -267,7 +332,9 @@ def nome_base_mapa(
             )
         )
         or nome_seguro(
-            fornecedores[0].get(
+            fornecedores[
+                0
+            ].get(
                 "empresa"
             )
             if fornecedores
@@ -311,7 +378,7 @@ def serializar_arquivo_base64(
 
 
 # =========================================================
-# ITENS
+# NORMALIZAÇÃO DOS ITENS
 # =========================================================
 
 def normalizar_itens(
@@ -359,7 +426,7 @@ def normalizar_itens(
             ]
         ]
 
-    # Compatibilidade com mapas antigos.
+    # Compatibilidade com a tela antiga.
     return [
         {
             "descricao":
@@ -386,6 +453,10 @@ def normalizar_itens(
     ]
 
 
+# =========================================================
+# CÁLCULOS DOS PREÇOS
+# =========================================================
+
 def obter_preco_item(
     fornecedor: dict[str, Any],
     indice_item: int,
@@ -410,11 +481,8 @@ def obter_preco_item(
             or {}
         )
 
-    # Compatibilidade com versão antiga.
-    if (
-        indice_item
-        == 0
-    ):
+    # Compatibilidade com a tela antiga.
+    if indice_item == 0:
         return {
             "precoUnitario":
                 fornecedor.get(
@@ -520,457 +588,585 @@ def calcular_total_fornecedor(
 
 
 # =========================================================
-# FORMATAÇÃO
+# LOCALIZAÇÃO DA PLANILHA DENTRO DO XLSX
 # =========================================================
 
-def alinhar_sem_perder_estilo(
-    ws,
-    endereco: str,
-    horizontal: str,
-    quebrar_texto: bool = False,
-) -> None:
-    alinhamento = copy(
-        ws[
-            endereco
-        ].alignment
+def localizar_xml_planilha(
+    arquivo_excel: zipfile.ZipFile,
+    nome_planilha: str,
+) -> str:
+    workbook_xml = arquivo_excel.read(
+        "xl/workbook.xml"
     )
 
-    alinhamento.horizontal = (
-        horizontal
+    workbook_root = ET.fromstring(
+        workbook_xml
     )
 
-    alinhamento.vertical = (
-        "center"
-    )
-
-    alinhamento.wrap_text = (
-        quebrar_texto
-    )
-
-    ws[
-        endereco
-    ].alignment = alinhamento
-
-
-def aplicar_formatacao_dinamica(
-    ws,
-) -> None:
-    # Conta Orçamentária:
-    # título e valor à esquerda.
-
-    alinhar_sem_perder_estilo(
-        ws,
-        "B8",
-        horizontal="left",
-        quebrar_texto=True,
-    )
-
-    alinhar_sem_perder_estilo(
-        ws,
-        "E8",
-        horizontal="left",
-        quebrar_texto=True,
-    )
-
-    # Observações:
-    # título no canto esquerdo.
-
-    alinhar_sem_perder_estilo(
-        ws,
-        "B30",
-        horizontal="left",
-        quebrar_texto=True,
-    )
-
-    # Texto da observação:
-    # centralizado na área branca.
-
-    alinhar_sem_perder_estilo(
-        ws,
-        "B31",
-        horizontal="center",
-        quebrar_texto=True,
-    )
-
-    # Empresa aprovada:
-    # centralizada.
-
-    alinhar_sem_perder_estilo(
-        ws,
-        "O37",
-        horizontal="center",
-        quebrar_texto=True,
-    )
-
-
-# =========================================================
-# BLOCOS DE APROVAÇÃO
-# =========================================================
-
-def garantir_blocos_aprovacoes(
-    ws,
-) -> None:
-    """
-    Recria os três quadros de aprovação usando células e bordas.
-
-    Os quadros passam a fazer parte da estrutura da planilha,
-    permanecendo visíveis no Excel e no PDF gerado.
-    """
-
-    borda_cinza = Side(
-        style="thin",
-        color="A6A6A6",
-    )
-
-    sem_borda = Side(
-        style=None,
-    )
-
-    preenchimento_branco = PatternFill(
-        fill_type="solid",
-        fgColor="FFFFFF",
-    )
-
-    fonte_legenda = Font(
-        name="Arial",
-        size=9,
-        color="666666",
-    )
-
-    quadros = [
-        {
-            "coluna_inicial": 2,   # B
-            "coluna_final": 4,     # D
-            "coluna_legenda": 3,   # C
-            "legenda": "Contratante",
-        },
-        {
-            "coluna_inicial": 6,   # F
-            "coluna_final": 8,     # H
-            "coluna_legenda": 7,   # G
-            "legenda": "Gerência",
-        },
-        {
-            "coluna_inicial": 10,  # J
-            "coluna_final": 12,    # L
-            "coluna_legenda": 11,  # K
-            "legenda": "Diretoria",
-        },
-    ]
-
-    linha_inicial = 37
-    linha_final = 40
-
-    for quadro in quadros:
-        coluna_inicial = quadro[
-            "coluna_inicial"
-        ]
-
-        coluna_final = quadro[
-            "coluna_final"
-        ]
-
-        for linha in range(
-            linha_inicial,
-            linha_final + 1,
-        ):
-            for coluna in range(
-                coluna_inicial,
-                coluna_final + 1,
-            ):
-                celula = ws.cell(
-                    row=linha,
-                    column=coluna,
-                )
-
-                celula.fill = (
-                    preenchimento_branco
-                )
-
-                celula.border = Border(
-                    left=(
-                        borda_cinza
-                        if coluna
-                        == coluna_inicial
-                        else sem_borda
-                    ),
-
-                    right=(
-                        borda_cinza
-                        if coluna
-                        == coluna_final
-                        else sem_borda
-                    ),
-
-                    top=(
-                        borda_cinza
-                        if linha
-                        == linha_inicial
-                        else sem_borda
-                    ),
-
-                    bottom=(
-                        borda_cinza
-                        if linha
-                        == linha_final
-                        else sem_borda
-                    ),
-                )
-
-        celula_legenda = ws.cell(
-            row=linha_final,
-            column=quadro[
-                "coluna_legenda"
-            ],
-        )
-
-        celula_legenda.value = (
-            quadro[
-                "legenda"
-            ]
-        )
-
-        celula_legenda.font = (
-            fonte_legenda
-        )
-
-        celula_legenda.alignment = Alignment(
-            horizontal="center",
-            vertical="center",
-        )
-
-
-# =========================================================
-# FORNECEDORES
-# =========================================================
-
-def limpar_fornecedor(
-    ws,
-    indice: int,
-) -> None:
-    colunas = [
-        "L",
-        "O",
-        "R",
-    ]
-
-    coluna = colunas[
-        indice
-    ]
-
-    for linha in [
-        5,
-        6,
-        7,
-        8,
-        9,
-    ]:
-        ws[
-            f"{coluna}{linha}"
-        ] = ""
-
-    for linha in range(
-        12,
-        21,
-    ):
-        ws[
-            f"{coluna}{linha}"
-        ] = 0
-
-    ws[
-        f"{coluna}22"
-    ] = "N/A"
-
-    ws[
-        f"{coluna}23"
-    ] = ""
-
-    ws[
-        f"{coluna}24"
-    ] = ""
-
-    ws[
-        f"{coluna}25"
-    ] = ""
-
-    ws[
-        f"{coluna}26"
-    ] = ""
-
-
-def preencher_fornecedor(
-    ws,
-    fornecedor: dict[str, Any],
-    indice: int,
-    itens: list[dict[str, Any]],
-) -> None:
-    colunas = [
-        "L",
-        "O",
-        "R",
-    ]
-
-    coluna = colunas[
-        indice
-    ]
-
-    ws[
-        f"{coluna}5"
-    ] = texto(
-        fornecedor.get(
-            "empresa"
+    sheets = workbook_root.find(
+        qname(
+            NS_MAIN,
+            "sheets",
         )
     )
 
-    ws[
-        f"{coluna}6"
-    ] = texto(
-        fornecedor.get(
-            "contato"
-        )
-    )
-
-    ws[
-        f"{coluna}7"
-    ] = texto(
-        fornecedor.get(
-            "telefone"
-        )
-    )
-
-    ws[
-        f"{coluna}8"
-    ] = texto(
-        fornecedor.get(
-            "email"
-        )
-    )
-
-    ws[
-        f"{coluna}9"
-    ] = data_br(
-        fornecedor.get(
-            "dataProposta"
-        )
-    )
-
-    # Preços unitários dos itens:
-    # linhas 12 até 20.
-
-    for indice_item, item in enumerate(
-        itens
-    ):
-        linha = (
-            12
-            + indice_item
-        )
-
-        ws[
-            f"{coluna}{linha}"
-        ] = obter_preco_unitario_item(
-            fornecedor,
-            item,
-            indice_item,
-        )
-
-    # Limpa linhas que não foram utilizadas.
-
-    for linha in range(
-        12
-        + len(
-            itens
-        ),
-        21,
-    ):
-        ws[
-            f"{coluna}{linha}"
-        ] = 0
-
-    ws[
-        f"{coluna}22"
-    ] = valor_frete_excel(
-        fornecedor.get(
-            "frete"
-        )
-    )
-
-    ws[
-        f"{coluna}23"
-    ] = texto(
-        fornecedor.get(
-            "prazoEntrega"
-        )
-    )
-
-    ws[
-        f"{coluna}24"
-    ] = texto(
-        fornecedor.get(
-            "validadeProposta"
-        )
-    )
-
-    ws[
-        f"{coluna}25"
-    ] = texto(
-        fornecedor.get(
-            "condicaoPagamento"
-        )
-    )
-
-    ws[
-        f"{coluna}26"
-    ] = texto(
-        fornecedor.get(
-            "garantia"
-        )
-    )
-
-
-# =========================================================
-# EXCEL PRINCIPAL PARA DOWNLOAD
-# =========================================================
-
-def preencher_excel(
-    dados: dict[str, Any],
-    caminho_saida: Path,
-) -> None:
-    if not TEMPLATE_EXCEL.exists():
+    if sheets is None:
         raise RuntimeError(
-            "Template Excel não encontrado."
+            "O Excel modelo não possui planilhas."
         )
 
-    workbook = load_workbook(
-        TEMPLATE_EXCEL
+    relacionamento_id = None
+
+    for sheet in sheets.findall(
+        qname(
+            NS_MAIN,
+            "sheet",
+        )
+    ):
+        if (
+            sheet.attrib.get(
+                "name"
+            )
+            == nome_planilha
+        ):
+            relacionamento_id = sheet.attrib.get(
+                qname(
+                    NS_REL_OFFICE,
+                    "id",
+                )
+            )
+
+            break
+
+    if not relacionamento_id:
+        raise RuntimeError(
+            (
+                "A planilha "
+                f"'{nome_planilha}' "
+                "não foi encontrada no Excel modelo."
+            )
+        )
+
+    rels_xml = arquivo_excel.read(
+        "xl/_rels/workbook.xml.rels"
     )
 
-    ws = workbook[
-        NOME_PLANILHA
-    ]
+    rels_root = ET.fromstring(
+        rels_xml
+    )
 
-    # Preserva os dados fixos existentes no template:
+    target = None
+
+    for relacionamento in rels_root.findall(
+        qname(
+            NS_REL_PACKAGE,
+            "Relationship",
+        )
+    ):
+        if (
+            relacionamento.attrib.get(
+                "Id"
+            )
+            == relacionamento_id
+        ):
+            target = relacionamento.attrib.get(
+                "Target"
+            )
+
+            break
+
+    if not target:
+        raise RuntimeError(
+            "Não foi possível localizar o XML da planilha."
+        )
+
+    target = target.lstrip(
+        "/"
+    )
+
+    if target.startswith(
+        "xl/"
+    ):
+        return posixpath.normpath(
+            target
+        )
+
+    return posixpath.normpath(
+        posixpath.join(
+            "xl",
+            target,
+        )
+    )
+
+
+# =========================================================
+# MANIPULAÇÃO PONTUAL DAS CÉLULAS
+# =========================================================
+
+def indice_coluna(
+    referencia: str,
+) -> int:
+    letras = "".join(
+        caractere
+        for caractere in referencia
+        if caractere.isalpha()
+    )
+
+    resultado = 0
+
+    for caractere in letras.upper():
+        resultado = (
+            resultado
+            * 26
+            + ord(
+                caractere
+            )
+            - ord(
+                "A"
+            )
+            + 1
+        )
+
+    return resultado
+
+
+def numero_linha(
+    referencia: str,
+) -> int:
+    numeros = "".join(
+        caractere
+        for caractere in referencia
+        if caractere.isdigit()
+    )
+
+    return int(
+        numeros
+    )
+
+
+def obter_sheet_data(
+    root: ET.Element,
+) -> ET.Element:
+    sheet_data = root.find(
+        qname(
+            NS_MAIN,
+            "sheetData",
+        )
+    )
+
+    if sheet_data is None:
+        raise RuntimeError(
+            "A estrutura da planilha modelo é inválida."
+        )
+
+    return sheet_data
+
+
+def garantir_linha(
+    sheet_data: ET.Element,
+    linha: int,
+) -> ET.Element:
+    for row in sheet_data.findall(
+        qname(
+            NS_MAIN,
+            "row",
+        )
+    ):
+        if (
+            int(
+                row.attrib.get(
+                    "r",
+                    "0",
+                )
+            )
+            == linha
+        ):
+            return row
+
+    nova_linha = ET.Element(
+        qname(
+            NS_MAIN,
+            "row",
+        ),
+        {
+            "r":
+                str(
+                    linha
+                ),
+        },
+    )
+
+    inserido = False
+
+    for indice, row in enumerate(
+        list(
+            sheet_data
+        )
+    ):
+        if (
+            int(
+                row.attrib.get(
+                    "r",
+                    "0",
+                )
+            )
+            > linha
+        ):
+            sheet_data.insert(
+                indice,
+                nova_linha,
+            )
+
+            inserido = True
+            break
+
+    if not inserido:
+        sheet_data.append(
+            nova_linha
+        )
+
+    return nova_linha
+
+
+def garantir_celula(
+    sheet_data: ET.Element,
+    referencia: str,
+) -> ET.Element:
+    linha = garantir_linha(
+        sheet_data,
+        numero_linha(
+            referencia
+        ),
+    )
+
+    for celula in linha.findall(
+        qname(
+            NS_MAIN,
+            "c",
+        )
+    ):
+        if (
+            celula.attrib.get(
+                "r"
+            )
+            == referencia
+        ):
+            return celula
+
+    nova_celula = ET.Element(
+        qname(
+            NS_MAIN,
+            "c",
+        ),
+        {
+            "r":
+                referencia,
+        },
+    )
+
+    coluna_nova = indice_coluna(
+        referencia
+    )
+
+    inserido = False
+
+    for indice, celula in enumerate(
+        list(
+            linha
+        )
+    ):
+        referencia_atual = celula.attrib.get(
+            "r",
+            "",
+        )
+
+        if (
+            referencia_atual
+            and indice_coluna(
+                referencia_atual
+            )
+            > coluna_nova
+        ):
+            linha.insert(
+                indice,
+                nova_celula,
+            )
+
+            inserido = True
+            break
+
+    if not inserido:
+        linha.append(
+            nova_celula
+        )
+
+    return nova_celula
+
+
+def remover_valores_celula(
+    celula: ET.Element,
+    remover_formula: bool,
+) -> None:
+    tags_remover = {
+        qname(
+            NS_MAIN,
+            "v",
+        ),
+
+        qname(
+            NS_MAIN,
+            "is",
+        ),
+    }
+
+    if remover_formula:
+        tags_remover.add(
+            qname(
+                NS_MAIN,
+                "f",
+            )
+        )
+
+    for filho in list(
+        celula
+    ):
+        if filho.tag in tags_remover:
+            celula.remove(
+                filho
+            )
+
+
+def definir_texto(
+    sheet_data: ET.Element,
+    referencia: str,
+    valor: Any,
+) -> None:
+    celula = garantir_celula(
+        sheet_data,
+        referencia,
+    )
+
+    remover_valores_celula(
+        celula,
+        remover_formula=True,
+    )
+
+    celula.attrib[
+        "t"
+    ] = "inlineStr"
+
+    elemento_is = ET.SubElement(
+        celula,
+        qname(
+            NS_MAIN,
+            "is",
+        ),
+    )
+
+    elemento_t = ET.SubElement(
+        elemento_is,
+        qname(
+            NS_MAIN,
+            "t",
+        ),
+    )
+
+    valor_texto = texto(
+        valor
+    )
+
+    if (
+        valor_texto.startswith(
+            " "
+        )
+        or valor_texto.endswith(
+            " "
+        )
+        or "\n" in valor_texto
+    ):
+        elemento_t.attrib[
+            qname(
+                NS_XML,
+                "space",
+            )
+        ] = "preserve"
+
+    elemento_t.text = valor_texto
+
+
+def definir_numero(
+    sheet_data: ET.Element,
+    referencia: str,
+    valor: Any,
+) -> None:
+    celula = garantir_celula(
+        sheet_data,
+        referencia,
+    )
+
+    remover_valores_celula(
+        celula,
+        remover_formula=True,
+    )
+
+    celula.attrib.pop(
+        "t",
+        None,
+    )
+
+    elemento_v = ET.SubElement(
+        celula,
+        qname(
+            NS_MAIN,
+            "v",
+        ),
+    )
+
+    elemento_v.text = numero_xml(
+        valor
+    )
+
+
+def limpar_celula(
+    sheet_data: ET.Element,
+    referencia: str,
+) -> None:
+    celula = garantir_celula(
+        sheet_data,
+        referencia,
+    )
+
+    remover_valores_celula(
+        celula,
+        remover_formula=True,
+    )
+
+    celula.attrib.pop(
+        "t",
+        None,
+    )
+
+
+def atualizar_cache_formula(
+    sheet_data: ET.Element,
+    referencia: str,
+    valor: Any,
+) -> None:
+    celula = garantir_celula(
+        sheet_data,
+        referencia,
+    )
+
+    formula = celula.find(
+        qname(
+            NS_MAIN,
+            "f",
+        )
+    )
+
+    if formula is None:
+        definir_numero(
+            sheet_data,
+            referencia,
+            valor,
+        )
+
+        return
+
+    remover_valores_celula(
+        celula,
+        remover_formula=False,
+    )
+
+    celula.attrib.pop(
+        "t",
+        None,
+    )
+
+    elemento_v = ET.SubElement(
+        celula,
+        qname(
+            NS_MAIN,
+            "v",
+        ),
+    )
+
+    elemento_v.text = numero_xml(
+        valor
+    )
+
+
+def definir_valor_generico(
+    sheet_data: ET.Element,
+    referencia: str,
+    valor: Any,
+) -> None:
+    if isinstance(
+        valor,
+        (
+            int,
+            float,
+        ),
+    ):
+        definir_numero(
+            sheet_data,
+            referencia,
+            valor,
+        )
+
+        return
+
+    definir_texto(
+        sheet_data,
+        referencia,
+        valor,
+    )
+
+
+# =========================================================
+# PREENCHIMENTO DO XML DA PLANILHA
+# =========================================================
+
+def preencher_planilha_xml(
+    sheet_xml: bytes,
+    dados: dict[str, Any],
+    consolidar_formulas: bool,
+) -> bytes:
+    root = ET.fromstring(
+        sheet_xml
+    )
+
+    sheet_data = obter_sheet_data(
+        root
+    )
+
+    # =====================================================
+    # DADOS FIXOS PRESERVADOS DO TEMPLATE
+    # =====================================================
     #
     # E5 = Empreendimento
     # E6 = Departamento
     # E7 = Contratante
     # E9 = Gerência Responsável
+    #
+    # Esses campos não são alterados.
 
     # Conta Orçamentária.
-
-    ws[
-        "E8"
-    ] = texto(
+    definir_texto(
+        sheet_data,
+        "E8",
         dados.get(
             "contaOrcamentaria"
-        )
+        ),
     )
+
+    # =====================================================
+    # ITENS COTADOS
+    # =====================================================
 
     itens = normalizar_itens(
         dados
     )
-
-    # Linhas disponíveis no template:
-    # linha 12 até linha 20.
 
     for indice_item in range(
         MAX_ITENS
@@ -990,144 +1186,49 @@ def preencher_excel(
                 indice_item
             ]
 
-            ws[
-                f"B{linha}"
-            ] = item[
-                "descricao"
-            ]
-
-            ws[
-                f"I{linha}"
-            ] = item[
-                "quantidade"
-            ]
-
-            ws[
-                f"J{linha}"
-            ] = item[
-                "unidade"
-            ]
-
-        else:
-            ws[
-                f"B{linha}"
-            ] = ""
-
-            ws[
-                f"I{linha}"
-            ] = ""
-
-            ws[
-                f"J{linha}"
-            ] = ""
-
-    fornecedores = (
-        dados.get(
-            "fornecedores"
-        )
-        or []
-    )[
-        :3
-    ]
-
-    for indice in range(
-        3
-    ):
-        if (
-            indice
-            < len(
-                fornecedores
-            )
-        ):
-            preencher_fornecedor(
-                ws,
-                fornecedores[
-                    indice
+            definir_texto(
+                sheet_data,
+                f"B{linha}",
+                item[
+                    "descricao"
                 ],
-                indice,
-                itens,
+            )
+
+            definir_numero(
+                sheet_data,
+                f"I{linha}",
+                item[
+                    "quantidade"
+                ],
+            )
+
+            definir_texto(
+                sheet_data,
+                f"J{linha}",
+                item[
+                    "unidade"
+                ],
             )
 
         else:
-            limpar_fornecedor(
-                ws,
-                indice,
+            limpar_celula(
+                sheet_data,
+                f"B{linha}",
             )
 
-    ws[
-        "B31"
-    ] = texto(
-        dados.get(
-            "observacoes"
-        )
-    )
+            limpar_celula(
+                sheet_data,
+                f"I{linha}",
+            )
 
-    ws[
-        "O37"
-    ] = texto(
-        dados.get(
-            "empresaAprovada"
-        )
-    )
+            limpar_celula(
+                sheet_data,
+                f"J{linha}",
+            )
 
-    aplicar_formatacao_dinamica(
-        ws
-    )
-
-    garantir_blocos_aprovacoes(
-        ws
-    )
-
-    workbook.calculation.fullCalcOnLoad = (
-        True
-    )
-
-    workbook.calculation.forceFullCalc = (
-        True
-    )
-
-    workbook.calculation.calcMode = (
-        "auto"
-    )
-
-    workbook.save(
-        caminho_saida
-    )
-
-
-# =========================================================
-# EXCEL TEMPORÁRIO USADO SOMENTE PARA GERAR O PDF
-# =========================================================
-
-def preparar_excel_para_pdf(
-    caminho_excel_origem: Path,
-    caminho_excel_pdf: Path,
-    dados: dict[str, Any],
-) -> None:
-    """
-    O PDF nasce exclusivamente de uma cópia do Excel preenchido.
-
-    A cópia temporária recebe subtotais e totais consolidados
-    numericamente para evitar divergências de recálculo durante
-    a conversão automática pelo LibreOffice.
-    """
-
-    shutil.copy2(
-        caminho_excel_origem,
-        caminho_excel_pdf,
-    )
-
-    workbook = load_workbook(
-        caminho_excel_pdf
-    )
-
-    ws = workbook[
-        NOME_PLANILHA
-    ]
-
-    itens = normalizar_itens(
-        dados
-    )
+    # =====================================================
+    # FORNECEDORES
+    # =====================================================
 
     fornecedores = (
         dados.get(
@@ -1138,7 +1239,7 @@ def preparar_excel_para_pdf(
         :3
     ]
 
-    colunas_preco_unitario = [
+    colunas_unitario = [
         "L",
         "O",
         "R",
@@ -1170,17 +1271,72 @@ def preparar_excel_para_pdf(
             else {}
         )
 
-        coluna_unitario = (
-            colunas_preco_unitario[
-                indice_fornecedor
-            ]
-        )
+        coluna_unitario = colunas_unitario[
+            indice_fornecedor
+        ]
 
-        coluna_subtotal = (
-            colunas_subtotal[
-                indice_fornecedor
-            ]
-        )
+        coluna_subtotal = colunas_subtotal[
+            indice_fornecedor
+        ]
+
+        if fornecedor:
+            definir_texto(
+                sheet_data,
+                f"{coluna_unitario}5",
+                fornecedor.get(
+                    "empresa"
+                ),
+            )
+
+            definir_texto(
+                sheet_data,
+                f"{coluna_unitario}6",
+                fornecedor.get(
+                    "contato"
+                ),
+            )
+
+            definir_texto(
+                sheet_data,
+                f"{coluna_unitario}7",
+                fornecedor.get(
+                    "telefone"
+                ),
+            )
+
+            definir_texto(
+                sheet_data,
+                f"{coluna_unitario}8",
+                fornecedor.get(
+                    "email"
+                ),
+            )
+
+            definir_texto(
+                sheet_data,
+                f"{coluna_unitario}9",
+                data_br(
+                    fornecedor.get(
+                        "dataProposta"
+                    )
+                ),
+            )
+
+        else:
+            for linha in [
+                5,
+                6,
+                7,
+                8,
+                9,
+            ]:
+                limpar_celula(
+                    sheet_data,
+                    f"{coluna_unitario}{linha}",
+                )
+
+        # Preços unitários e subtotais:
+        # linhas 12 até 20.
 
         for indice_item in range(
             MAX_ITENS
@@ -1191,7 +1347,8 @@ def preparar_excel_para_pdf(
             )
 
             if (
-                indice_item
+                fornecedor
+                and indice_item
                 < len(
                     itens
                 )
@@ -1216,38 +1373,201 @@ def preparar_excel_para_pdf(
                 unitario = 0
                 subtotal = 0
 
-            ws[
-                f"{coluna_unitario}{linha}"
-            ] = unitario
+            definir_numero(
+                sheet_data,
+                f"{coluna_unitario}{linha}",
+                unitario,
+            )
 
-            ws[
-                f"{coluna_subtotal}{linha}"
-            ] = subtotal
+            if consolidar_formulas:
+                definir_numero(
+                    sheet_data,
+                    f"{coluna_subtotal}{linha}",
+                    subtotal,
+                )
 
-        ws[
-            celulas_total[
-                indice_fornecedor
-            ]
-        ] = calcular_total_fornecedor(
-            fornecedor,
-            itens,
+            else:
+                atualizar_cache_formula(
+                    sheet_data,
+                    f"{coluna_subtotal}{linha}",
+                    subtotal,
+                )
+
+        # Dados comerciais.
+
+        frete = (
+            valor_frete_excel(
+                fornecedor.get(
+                    "frete"
+                )
+            )
+            if fornecedor
+            else "N/A"
         )
 
-    aplicar_formatacao_dinamica(
-        ws
+        definir_valor_generico(
+            sheet_data,
+            f"{coluna_unitario}22",
+            frete,
+        )
+
+        definir_texto(
+            sheet_data,
+            f"{coluna_unitario}23",
+            fornecedor.get(
+                "prazoEntrega"
+            )
+            if fornecedor
+            else "",
+        )
+
+        definir_texto(
+            sheet_data,
+            f"{coluna_unitario}24",
+            fornecedor.get(
+                "validadeProposta"
+            )
+            if fornecedor
+            else "",
+        )
+
+        definir_texto(
+            sheet_data,
+            f"{coluna_unitario}25",
+            fornecedor.get(
+                "condicaoPagamento"
+            )
+            if fornecedor
+            else "",
+        )
+
+        definir_texto(
+            sheet_data,
+            f"{coluna_unitario}26",
+            fornecedor.get(
+                "garantia"
+            )
+            if fornecedor
+            else "",
+        )
+
+        total = (
+            calcular_total_fornecedor(
+                fornecedor,
+                itens,
+            )
+            if fornecedor
+            else 0
+        )
+
+        if consolidar_formulas:
+            definir_numero(
+                sheet_data,
+                celulas_total[
+                    indice_fornecedor
+                ],
+                total,
+            )
+
+        else:
+            atualizar_cache_formula(
+                sheet_data,
+                celulas_total[
+                    indice_fornecedor
+                ],
+                total,
+            )
+
+    # =====================================================
+    # OBSERVAÇÕES E EMPRESA APROVADA
+    # =====================================================
+
+    definir_texto(
+        sheet_data,
+        "B31",
+        dados.get(
+            "observacoes"
+        ),
     )
 
-    garantir_blocos_aprovacoes(
-        ws
+    definir_texto(
+        sheet_data,
+        "O37",
+        dados.get(
+            "empresaAprovada"
+        ),
     )
 
-    workbook.save(
-        caminho_excel_pdf
+    return ET.tostring(
+        root,
+        encoding="utf-8",
+        xml_declaration=True,
     )
 
 
 # =========================================================
-# CONVERSÃO DO EXCEL PARA PDF
+# GERAÇÃO DO EXCEL USANDO O MODELO ORIGINAL
+# =========================================================
+
+def gerar_excel_a_partir_modelo(
+    caminho_saida: Path,
+    dados: dict[str, Any],
+    consolidar_formulas: bool,
+) -> None:
+    if not TEMPLATE_EXCEL.exists():
+        raise RuntimeError(
+            "Template Excel não encontrado."
+        )
+
+    with zipfile.ZipFile(
+        TEMPLATE_EXCEL,
+        "r",
+    ) as arquivo_origem:
+        caminho_sheet_xml = localizar_xml_planilha(
+            arquivo_origem,
+            NOME_PLANILHA,
+        )
+
+        with zipfile.ZipFile(
+            caminho_saida,
+            "w",
+        ) as arquivo_saida:
+            for info in arquivo_origem.infolist():
+                conteudo = arquivo_origem.read(
+                    info.filename
+                )
+
+                if (
+                    info.filename
+                    == caminho_sheet_xml
+                ):
+                    conteudo = preencher_planilha_xml(
+                        conteudo,
+                        dados,
+                        consolidar_formulas=
+                            consolidar_formulas,
+                    )
+
+                # Todos os demais arquivos internos do Excel
+                # são copiados sem alteração:
+                #
+                # imagens
+                # desenhos
+                # quadros de aprovação
+                # estilos
+                # bordas
+                # cores
+                # mesclagens
+                # configurações de impressão
+
+                arquivo_saida.writestr(
+                    info,
+                    conteudo,
+                )
+
+
+# =========================================================
+# CONVERSÃO EXCEL PARA PDF
 # =========================================================
 
 def converter_excel_para_pdf(
@@ -1298,7 +1618,8 @@ def converter_excel_para_pdf(
     )
 
     if (
-        resultado.returncode != 0
+        resultado.returncode
+        != 0
         or not caminho_pdf.exists()
     ):
         raise RuntimeError(
@@ -1407,16 +1728,16 @@ def inicio():
             "online",
 
         "versao":
-            "3.3.3",
+            "4.0.0",
 
         "itens_por_mapa":
             MAX_ITENS,
 
-        "geracao_pdf":
-            "excel-preenchido-convertido",
+        "geracao_excel":
+            "modelo-original-com-edicao-pontual-do-xml",
 
-        "aprovacoes":
-            "quadros-recriados-com-celulas-e-bordas",
+        "geracao_pdf":
+            "excel-original-preenchido-convertido",
     }
 
 
@@ -1436,20 +1757,20 @@ def health_check():
                 TEMPLATE_EXCEL
             ),
 
-        "geracao_pdf":
-            "somente-a-partir-do-excel",
+        "versao":
+            "4.0.0",
 
         "itens_por_mapa":
             MAX_ITENS,
 
-        "observacao":
-            "titulo-esquerda-conteudo-centralizado",
+        "preserva_layout_original":
+            True,
 
-        "conta_orcamentaria":
-            "titulo-e-valor-a-esquerda",
+        "edicao_xlsx":
+            "xml-pontual-sem-openpyxl-save",
 
-        "aprovacoes":
-            "quadros-recriados-com-celulas-e-bordas",
+        "geracao_pdf":
+            "somente-a-partir-do-excel-original-preenchido",
     }
 
 
@@ -1473,117 +1794,158 @@ async def gerar_mapa_cotacao(
             detail="Dados do formulário inválidos.",
         ) from erro
 
-    with tempfile.TemporaryDirectory() as pasta_temporaria:
-        pasta = Path(
-            pasta_temporaria
-        )
+    try:
+        with tempfile.TemporaryDirectory() as pasta_temporaria:
+            pasta = Path(
+                pasta_temporaria
+            )
 
-        nome_base = nome_base_mapa(
-            dados
-        )
+            nome_base = nome_base_mapa(
+                dados
+            )
 
-        identificacao = (
-            nome_seguro(
-                dados.get(
-                    "identificacaoMapa"
+            identificacao = (
+                nome_seguro(
+                    dados.get(
+                        "identificacaoMapa"
+                    )
+                )
+                or "Cotacao"
+            )
+
+            # ==============================================
+            # EXCEL FINAL PARA DOWNLOAD
+            # ==============================================
+            #
+            # Mantém as fórmulas originais e atualiza
+            # os valores em cache.
+
+            caminho_excel = (
+                pasta
+                / f"{nome_base}.xlsx"
+            )
+
+            gerar_excel_a_partir_modelo(
+                caminho_excel,
+                dados,
+                consolidar_formulas=False,
+            )
+
+            # ==============================================
+            # EXCEL TEMPORÁRIO PARA GERAR O PDF
+            # ==============================================
+            #
+            # Usa novamente o modelo original.
+            # Consolida subtotais e totais para evitar
+            # divergências no LibreOffice headless.
+
+            caminho_excel_pdf = (
+                pasta
+                / (
+                    f"{nome_base}"
+                    " - conversao-pdf.xlsx"
                 )
             )
-            or "Cotacao"
-        )
 
-        caminho_excel = (
-            pasta
-            / f"{nome_base}.xlsx"
-        )
-
-        preencher_excel(
-            dados,
-            caminho_excel,
-        )
-
-        caminho_excel_pdf = (
-            pasta
-            / (
-                f"{nome_base}"
-                " - conversao-pdf.xlsx"
+            gerar_excel_a_partir_modelo(
+                caminho_excel_pdf,
+                dados,
+                consolidar_formulas=True,
             )
-        )
 
-        preparar_excel_para_pdf(
-            caminho_excel,
-            caminho_excel_pdf,
-            dados,
-        )
+            # ==============================================
+            # PDF GERADO EXCLUSIVAMENTE A PARTIR DO EXCEL
+            # ==============================================
 
-        caminho_pdf_convertido = converter_excel_para_pdf(
-            caminho_excel_pdf,
-            pasta,
-        )
-
-        caminho_pdf_mapa = (
-            pasta
-            / f"{nome_base}.pdf"
-        )
-
-        shutil.copy2(
-            caminho_pdf_convertido,
-            caminho_pdf_mapa,
-        )
-
-        propostas_upload = [
-            proposta1,
-            proposta2,
-            proposta3,
-        ]
-
-        pdfs_propostas = []
-
-        for indice, upload in enumerate(
-            propostas_upload,
-            start=1,
-        ):
-            pdf = await salvar_upload_pdf(
-                upload,
+            caminho_pdf_convertido = converter_excel_para_pdf(
+                caminho_excel_pdf,
                 pasta,
-                indice,
             )
 
-            if pdf:
-                pdfs_propostas.append(
-                    pdf
+            caminho_pdf_mapa = (
+                pasta
+                / f"{nome_base}.pdf"
+            )
+
+            shutil.copy2(
+                caminho_pdf_convertido,
+                caminho_pdf_mapa,
+            )
+
+            # ==============================================
+            # PROPOSTAS ANEXADAS
+            # ==============================================
+
+            propostas_upload = [
+                proposta1,
+                proposta2,
+                proposta3,
+            ]
+
+            pdfs_propostas = []
+
+            for indice, upload in enumerate(
+                propostas_upload,
+                start=1,
+            ):
+                pdf = await salvar_upload_pdf(
+                    upload,
+                    pasta,
+                    indice,
                 )
 
-        caminho_pdf_completo = (
-            pasta
-            / (
-                f"Mapa {codigo_mapa(dados)}"
-                f" - {identificacao}"
-                " + Prop.pdf"
+                if pdf:
+                    pdfs_propostas.append(
+                        pdf
+                    )
+
+            # ==============================================
+            # PDF FINAL COM PROPOSTAS
+            # ==============================================
+
+            caminho_pdf_completo = (
+                pasta
+                / (
+                    f"Mapa {codigo_mapa(dados)}"
+                    f" - {identificacao}"
+                    " + Prop.pdf"
+                )
             )
-        )
 
-        unir_pdfs(
-            caminho_pdf_mapa,
-            pdfs_propostas,
-            caminho_pdf_completo,
-        )
+            unir_pdfs(
+                caminho_pdf_mapa,
+                pdfs_propostas,
+                caminho_pdf_completo,
+            )
 
-        return {
-            "nomeBase":
-                nome_base,
+            return {
+                "nomeBase":
+                    nome_base,
 
-            "excel":
-                serializar_arquivo_base64(
-                    caminho_excel
-                ),
+                "excel":
+                    serializar_arquivo_base64(
+                        caminho_excel
+                    ),
 
-            "pdfMapa":
-                serializar_arquivo_base64(
-                    caminho_pdf_mapa
-                ),
+                "pdfMapa":
+                    serializar_arquivo_base64(
+                        caminho_pdf_mapa
+                    ),
 
-            "pdfCompleto":
-                serializar_arquivo_base64(
-                    caminho_pdf_completo
-                ),
-        }
+                "pdfCompleto":
+                    serializar_arquivo_base64(
+                        caminho_pdf_completo
+                    ),
+            }
+
+    except HTTPException:
+        raise
+
+    except Exception as erro:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Não foi possível gerar o mapa de cotação. "
+                f"Detalhe técnico: {erro}"
+            ),
+        ) from erro
