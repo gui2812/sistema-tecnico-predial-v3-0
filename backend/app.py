@@ -30,7 +30,7 @@ NOME_PLANILHA = "Mapa de Cotação"
 
 app = FastAPI(
     title="Sistema Técnico Predial — Backend",
-    version="3.1.0",
+    version="3.2.0",
 )
 
 app.add_middleware(
@@ -46,14 +46,18 @@ app.add_middleware(
 # UTILIDADES
 # =========================================================
 
-def texto(valor: Any) -> str:
+def texto(
+    valor: Any,
+) -> str:
     return str(
         valor
         or ""
     ).strip()
 
 
-def nome_seguro(valor: Any) -> str:
+def nome_seguro(
+    valor: Any,
+) -> str:
     valor = texto(
         valor
     )
@@ -87,7 +91,9 @@ def nome_seguro(valor: Any) -> str:
     return valor.strip()
 
 
-def numero_decimal(valor: Any) -> float:
+def numero_decimal(
+    valor: Any,
+) -> float:
     if isinstance(
         valor,
         (
@@ -132,7 +138,9 @@ def numero_decimal(valor: Any) -> float:
         return 0.0
 
 
-def valor_frete_excel(valor: Any) -> Any:
+def valor_frete_excel(
+    valor: Any,
+) -> Any:
     valor_texto = texto(
         valor
     )
@@ -155,7 +163,9 @@ def valor_frete_excel(valor: Any) -> Any:
     )
 
 
-def valor_frete_numerico(valor: Any) -> float:
+def valor_frete_numerico(
+    valor: Any,
+) -> float:
     valor_texto = texto(
         valor
     )
@@ -178,7 +188,9 @@ def valor_frete_numerico(valor: Any) -> float:
     )
 
 
-def data_br(valor: Any) -> str:
+def data_br(
+    valor: Any,
+) -> str:
     valor = texto(
         valor
     )
@@ -306,9 +318,10 @@ def serializar_arquivo_base64(
 # FORMATAÇÃO
 # =========================================================
 
-def centralizar_sem_perder_estilo(
+def alinhar_sem_perder_estilo(
     ws,
     endereco: str,
+    horizontal: str = "left",
     quebrar_texto: bool = False,
 ) -> None:
     alinhamento = copy(
@@ -318,7 +331,7 @@ def centralizar_sem_perder_estilo(
     )
 
     alinhamento.horizontal = (
-        "center"
+        horizontal
     )
 
     alinhamento.vertical = (
@@ -344,30 +357,62 @@ def aplicar_formatacao_dinamica(
     para os campos preenchidos dinamicamente.
     """
 
-    # Conta Orçamentária.
-    centralizar_sem_perder_estilo(
+    # ==========================================
+    # CONTA ORÇAMENTÁRIA
+    # ==========================================
+    #
+    # B8 = título
+    # E8 = valor preenchido
+    #
+    # Ambos ficam no canto esquerdo.
+
+    alinhar_sem_perder_estilo(
+        ws,
+        "B8",
+        horizontal="left",
+        quebrar_texto=True,
+    )
+
+    alinhar_sem_perder_estilo(
         ws,
         "E8",
+        horizontal="left",
         quebrar_texto=True,
     )
 
-    # Título e conteúdo de Observações.
-    centralizar_sem_perder_estilo(
+    # ==========================================
+    # OBSERVAÇÕES
+    # ==========================================
+    #
+    # B30 = título Observações:
+    # B31 = texto digitado pelo usuário
+    #
+    # Ambos ficam no canto esquerdo.
+
+    alinhar_sem_perder_estilo(
         ws,
         "B30",
+        horizontal="left",
         quebrar_texto=True,
     )
 
-    centralizar_sem_perder_estilo(
+    alinhar_sem_perder_estilo(
         ws,
         "B31",
+        horizontal="left",
         quebrar_texto=True,
     )
 
-    # Empresa aprovada.
-    centralizar_sem_perder_estilo(
+    # ==========================================
+    # EMPRESA APROVADA
+    # ==========================================
+    #
+    # Permanece centralizada.
+
+    alinhar_sem_perder_estilo(
         ws,
         "O37",
+        horizontal="center",
         quebrar_texto=True,
     )
 
@@ -502,6 +547,7 @@ def preencher_fornecedor(
     # M12 = I12 * L12
     # P12 = I12 * O12
     # S12 = I12 * R12
+
     ws[
         f"{coluna}12"
     ] = obter_preco_unitario(
@@ -675,6 +721,7 @@ def preencher_excel(
 
     # Limpa somente campos editáveis das linhas extras.
     # Fórmulas, bordas e estilos permanecem.
+
     for linha in range(
         13,
         21,
@@ -754,6 +801,7 @@ def preencher_excel(
     )
 
     # Solicita recálculo ao abrir no Excel.
+
     workbook.calculation.fullCalcOnLoad = (
         True
     )
@@ -879,16 +927,19 @@ def preparar_excel_para_pdf(
         )
 
         # Preço unitário.
+
         ws[
             f"{coluna_preco_unitario}12"
         ] = preco_unitario
 
         # Subtotal da primeira linha.
+
         ws[
             f"{coluna_subtotal}12"
         ] = subtotal
 
         # Total final do fornecedor.
+
         ws[
             celulas_total[
                 indice
@@ -1070,10 +1121,13 @@ def inicio():
             "online",
 
         "versao":
-            "3.1.0",
+            "3.2.0",
 
         "geracao_pdf":
             "excel-preenchido-convertido",
+
+        "alinhamentos":
+            "conta-orcamentaria-e-observacoes-a-esquerda",
     }
 
 
@@ -1101,6 +1155,9 @@ def health_check():
 
         "totais_pdf":
             "consolidados-antes-da-conversao",
+
+        "alinhamentos":
+            "conta-orcamentaria-e-observacoes-a-esquerda",
     }
 
 
@@ -1159,6 +1216,7 @@ async def gerar_mapa_cotacao(
 
         # O PDF nasce exclusivamente de uma cópia
         # do Excel preenchido.
+
         caminho_excel_pdf = (
             pasta
             / (
@@ -1179,6 +1237,7 @@ async def gerar_mapa_cotacao(
         )
 
         # Remove o sufixo técnico do nome entregue ao usuário.
+
         caminho_pdf_mapa = (
             pasta
             / f"{nome_base}.pdf"
