@@ -7,6 +7,10 @@ const API_URL =
     .VITE_MAPA_COTACAO_API_URL ||
   "https://sistema-tecnico-predial-backend.onrender.com";
 
+// =========================================================
+// CONVERSÃO DE ARQUIVOS
+// =========================================================
+
 function base64ParaBlob(
   conteudoBase64,
   mimeType
@@ -25,8 +29,7 @@ function base64ParaBlob(
     let indice = 0;
     indice <
     binario.length;
-    indice +=
-    1
+    indice += 1
   ) {
     bytes[
       indice
@@ -51,6 +54,15 @@ function normalizarResultado(
   arquivo,
   mimeType
 ) {
+  if (
+    !arquivo?.nome ||
+    !arquivo?.base64
+  ) {
+    throw new Error(
+      "O backend não retornou um arquivo válido."
+    );
+  }
+
   return {
     nome:
       arquivo.nome,
@@ -62,6 +74,10 @@ function normalizarResultado(
       ),
   };
 }
+
+// =========================================================
+// LIMPEZA DOS DADOS ANTES DO ENVIO
+// =========================================================
 
 function limparFornecedoresParaEnvio(
   fornecedores =
@@ -81,6 +97,10 @@ function limparFornecedoresParaEnvio(
     }
   );
 }
+
+// =========================================================
+// GERAÇÃO DOS ARQUIVOS
+// =========================================================
 
 export async function gerarArquivosMapaCotacao(
   dados
@@ -143,7 +163,8 @@ export async function gerarArquivosMapaCotacao(
       }
     );
 
-  let resposta;
+  let resposta =
+    null;
 
   try {
     resposta =
@@ -169,10 +190,7 @@ export async function gerarArquivosMapaCotacao(
     excel:
       normalizarResultado(
         resposta.excel,
-        (
-          "application/vnd.openxmlformats-officedocument"
-          ".spreadsheetml.sheet"
-        )
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
       ),
 
     pdfMapa:
@@ -188,6 +206,10 @@ export async function gerarArquivosMapaCotacao(
       ),
   };
 }
+
+// =========================================================
+// DOWNLOAD
+// =========================================================
 
 export function baixarArquivoGerado(
   arquivo
