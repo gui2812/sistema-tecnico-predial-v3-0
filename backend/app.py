@@ -14,6 +14,7 @@ from typing import Any
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from pypdf import PdfReader, PdfWriter
 
 
@@ -31,7 +32,7 @@ MAX_ITENS = 9
 
 app = FastAPI(
     title="Sistema Técnico Predial — Backend",
-    version="3.3.2",
+    version="3.3.3",
 )
 
 app.add_middleware(
@@ -358,8 +359,7 @@ def normalizar_itens(
             ]
         ]
 
-    # Compatibilidade com mapas criados antes
-    # da inclusão de múltiplos itens.
+    # Compatibilidade com mapas antigos.
     return [
         {
             "descricao":
@@ -410,8 +410,7 @@ def obter_preco_item(
             or {}
         )
 
-    # Compatibilidade com versão antiga:
-    # preço direto no fornecedor.
+    # Compatibilidade com versão antiga.
     if (
         indice_item
         == 0
@@ -593,7 +592,8 @@ def aplicar_formatacao_dinamica(
         quebrar_texto=True,
     )
 
-    # Empresa aprovada centralizada.
+    # Empresa aprovada:
+    # centralizada.
 
     alinhar_sem_perder_estilo(
         ws,
@@ -601,6 +601,143 @@ def aplicar_formatacao_dinamica(
         horizontal="center",
         quebrar_texto=True,
     )
+
+
+# =========================================================
+# BLOCOS DE APROVAÇÃO
+# =========================================================
+
+def garantir_blocos_aprovacoes(
+    ws,
+) -> None:
+    """
+    Recria os três quadros de aprovação usando células e bordas.
+
+    Os quadros passam a fazer parte da estrutura da planilha,
+    permanecendo visíveis no Excel e no PDF gerado.
+    """
+
+    borda_cinza = Side(
+        style="thin",
+        color="A6A6A6",
+    )
+
+    sem_borda = Side(
+        style=None,
+    )
+
+    preenchimento_branco = PatternFill(
+        fill_type="solid",
+        fgColor="FFFFFF",
+    )
+
+    fonte_legenda = Font(
+        name="Arial",
+        size=9,
+        color="666666",
+    )
+
+    quadros = [
+        {
+            "coluna_inicial": 2,   # B
+            "coluna_final": 4,     # D
+            "coluna_legenda": 3,   # C
+            "legenda": "Contratante",
+        },
+        {
+            "coluna_inicial": 6,   # F
+            "coluna_final": 8,     # H
+            "coluna_legenda": 7,   # G
+            "legenda": "Gerência",
+        },
+        {
+            "coluna_inicial": 10,  # J
+            "coluna_final": 12,    # L
+            "coluna_legenda": 11,  # K
+            "legenda": "Diretoria",
+        },
+    ]
+
+    linha_inicial = 37
+    linha_final = 40
+
+    for quadro in quadros:
+        coluna_inicial = quadro[
+            "coluna_inicial"
+        ]
+
+        coluna_final = quadro[
+            "coluna_final"
+        ]
+
+        for linha in range(
+            linha_inicial,
+            linha_final + 1,
+        ):
+            for coluna in range(
+                coluna_inicial,
+                coluna_final + 1,
+            ):
+                celula = ws.cell(
+                    row=linha,
+                    column=coluna,
+                )
+
+                celula.fill = (
+                    preenchimento_branco
+                )
+
+                celula.border = Border(
+                    left=(
+                        borda_cinza
+                        if coluna
+                        == coluna_inicial
+                        else sem_borda
+                    ),
+
+                    right=(
+                        borda_cinza
+                        if coluna
+                        == coluna_final
+                        else sem_borda
+                    ),
+
+                    top=(
+                        borda_cinza
+                        if linha
+                        == linha_inicial
+                        else sem_borda
+                    ),
+
+                    bottom=(
+                        borda_cinza
+                        if linha
+                        == linha_final
+                        else sem_borda
+                    ),
+                )
+
+        celula_legenda = ws.cell(
+            row=linha_final,
+            column=quadro[
+                "coluna_legenda"
+            ],
+        )
+
+        celula_legenda.value = (
+            quadro[
+                "legenda"
+            ]
+        )
+
+        celula_legenda.font = (
+            fonte_legenda
+        )
+
+        celula_legenda.alignment = Alignment(
+            horizontal="center",
+            vertical="center",
+        )
 
 
 # =========================================================
@@ -736,7 +873,7 @@ def preencher_fornecedor(
             indice_item,
         )
 
-    # Limpa linhas não utilizadas.
+    # Limpa linhas que não foram utilizadas.
 
     for linha in range(
         12
@@ -937,6 +1074,10 @@ def preencher_excel(
         ws
     )
 
+    garantir_blocos_aprovacoes(
+        ws
+    )
+
     workbook.calculation.fullCalcOnLoad = (
         True
     )
@@ -1093,6 +1234,10 @@ def preparar_excel_para_pdf(
         )
 
     aplicar_formatacao_dinamica(
+        ws
+    )
+
+    garantir_blocos_aprovacoes(
         ws
     )
 
@@ -1262,13 +1407,16 @@ def inicio():
             "online",
 
         "versao":
-            "3.3.2",
+            "3.3.3",
 
         "itens_por_mapa":
             MAX_ITENS,
 
         "geracao_pdf":
             "excel-preenchido-convertido",
+
+        "aprovacoes":
+            "quadros-recriados-com-celulas-e-bordas",
     }
 
 
@@ -1299,6 +1447,9 @@ def health_check():
 
         "conta_orcamentaria":
             "titulo-e-valor-a-esquerda",
+
+        "aprovacoes":
+            "quadros-recriados-com-celulas-e-bordas",
     }
 
 
