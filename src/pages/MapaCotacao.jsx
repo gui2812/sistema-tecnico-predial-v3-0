@@ -22,9 +22,27 @@ import {
 const EMPREENDIMENTO_PADRAO =
   "JK 1455";
 
+const MAX_ITENS =
+  9;
+
 // =========================================================
 // VALORES PADRÃO
 // =========================================================
+
+function itemVazio() {
+  return {
+    descricao: "",
+    quantidade: "1",
+    unidade: "UND",
+  };
+}
+
+function precoItemVazio() {
+  return {
+    precoUnitario: "",
+    precoTotal: "",
+  };
+}
 
 function fornecedorVazio() {
   return {
@@ -33,14 +51,16 @@ function fornecedorVazio() {
     telefone: "",
     email: "",
     dataProposta: "",
-    precoUnitario: "",
-    precoTotal: "",
 
     frete: "N/A",
     prazoEntrega: "10 DIAS",
     validadeProposta: "15 DIAS",
     condicaoPagamento: "28DDL",
     garantia: "SIM",
+
+    precosItens: [
+      precoItemVazio(),
+    ],
 
     arquivo: null,
   };
@@ -58,9 +78,9 @@ function dadosIniciais() {
 
     contaOrcamentaria: "",
 
-    descricaoItem: "",
-    quantidade: "1",
-    unidade: "UND",
+    itens: [
+      itemVazio(),
+    ],
 
     observacoes: "",
     empresaAprovada: "",
@@ -80,7 +100,7 @@ function dadosIniciais() {
 }
 
 // =========================================================
-// COMPONENTES DE FORMULÁRIO
+// CAMPOS
 // =========================================================
 
 function Campo({
@@ -104,7 +124,9 @@ function Campo({
 
       <input
         type={type}
-        value={value}
+        value={
+          value
+        }
         inputMode={
           inputMode
         }
@@ -138,7 +160,9 @@ function CampoTexto({
       </span>
 
       <textarea
-        value={value}
+        value={
+          value
+        }
         onChange={(
           event
         ) =>
@@ -149,7 +173,9 @@ function CampoTexto({
         placeholder={
           placeholder
         }
-        rows={rows}
+        rows={
+          rows
+        }
         className="mt-1 w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
       />
     </label>
@@ -157,13 +183,15 @@ function CampoTexto({
 }
 
 // =========================================================
-// CARD DE FORNECEDOR
+// CARD DO FORNECEDOR
 // =========================================================
 
 function CardFornecedor({
   indice,
   fornecedor,
+  itens,
   onAlterar,
+  onAlterarPreco,
   onArquivo,
   onRemoverArquivo,
 }) {
@@ -286,40 +314,6 @@ function CardFornecedor({
         />
 
         <Campo
-          label="Preço unitário"
-          value={
-            fornecedor.precoUnitario
-          }
-          inputMode="decimal"
-          onChange={(
-            valor
-          ) =>
-            onAlterar(
-              "precoUnitario",
-              valor
-            )
-          }
-          placeholder="Ex: 7.031,13"
-        />
-
-        <Campo
-          label="Preço total"
-          value={
-            fornecedor.precoTotal
-          }
-          inputMode="decimal"
-          onChange={(
-            valor
-          ) =>
-            onAlterar(
-              "precoTotal",
-              valor
-            )
-          }
-          placeholder="Ex: 7.031,13"
-        />
-
-        <Campo
           label="Frete"
           value={
             fornecedor.frete
@@ -397,8 +391,91 @@ function CardFornecedor({
             )
           }
           placeholder="Ex: SIM"
-          className="md:col-span-2"
         />
+      </div>
+
+      <div className="mt-5 rounded-2xl border border-blue-100 bg-white p-3">
+        <h4 className="text-sm font-black text-slate-900">
+          Valores por item
+        </h4>
+
+        <p className="mt-1 text-xs text-slate-500">
+          Informe o preço unitário ou o preço total de cada item.
+        </p>
+
+        <div className="mt-3 space-y-3">
+          {itens.map(
+            (
+              item,
+              indiceItem
+            ) => {
+              const preco =
+                fornecedor
+                  .precosItens[
+                    indiceItem
+                  ] ||
+                precoItemVazio();
+
+              return (
+                <div
+                  key={
+                    indiceItem
+                  }
+                  className="rounded-xl border border-slate-100 bg-slate-50 p-3"
+                >
+                  <p className="truncate text-xs font-black text-blue-700">
+                    Item{" "}
+                    {indiceItem +
+                      1}
+                    {" — "}
+                    {
+                      item.descricao ||
+                      "Descrição ainda não preenchida"
+                    }
+                  </p>
+
+                  <div className="mt-2 grid gap-2 md:grid-cols-2">
+                    <Campo
+                      label="Preço unitário"
+                      value={
+                        preco.precoUnitario
+                      }
+                      inputMode="decimal"
+                      onChange={(
+                        valor
+                      ) =>
+                        onAlterarPreco(
+                          indiceItem,
+                          "precoUnitario",
+                          valor
+                        )
+                      }
+                      placeholder="Ex: 7.031,13"
+                    />
+
+                    <Campo
+                      label="Preço total"
+                      value={
+                        preco.precoTotal
+                      }
+                      inputMode="decimal"
+                      onChange={(
+                        valor
+                      ) =>
+                        onAlterarPreco(
+                          indiceItem,
+                          "precoTotal",
+                          valor
+                        )
+                      }
+                      placeholder="Opcional"
+                    />
+                  </div>
+                </div>
+              );
+            }
+          )}
+        </div>
       </div>
 
       <div className="mt-4 flex flex-col gap-2">
@@ -522,6 +599,16 @@ export default function MapaCotacao() {
         Boolean
       );
 
+  function limparResultado() {
+    setResultado(
+      null
+    );
+
+    setErro(
+      ""
+    );
+  }
+
   function alterarCampo(
     campo,
     valor
@@ -537,9 +624,135 @@ export default function MapaCotacao() {
       })
     );
 
-    setResultado(
-      null
+    limparResultado();
+  }
+
+  function alterarItem(
+    indice,
+    campo,
+    valor
+  ) {
+    setDados(
+      (
+        atual
+      ) => ({
+        ...atual,
+
+        itens:
+          atual.itens.map(
+            (
+              item,
+              posicao
+            ) =>
+              posicao ===
+              indice
+                ? {
+                    ...item,
+
+                    [campo]:
+                      valor,
+                  }
+                : item
+          ),
+      })
     );
+
+    limparResultado();
+  }
+
+  function adicionarItem() {
+    setDados(
+      (
+        atual
+      ) => {
+        if (
+          atual.itens.length >=
+          MAX_ITENS
+        ) {
+          return atual;
+        }
+
+        return {
+          ...atual,
+
+          itens: [
+            ...atual.itens,
+            itemVazio(),
+          ],
+
+          fornecedores:
+            atual.fornecedores.map(
+              (
+                fornecedor
+              ) => ({
+                ...fornecedor,
+
+                precosItens: [
+                  ...fornecedor
+                    .precosItens,
+                  precoItemVazio(),
+                ],
+              })
+            ),
+        };
+      }
+    );
+
+    limparResultado();
+  }
+
+  function removerItem(
+    indice
+  ) {
+    setDados(
+      (
+        atual
+      ) => {
+        if (
+          atual.itens.length <=
+          1
+        ) {
+          return atual;
+        }
+
+        return {
+          ...atual,
+
+          itens:
+            atual.itens.filter(
+              (
+                _,
+                posicao
+              ) =>
+                posicao !==
+                indice
+            ),
+
+          fornecedores:
+            atual.fornecedores.map(
+              (
+                fornecedor
+              ) => ({
+                ...fornecedor,
+
+                precosItens:
+                  fornecedor
+                    .precosItens
+                    .filter(
+                      (
+                        _,
+                        posicao
+                      ) =>
+                        posicao !==
+                        indice
+                    ),
+              })
+            ),
+        };
+      }
+    );
+
+    limparResultado();
   }
 
   function alterarFornecedor(
@@ -608,30 +821,64 @@ export default function MapaCotacao() {
       }
     );
 
-    setResultado(
-      null
-    );
+    limparResultado();
   }
 
-  function alterarArquivo(
-    indice,
-    arquivo
+  function alterarPrecoFornecedor(
+    indiceFornecedor,
+    indiceItem,
+    campo,
+    valor
   ) {
-    alterarFornecedor(
-      indice,
-      "arquivo",
-      arquivo
-    );
-  }
+    setDados(
+      (
+        atual
+      ) => ({
+        ...atual,
 
-  function removerArquivo(
-    indice
-  ) {
-    alterarFornecedor(
-      indice,
-      "arquivo",
-      null
+        fornecedores:
+          atual.fornecedores.map(
+            (
+              fornecedor,
+              posicao
+            ) => {
+              if (
+                posicao !==
+                indiceFornecedor
+              ) {
+                return fornecedor;
+              }
+
+              const precosItens =
+                fornecedor
+                  .precosItens
+                  .map(
+                    (
+                      preco,
+                      indicePreco
+                    ) =>
+                      indicePreco ===
+                      indiceItem
+                        ? {
+                            ...preco,
+
+                            [campo]:
+                              valor,
+                          }
+                        : preco
+                  );
+
+              return {
+                ...fornecedor,
+
+                precosItens,
+              };
+            }
+          ),
+      })
     );
+
+    limparResultado();
   }
 
   function alternarFornecedorUnico() {
@@ -673,9 +920,7 @@ export default function MapaCotacao() {
       }
     );
 
-    setResultado(
-      null
-    );
+    limparResultado();
   }
 
   function alterarQuantidadeFornecedores(
@@ -714,16 +959,37 @@ export default function MapaCotacao() {
       }
     );
 
-    setResultado(
-      null
-    );
+    limparResultado();
   }
 
   function gerarSugestao() {
+    const descricoes =
+      dados.itens
+        .map(
+          (
+            item
+          ) =>
+            item
+              .descricao
+              .trim()
+        )
+        .filter(
+          Boolean
+        );
+
+    const identificacao =
+      dados.identificacaoMapa.trim();
+
     const item =
-      dados.identificacaoMapa.trim() ||
-      dados.descricaoItem.trim() ||
-      "item informado";
+      identificacao ||
+      (
+        descricoes.length ===
+        1
+          ? descricoes[
+              0
+            ]
+          : "itens cotados"
+      );
 
     alterarCampo(
       "observacoes",
@@ -751,53 +1017,98 @@ export default function MapaCotacao() {
     }
 
     if (
-      !dados.descricaoItem.trim()
-    ) {
-      return "Informe a descrição do item.";
-    }
-
-    if (
       !dados.contaOrcamentaria.trim()
     ) {
       return "Informe a conta orçamentária.";
     }
 
-    if (
-      fornecedoresVisiveis.length ===
-      0
-    ) {
-      return "Inclua pelo menos um fornecedor.";
-    }
-
     for (
       let indice = 0;
       indice <
-      fornecedoresVisiveis.length;
+      dados.itens.length;
       indice +=
       1
     ) {
-      const fornecedor =
-        fornecedoresVisiveis[
+      const item =
+        dados.itens[
           indice
         ];
 
       if (
-        !fornecedor.empresa.trim()
+        !item.descricao.trim()
       ) {
-        return `Informe a empresa do Orçamento ${
+        return `Informe a descrição do Item ${
           indice +
           1
         }.`;
       }
 
       if (
-        !fornecedor.precoUnitario.trim() &&
-        !fornecedor.precoTotal.trim()
+        !item.quantidade.trim()
       ) {
-        return `Informe o preço unitário ou o preço total do Orçamento ${
+        return `Informe a quantidade do Item ${
           indice +
           1
         }.`;
+      }
+
+      if (
+        !item.unidade.trim()
+      ) {
+        return `Informe a unidade do Item ${
+          indice +
+          1
+        }.`;
+      }
+    }
+
+    for (
+      let indiceFornecedor = 0;
+      indiceFornecedor <
+      fornecedoresVisiveis.length;
+      indiceFornecedor +=
+      1
+    ) {
+      const fornecedor =
+        fornecedoresVisiveis[
+          indiceFornecedor
+        ];
+
+      if (
+        !fornecedor.empresa.trim()
+      ) {
+        return `Informe a empresa do Orçamento ${
+          indiceFornecedor +
+          1
+        }.`;
+      }
+
+      for (
+        let indiceItem = 0;
+        indiceItem <
+        dados.itens.length;
+        indiceItem +=
+        1
+      ) {
+        const preco =
+          fornecedor
+            .precosItens[
+              indiceItem
+            ] ||
+          precoItemVazio();
+
+        if (
+          !preco.precoUnitario.trim() &&
+          !preco.precoTotal.trim()
+        ) {
+          return `Informe o preço do Item ${
+            indiceItem +
+            1
+          } no Orçamento ${
+            indiceFornecedor +
+            1
+          }.`;
+        }
       }
     }
 
@@ -831,9 +1142,27 @@ export default function MapaCotacao() {
     );
 
     try {
+      const primeiroItem =
+        dados.itens[
+          0
+        ];
+
       const arquivos =
         await gerarArquivosMapaCotacao({
           ...dados,
+
+          // Compatibilidade com versões anteriores.
+          descricaoItem:
+            primeiroItem
+              .descricao,
+
+          quantidade:
+            primeiroItem
+              .quantidade,
+
+          unidade:
+            primeiroItem
+              .unidade,
 
           fornecedores:
             fornecedoresVisiveis,
@@ -977,7 +1306,7 @@ export default function MapaCotacao() {
                 valor
               )
             }
-            placeholder="Ex: Bomba Jockey 5MA5-T"
+            placeholder="Ex: Bombas do sistema hidráulico"
           />
         </div>
       </section>
@@ -1035,12 +1364,11 @@ export default function MapaCotacao() {
 
               {nomesFornecedores.map(
                 (
-                  nome
+                  nome,
+                  indice
                 ) => (
                   <option
-                    key={
-                      nome
-                    }
+                    key={`${nome}-${indice}`}
                     value={
                       nome
                     }
@@ -1056,9 +1384,138 @@ export default function MapaCotacao() {
 
       <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <h2 className="font-black text-slate-900">
-            Item cotado
-          </h2>
+          <div>
+            <h2 className="font-black text-slate-900">
+              Itens cotados
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Adicione até{" "}
+              {MAX_ITENS}{" "}
+              itens no mesmo mapa.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={
+              adicionarItem
+            }
+            disabled={
+              dados.itens.length >=
+              MAX_ITENS
+            }
+            className="flex items-center justify-center gap-2 rounded-xl bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Plus
+              size={16}
+            />
+
+            Adicionar item
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {dados.itens.map(
+            (
+              item,
+              indice
+            ) => (
+              <div
+                key={
+                  indice
+                }
+                className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-black text-slate-900">
+                    Item{" "}
+                    {indice +
+                      1}
+                  </p>
+
+                  {dados.itens.length >
+                    1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removerItem(
+                          indice
+                        )
+                      }
+                      className="flex items-center gap-1 rounded-xl px-3 py-2 text-xs font-black text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2
+                        size={15}
+                      />
+
+                      Remover
+                    </button>
+                  )}
+                </div>
+
+                <div className="mt-3 grid gap-3 md:grid-cols-[1fr_120px_120px]">
+                  <Campo
+                    label="Descrição do item"
+                    value={
+                      item.descricao
+                    }
+                    onChange={(
+                      valor
+                    ) =>
+                      alterarItem(
+                        indice,
+                        "descricao",
+                        valor
+                      )
+                    }
+                    placeholder="Ex: Bomba Jacuzzi 5MA5-T 5CV"
+                  />
+
+                  <Campo
+                    label="Quantidade"
+                    value={
+                      item.quantidade
+                    }
+                    inputMode="decimal"
+                    onChange={(
+                      valor
+                    ) =>
+                      alterarItem(
+                        indice,
+                        "quantidade",
+                        valor
+                      )
+                    }
+                    placeholder="1"
+                  />
+
+                  <Campo
+                    label="Unidade"
+                    value={
+                      item.unidade
+                    }
+                    onChange={(
+                      valor
+                    ) =>
+                      alterarItem(
+                        indice,
+                        "unidade",
+                        valor
+                      )
+                    }
+                    placeholder="UND"
+                  />
+                </div>
+              </div>
+            )
+          )}
+        </div>
+
+        <div className="mt-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <h3 className="font-black text-slate-900">
+            Observações
+          </h3>
 
           <button
             type="button"
@@ -1075,60 +1532,9 @@ export default function MapaCotacao() {
           </button>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-[1fr_120px_120px]">
-          <Campo
-            label="Descrição do item"
-            value={
-              dados.descricaoItem
-            }
-            onChange={(
-              valor
-            ) =>
-              alterarCampo(
-                "descricaoItem",
-                valor
-              )
-            }
-            placeholder="Ex: Bomba Jacuzzi 5MA5-T 5CV"
-          />
-
-          <Campo
-            label="Quantidade"
-            value={
-              dados.quantidade
-            }
-            inputMode="decimal"
-            onChange={(
-              valor
-            ) =>
-              alterarCampo(
-                "quantidade",
-                valor
-              )
-            }
-            placeholder="1"
-          />
-
-          <Campo
-            label="Unidade"
-            value={
-              dados.unidade
-            }
-            onChange={(
-              valor
-            ) =>
-              alterarCampo(
-                "unidade",
-                valor
-              )
-            }
-            placeholder="UND"
-          />
-        </div>
-
-        <div className="mt-4">
+        <div className="mt-3">
           <CampoTexto
-            label="Observações"
+            label="Texto da observação"
             value={
               dados.observacoes
             }
@@ -1153,7 +1559,7 @@ export default function MapaCotacao() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Preencha até três propostas. Os dados comerciais padrão permanecem editáveis.
+              Preencha até três propostas e informe os valores de cada item.
             </p>
           </div>
 
@@ -1222,6 +1628,9 @@ export default function MapaCotacao() {
                 fornecedor={
                   fornecedor
                 }
+                itens={
+                  dados.itens
+                }
                 onAlterar={(
                   campo,
                   valor
@@ -1232,17 +1641,32 @@ export default function MapaCotacao() {
                     valor
                   )
                 }
+                onAlterarPreco={(
+                  indiceItem,
+                  campo,
+                  valor
+                ) =>
+                  alterarPrecoFornecedor(
+                    indice,
+                    indiceItem,
+                    campo,
+                    valor
+                  )
+                }
                 onArquivo={(
                   arquivo
                 ) =>
-                  alterarArquivo(
+                  alterarFornecedor(
                     indice,
+                    "arquivo",
                     arquivo
                   )
                 }
                 onRemoverArquivo={() =>
-                  removerArquivo(
-                    indice
+                  alterarFornecedor(
+                    indice,
+                    "arquivo",
+                    null
                   )
                 }
               />
