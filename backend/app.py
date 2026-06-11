@@ -14,7 +14,6 @@ from typing import Any
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from openpyxl import load_workbook
-from openpyxl.styles import Alignment
 from pypdf import PdfReader, PdfWriter
 
 
@@ -27,9 +26,11 @@ TEMPLATE_EXCEL = (
     / "Modelo - Mapa de Cotação.xlsx"
 )
 
+NOME_PLANILHA = "Mapa de Cotação"
+
 app = FastAPI(
     title="Sistema Técnico Predial — Backend",
-    version="3.0.0",
+    version="3.1.0",
 )
 
 app.add_middleware(
@@ -45,18 +46,14 @@ app.add_middleware(
 # UTILIDADES
 # =========================================================
 
-def texto(
-    valor: Any,
-) -> str:
+def texto(valor: Any) -> str:
     return str(
         valor
         or ""
     ).strip()
 
 
-def nome_seguro(
-    valor: Any,
-) -> str:
+def nome_seguro(valor: Any) -> str:
     valor = texto(
         valor
     )
@@ -90,9 +87,7 @@ def nome_seguro(
     return valor.strip()
 
 
-def numero_decimal(
-    valor: Any,
-) -> float:
+def numero_decimal(valor: Any) -> float:
     if isinstance(
         valor,
         (
@@ -137,9 +132,7 @@ def numero_decimal(
         return 0.0
 
 
-def valor_frete_excel(
-    valor: Any,
-) -> Any:
+def valor_frete_excel(valor: Any) -> Any:
     valor_texto = texto(
         valor
     )
@@ -162,9 +155,30 @@ def valor_frete_excel(
     )
 
 
-def data_br(
-    valor: Any,
-) -> str:
+def valor_frete_numerico(valor: Any) -> float:
+    valor_texto = texto(
+        valor
+    )
+
+    if not valor_texto:
+        return 0.0
+
+    possui_numero = bool(
+        re.search(
+            r"\d",
+            valor_texto,
+        )
+    )
+
+    if not possui_numero:
+        return 0.0
+
+    return numero_decimal(
+        valor_texto
+    )
+
+
+def data_br(valor: Any) -> str:
     valor = texto(
         valor
     )
@@ -292,7 +306,7 @@ def serializar_arquivo_base64(
 # FORMATAÇÃO
 # =========================================================
 
-def centralizar_celula(
+def centralizar_sem_perder_estilo(
     ws,
     endereco: str,
     quebrar_texto: bool = False,
@@ -320,103 +334,38 @@ def centralizar_celula(
     ].alignment = alinhamento
 
 
-def preparar_layout_impressao(
+def aplicar_formatacao_dinamica(
     ws,
 ) -> None:
-    # Área exata utilizada no template.
-    ws.print_area = (
-        "B2:S40"
-    )
+    """
+    Mantém o layout original do template.
 
-    ws.page_setup.orientation = (
-        "landscape"
-    )
+    Modifica somente os alinhamentos necessários
+    para os campos preenchidos dinamicamente.
+    """
 
-    ws.page_setup.fitToWidth = (
-        1
-    )
-
-    ws.page_setup.fitToHeight = (
-        1
-    )
-
-    ws.sheet_properties.pageSetUpPr.fitToPage = (
-        True
-    )
-
-    ws.print_options.horizontalCentered = (
-        True
-    )
-
-    # Dados gerais.
-    for endereco in [
-        "E5",
-        "E6",
-        "E7",
+    # Conta Orçamentária.
+    centralizar_sem_perder_estilo(
+        ws,
         "E8",
-        "E9",
-    ]:
-        centralizar_celula(
-            ws,
-            endereco,
-        )
+        quebrar_texto=True,
+    )
 
-    # Item principal.
-    for endereco in [
-        "B12",
-        "I12",
-        "J12",
-    ]:
-        centralizar_celula(
-            ws,
-            endereco,
-            quebrar_texto=(
-                endereco
-                == "B12"
-            ),
-        )
-
-    # Fornecedores.
-    for coluna in [
-        "L",
-        "O",
-        "R",
-    ]:
-        for linha in [
-            5,
-            6,
-            7,
-            8,
-            9,
-            12,
-            22,
-            23,
-            24,
-            25,
-            26,
-            28,
-        ]:
-            centralizar_celula(
-                ws,
-                f"{coluna}{linha}",
-                quebrar_texto=True,
-            )
-
-    # Observações.
-    centralizar_celula(
+    # Título e conteúdo de Observações.
+    centralizar_sem_perder_estilo(
         ws,
         "B30",
         quebrar_texto=True,
     )
 
-    centralizar_celula(
+    centralizar_sem_perder_estilo(
         ws,
         "B31",
         quebrar_texto=True,
     )
 
     # Empresa aprovada.
-    centralizar_celula(
+    centralizar_sem_perder_estilo(
         ws,
         "O37",
         quebrar_texto=True,
@@ -424,7 +373,7 @@ def preparar_layout_impressao(
 
 
 # =========================================================
-# PREENCHIMENTO DO EXCEL
+# CÁLCULOS
 # =========================================================
 
 def obter_preco_unitario(
@@ -444,12 +393,9 @@ def obter_preco_unitario(
     )
 
     if (
-        preco_unitario
-        == 0
-        and preco_total
-        > 0
-        and quantidade
-        > 0
+        preco_unitario == 0
+        and preco_total > 0
+        and quantidade > 0
     ):
         return (
             preco_total
@@ -458,6 +404,42 @@ def obter_preco_unitario(
 
     return preco_unitario
 
+
+def calcular_subtotal(
+    fornecedor: dict[str, Any],
+    quantidade: float,
+) -> float:
+    preco_unitario = obter_preco_unitario(
+        fornecedor,
+        quantidade,
+    )
+
+    return (
+        quantidade
+        * preco_unitario
+    )
+
+
+def calcular_total(
+    fornecedor: dict[str, Any],
+    quantidade: float,
+) -> float:
+    return (
+        calcular_subtotal(
+            fornecedor,
+            quantidade,
+        )
+        + valor_frete_numerico(
+            fornecedor.get(
+                "frete"
+            )
+        )
+    )
+
+
+# =========================================================
+# PREENCHIMENTO DOS FORNECEDORES
+# =========================================================
 
 def preencher_fornecedor(
     ws,
@@ -516,6 +498,7 @@ def preencher_fornecedor(
     )
 
     # O próprio template calcula:
+    #
     # M12 = I12 * L12
     # P12 = I12 * O12
     # S12 = I12 * R12
@@ -617,6 +600,10 @@ def limpar_fornecedor(
     ] = ""
 
 
+# =========================================================
+# EXCEL PRINCIPAL PARA DOWNLOAD
+# =========================================================
+
 def preencher_excel(
     dados: dict[str, Any],
     caminho_saida: Path,
@@ -631,51 +618,28 @@ def preencher_excel(
     )
 
     ws = workbook[
-        "Mapa de Cotação"
+        NOME_PLANILHA
     ]
 
     # ==========================================
-    # DADOS GERAIS
+    # DADOS FIXOS
     # ==========================================
+    #
+    # As células abaixo já vêm prontas no Excel:
+    #
+    # E5 = Empreendimento
+    # E6 = Departamento
+    # E7 = Contratante
+    # E9 = Gerência Responsável
+    #
+    # Não sobrescrevemos esses dados.
 
-    ws[
-        "E5"
-    ] = texto(
-        dados.get(
-            "empreendimento"
-        )
-    )
-
-    ws[
-        "E6"
-    ] = texto(
-        dados.get(
-            "departamento"
-        )
-    )
-
-    ws[
-        "E7"
-    ] = texto(
-        dados.get(
-            "contratante"
-        )
-    )
-
-    # Conta Orçamentária.
+    # Conta Orçamentária: único campo variável.
     ws[
         "E8"
     ] = texto(
         dados.get(
             "contaOrcamentaria"
-        )
-    )
-
-    ws[
-        "E9"
-    ] = texto(
-        dados.get(
-            "gerenciaResponsavel"
         )
     )
 
@@ -709,8 +673,8 @@ def preencher_excel(
         )
     )
 
-    # Limpa as linhas adicionais sem alterar
-    # fórmulas e formatação do template.
+    # Limpa somente campos editáveis das linhas extras.
+    # Fórmulas, bordas e estilos permanecem.
     for linha in range(
         13,
         21,
@@ -777,25 +741,19 @@ def preencher_excel(
     # EMPRESA APROVADA
     # ==========================================
 
-    empresa_aprovada = texto(
+    ws[
+        "O37"
+    ] = texto(
         dados.get(
             "empresaAprovada"
         )
     )
 
-    ws[
-        "O37"
-    ] = (
-        empresa_aprovada
-        if empresa_aprovada
-        else ""
-    )
-
-    preparar_layout_impressao(
+    aplicar_formatacao_dinamica(
         ws
     )
 
-    # Obriga o LibreOffice a recalcular as fórmulas.
+    # Solicita recálculo ao abrir no Excel.
     workbook.calculation.fullCalcOnLoad = (
         True
     )
@@ -810,6 +768,139 @@ def preencher_excel(
 
     workbook.save(
         caminho_saida
+    )
+
+
+# =========================================================
+# EXCEL TEMPORÁRIO USADO SOMENTE PARA GERAR O PDF
+# =========================================================
+
+def preparar_excel_para_pdf(
+    caminho_excel_origem: Path,
+    caminho_excel_pdf: Path,
+    dados: dict[str, Any],
+) -> None:
+    """
+    O PDF continua sendo gerado exclusivamente pelo Excel.
+
+    O Excel original disponibilizado para download mantém
+    suas fórmulas.
+
+    Para a conversão headless, criamos uma cópia temporária
+    com os totais consolidados numericamente. Isso evita
+    divergências de recálculo do LibreOffice durante a
+    exportação automática para PDF.
+    """
+
+    shutil.copy2(
+        caminho_excel_origem,
+        caminho_excel_pdf,
+    )
+
+    workbook = load_workbook(
+        caminho_excel_pdf,
+    )
+
+    ws = workbook[
+        NOME_PLANILHA
+    ]
+
+    quantidade = numero_decimal(
+        dados.get(
+            "quantidade"
+        )
+    )
+
+    fornecedores = (
+        dados.get(
+            "fornecedores"
+        )
+        or []
+    )[
+        :3
+    ]
+
+    colunas_preco_unitario = [
+        "L",
+        "O",
+        "R",
+    ]
+
+    colunas_subtotal = [
+        "M",
+        "P",
+        "S",
+    ]
+
+    celulas_total = [
+        "L28",
+        "O28",
+        "R28",
+    ]
+
+    for indice in range(
+        3
+    ):
+        fornecedor = (
+            fornecedores[
+                indice
+            ]
+            if indice < len(
+                fornecedores
+            )
+            else {}
+        )
+
+        coluna_preco_unitario = (
+            colunas_preco_unitario[
+                indice
+            ]
+        )
+
+        coluna_subtotal = (
+            colunas_subtotal[
+                indice
+            ]
+        )
+
+        preco_unitario = obter_preco_unitario(
+            fornecedor,
+            quantidade,
+        )
+
+        subtotal = calcular_subtotal(
+            fornecedor,
+            quantidade,
+        )
+
+        total = calcular_total(
+            fornecedor,
+            quantidade,
+        )
+
+        # Preço unitário.
+        ws[
+            f"{coluna_preco_unitario}12"
+        ] = preco_unitario
+
+        # Subtotal da primeira linha.
+        ws[
+            f"{coluna_subtotal}12"
+        ] = subtotal
+
+        # Total final do fornecedor.
+        ws[
+            celulas_total[
+                indice
+            ]
+        ] = total
+
+    aplicar_formatacao_dinamica(
+        ws
+    )
+
+    workbook.save(
+        caminho_excel_pdf
     )
 
 
@@ -979,7 +1070,7 @@ def inicio():
             "online",
 
         "versao":
-            "3.0.0",
+            "3.1.0",
 
         "geracao_pdf":
             "excel-preenchido-convertido",
@@ -1004,6 +1095,12 @@ def health_check():
 
         "geracao_pdf":
             "somente-a-partir-do-excel",
+
+        "preserva_dados_fixos_template":
+            True,
+
+        "totais_pdf":
+            "consolidados-antes-da-conversao",
     }
 
 
@@ -1060,10 +1157,36 @@ async def gerar_mapa_cotacao(
             caminho_excel,
         )
 
-        # O PDF nasce exclusivamente do Excel preenchido.
-        caminho_pdf_mapa = converter_excel_para_pdf(
+        # O PDF nasce exclusivamente de uma cópia
+        # do Excel preenchido.
+        caminho_excel_pdf = (
+            pasta
+            / (
+                f"{nome_base}"
+                " - conversao-pdf.xlsx"
+            )
+        )
+
+        preparar_excel_para_pdf(
             caminho_excel,
+            caminho_excel_pdf,
+            dados,
+        )
+
+        caminho_pdf_convertido = converter_excel_para_pdf(
+            caminho_excel_pdf,
             pasta,
+        )
+
+        # Remove o sufixo técnico do nome entregue ao usuário.
+        caminho_pdf_mapa = (
+            pasta
+            / f"{nome_base}.pdf"
+        )
+
+        shutil.copy2(
+            caminho_pdf_convertido,
+            caminho_pdf_mapa,
         )
 
         propostas_upload = [
