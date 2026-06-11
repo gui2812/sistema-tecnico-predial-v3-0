@@ -26,11 +26,15 @@ TEMPLATE_EXCEL = (
     / "Modelo - Mapa de Cotação.xlsx"
 )
 
-NOME_PLANILHA = "Mapa de Cotação"
+NOME_PLANILHA =
+    "Mapa de Cotação"
+
+MAX_ITENS =
+    9
 
 app = FastAPI(
     title="Sistema Técnico Predial — Backend",
-    version="3.2.0",
+    version="3.3.0",
 )
 
 app.add_middleware(
@@ -281,11 +285,6 @@ def nome_base_mapa(
                 "identificacaoMapa"
             )
         )
-        or nome_seguro(
-            dados.get(
-                "descricaoItem"
-            )
-        )
         or "Cotacao"
     )
 
@@ -299,7 +298,8 @@ def nome_base_mapa(
 def serializar_arquivo_base64(
     caminho: Path,
 ) -> dict[str, str]:
-    conteudo = caminho.read_bytes()
+    conteudo =
+        caminho.read_bytes()
 
     return {
         "nome":
@@ -315,13 +315,223 @@ def serializar_arquivo_base64(
 
 
 # =========================================================
+# ITENS
+# =========================================================
+
+def normalizar_itens(
+    dados: dict[str, Any],
+) -> list[dict[str, Any]]:
+    itens_recebidos = (
+        dados.get(
+            "itens"
+        )
+        or []
+    )
+
+    if (
+        isinstance(
+            itens_recebidos,
+            list,
+        )
+        and itens_recebidos
+    ):
+        return [
+            {
+                "descricao":
+                    texto(
+                        item.get(
+                            "descricao"
+                        )
+                    ),
+
+                "quantidade":
+                    numero_decimal(
+                        item.get(
+                            "quantidade"
+                        )
+                    ),
+
+                "unidade":
+                    texto(
+                        item.get(
+                            "unidade"
+                        )
+                    ),
+            }
+            for item in itens_recebidos[
+                :MAX_ITENS
+            ]
+        ]
+
+    return [
+        {
+            "descricao":
+                texto(
+                    dados.get(
+                        "descricaoItem"
+                    )
+                ),
+
+            "quantidade":
+                numero_decimal(
+                    dados.get(
+                        "quantidade"
+                    )
+                ),
+
+            "unidade":
+                texto(
+                    dados.get(
+                        "unidade"
+                    )
+                ),
+        }
+    ]
+
+
+def obter_preco_item(
+    fornecedor: dict[str, Any],
+    indice_item: int,
+) -> dict[str, Any]:
+    precos = (
+        fornecedor.get(
+            "precosItens"
+        )
+        or []
+    )
+
+    if (
+        indice_item <
+        len(
+            precos
+        )
+    ):
+        return (
+            precos[
+                indice_item
+            ]
+            or {}
+        )
+
+    if (
+        indice_item ==
+        0
+    ):
+        return {
+            "precoUnitario":
+                fornecedor.get(
+                    "precoUnitario"
+                ),
+
+            "precoTotal":
+                fornecedor.get(
+                    "precoTotal"
+                ),
+        }
+
+    return {}
+
+
+def obter_preco_unitario_item(
+    fornecedor: dict[str, Any],
+    item: dict[str, Any],
+    indice_item: int,
+) -> float:
+    preco = obter_preco_item(
+        fornecedor,
+        indice_item,
+    )
+
+    preco_unitario = numero_decimal(
+        preco.get(
+            "precoUnitario"
+        )
+    )
+
+    preco_total = numero_decimal(
+        preco.get(
+            "precoTotal"
+        )
+    )
+
+    quantidade = numero_decimal(
+        item.get(
+            "quantidade"
+        )
+    )
+
+    if (
+        preco_unitario ==
+        0
+        and preco_total >
+        0
+        and quantidade >
+        0
+    ):
+        return (
+            preco_total
+            / quantidade
+        )
+
+    return preco_unitario
+
+
+def calcular_subtotal_item(
+    fornecedor: dict[str, Any],
+    item: dict[str, Any],
+    indice_item: int,
+) -> float:
+    quantidade = numero_decimal(
+        item.get(
+            "quantidade"
+        )
+    )
+
+    preco_unitario = obter_preco_unitario_item(
+        fornecedor,
+        item,
+        indice_item,
+    )
+
+    return (
+        quantidade
+        * preco_unitario
+    )
+
+
+def calcular_total_fornecedor(
+    fornecedor: dict[str, Any],
+    itens: list[dict[str, Any]],
+) -> float:
+    subtotais = sum(
+        calcular_subtotal_item(
+            fornecedor,
+            item,
+            indice_item,
+        )
+        for indice_item, item in enumerate(
+            itens
+        )
+    )
+
+    return (
+        subtotais
+        + valor_frete_numerico(
+            fornecedor.get(
+                "frete"
+            )
+        )
+    )
+
+
+# =========================================================
 # FORMATAÇÃO
 # =========================================================
 
 def alinhar_sem_perder_estilo(
     ws,
     endereco: str,
-    horizontal: str = "left",
+    horizontal: str,
     quebrar_texto: bool = False,
 ) -> None:
     alinhamento = copy(
@@ -350,21 +560,8 @@ def alinhar_sem_perder_estilo(
 def aplicar_formatacao_dinamica(
     ws,
 ) -> None:
-    """
-    Mantém o layout original do template.
-
-    Modifica somente os alinhamentos necessários
-    para os campos preenchidos dinamicamente.
-    """
-
-    # ==========================================
-    # CONTA ORÇAMENTÁRIA
-    # ==========================================
-    #
-    # B8 = título
-    # E8 = valor preenchido
-    #
-    # Ambos ficam no canto esquerdo.
+    # Conta Orçamentária:
+    # título e valor à esquerda.
 
     alinhar_sem_perder_estilo(
         ws,
@@ -380,14 +577,8 @@ def aplicar_formatacao_dinamica(
         quebrar_texto=True,
     )
 
-    # ==========================================
-    # OBSERVAÇÕES
-    # ==========================================
-    #
-    # B30 = título Observações:
-    # B31 = texto digitado pelo usuário
-    #
-    # Ambos ficam no canto esquerdo.
+    # Observações:
+    # título à esquerda.
 
     alinhar_sem_perder_estilo(
         ws,
@@ -396,18 +587,18 @@ def aplicar_formatacao_dinamica(
         quebrar_texto=True,
     )
 
+    # Texto da observação:
+    # centralizado na área branca.
+
     alinhar_sem_perder_estilo(
         ws,
         "B31",
-        horizontal="left",
+        horizontal="center",
         quebrar_texto=True,
     )
 
-    # ==========================================
-    # EMPRESA APROVADA
-    # ==========================================
-    #
-    # Permanece centralizada.
+    # Empresa aprovada:
+    # centralizada.
 
     alinhar_sem_perder_estilo(
         ws,
@@ -418,79 +609,12 @@ def aplicar_formatacao_dinamica(
 
 
 # =========================================================
-# CÁLCULOS
-# =========================================================
-
-def obter_preco_unitario(
-    fornecedor: dict[str, Any],
-    quantidade: float,
-) -> float:
-    preco_unitario = numero_decimal(
-        fornecedor.get(
-            "precoUnitario"
-        )
-    )
-
-    preco_total = numero_decimal(
-        fornecedor.get(
-            "precoTotal"
-        )
-    )
-
-    if (
-        preco_unitario == 0
-        and preco_total > 0
-        and quantidade > 0
-    ):
-        return (
-            preco_total
-            / quantidade
-        )
-
-    return preco_unitario
-
-
-def calcular_subtotal(
-    fornecedor: dict[str, Any],
-    quantidade: float,
-) -> float:
-    preco_unitario = obter_preco_unitario(
-        fornecedor,
-        quantidade,
-    )
-
-    return (
-        quantidade
-        * preco_unitario
-    )
-
-
-def calcular_total(
-    fornecedor: dict[str, Any],
-    quantidade: float,
-) -> float:
-    return (
-        calcular_subtotal(
-            fornecedor,
-            quantidade,
-        )
-        + valor_frete_numerico(
-            fornecedor.get(
-                "frete"
-            )
-        )
-    )
-
-
-# =========================================================
 # PREENCHIMENTO DOS FORNECEDORES
 # =========================================================
 
-def preencher_fornecedor(
+def limpar_fornecedor(
     ws,
-    fornecedor: dict[str, Any],
     indice: int,
-    quantidade: float,
 ) -> None:
     colunas = [
         "L",
@@ -498,9 +622,67 @@ def preencher_fornecedor(
         "R",
     ]
 
-    coluna = colunas[
-        indice
+    coluna =
+        colunas[
+            indice
+        ]
+
+    for linha in [
+        5,
+        6,
+        7,
+        8,
+        9,
+    ]:
+        ws[
+            f"{coluna}{linha}"
+        ] = ""
+
+    for linha in range(
+        12,
+        21,
+    ):
+        ws[
+            f"{coluna}{linha}"
+        ] = 0
+
+    ws[
+        f"{coluna}22"
+    ] = "N/A"
+
+    ws[
+        f"{coluna}23"
+    ] = ""
+
+    ws[
+        f"{coluna}24"
+    ] = ""
+
+    ws[
+        f"{coluna}25"
+    ] = ""
+
+    ws[
+        f"{coluna}26"
+    ] = ""
+
+
+def preencher_fornecedor(
+    ws,
+    fornecedor: dict[str, Any],
+    indice: int,
+    itens: list[dict[str, Any]],
+) -> None:
+    colunas = [
+        "L",
+        "O",
+        "R",
     ]
+
+    coluna =
+        colunas[
+            indice
+        ]
 
     ws[
         f"{coluna}5"
@@ -542,18 +724,29 @@ def preencher_fornecedor(
         )
     )
 
-    # O próprio template calcula:
-    #
-    # M12 = I12 * L12
-    # P12 = I12 * O12
-    # S12 = I12 * R12
+    for indice_item, item in enumerate(
+        itens
+    ):
+        linha =
+            12 + indice_item
 
-    ws[
-        f"{coluna}12"
-    ] = obter_preco_unitario(
-        fornecedor,
-        quantidade,
-    )
+        ws[
+            f"{coluna}{linha}"
+        ] = obter_preco_unitario_item(
+            fornecedor,
+            item,
+            indice_item,
+        )
+
+    for linha in range(
+        12 + len(
+            itens
+        ),
+        21,
+    ):
+        ws[
+            f"{coluna}{linha}"
+        ] = 0
 
     ws[
         f"{coluna}22"
@@ -596,58 +789,8 @@ def preencher_fornecedor(
     )
 
 
-def limpar_fornecedor(
-    ws,
-    indice: int,
-) -> None:
-    colunas = [
-        "L",
-        "O",
-        "R",
-    ]
-
-    coluna = colunas[
-        indice
-    ]
-
-    for linha in [
-        5,
-        6,
-        7,
-        8,
-        9,
-    ]:
-        ws[
-            f"{coluna}{linha}"
-        ] = ""
-
-    ws[
-        f"{coluna}12"
-    ] = 0
-
-    ws[
-        f"{coluna}22"
-    ] = "N/A"
-
-    ws[
-        f"{coluna}23"
-    ] = ""
-
-    ws[
-        f"{coluna}24"
-    ] = ""
-
-    ws[
-        f"{coluna}25"
-    ] = ""
-
-    ws[
-        f"{coluna}26"
-    ] = ""
-
-
 # =========================================================
-# EXCEL PRINCIPAL PARA DOWNLOAD
+# EXCEL PRINCIPAL
 # =========================================================
 
 def preencher_excel(
@@ -659,28 +802,25 @@ def preencher_excel(
             "Template Excel não encontrado."
         )
 
-    workbook = load_workbook(
-        TEMPLATE_EXCEL,
-    )
+    workbook =
+        load_workbook(
+            TEMPLATE_EXCEL
+        )
 
-    ws = workbook[
-        NOME_PLANILHA
-    ]
+    ws =
+        workbook[
+            NOME_PLANILHA
+        ]
 
-    # ==========================================
-    # DADOS FIXOS
-    # ==========================================
-    #
-    # As células abaixo já vêm prontas no Excel:
+    # Dados fixos preservados:
     #
     # E5 = Empreendimento
     # E6 = Departamento
     # E7 = Contratante
     # E9 = Gerência Responsável
-    #
-    # Não sobrescrevemos esses dados.
 
-    # Conta Orçamentária: único campo variável.
+    # Conta Orçamentária.
+
     ws[
         "E8"
     ] = texto(
@@ -689,58 +829,60 @@ def preencher_excel(
         )
     )
 
-    # ==========================================
-    # ITEM PRINCIPAL
-    # ==========================================
-
-    quantidade = numero_decimal(
-        dados.get(
-            "quantidade"
+    itens =
+        normalizar_itens(
+            dados
         )
-    )
 
-    ws[
-        "B12"
-    ] = texto(
-        dados.get(
-            "descricaoItem"
-        )
-    )
+    # Preenche as linhas 12 até 20.
 
-    ws[
-        "I12"
-    ] = quantidade
-
-    ws[
-        "J12"
-    ] = texto(
-        dados.get(
-            "unidade"
-        )
-    )
-
-    # Limpa somente campos editáveis das linhas extras.
-    # Fórmulas, bordas e estilos permanecem.
-
-    for linha in range(
-        13,
-        21,
+    for indice_item in range(
+        MAX_ITENS
     ):
-        ws[
-            f"B{linha}"
-        ] = ""
+        linha =
+            12 + indice_item
 
-        ws[
-            f"I{linha}"
-        ] = ""
+        if (
+            indice_item <
+            len(
+                itens
+            )
+        ):
+            item =
+                itens[
+                    indice_item
+                ]
 
-        ws[
-            f"J{linha}"
-        ] = ""
+            ws[
+                f"B{linha}"
+            ] = item[
+                "descricao"
+            ]
 
-    # ==========================================
-    # FORNECEDORES
-    # ==========================================
+            ws[
+                f"I{linha}"
+            ] = item[
+                "quantidade"
+            ]
+
+            ws[
+                f"J{linha}"
+            ] = item[
+                "unidade"
+            ]
+
+        else:
+            ws[
+                f"B{linha}"
+            ] = ""
+
+            ws[
+                f"I{linha}"
+            ] = ""
+
+            ws[
+                f"J{linha}"
+            ] = ""
 
     fornecedores = (
         dados.get(
@@ -754,8 +896,11 @@ def preencher_excel(
     for indice in range(
         3
     ):
-        if indice < len(
-            fornecedores
+        if (
+            indice <
+            len(
+                fornecedores
+            )
         ):
             preencher_fornecedor(
                 ws,
@@ -763,7 +908,7 @@ def preencher_excel(
                     indice
                 ],
                 indice,
-                quantidade,
+                itens,
             )
 
         else:
@@ -772,10 +917,6 @@ def preencher_excel(
                 indice,
             )
 
-    # ==========================================
-    # OBSERVAÇÕES
-    # ==========================================
-
     ws[
         "B31"
     ] = texto(
@@ -783,10 +924,6 @@ def preencher_excel(
             "observacoes"
         )
     )
-
-    # ==========================================
-    # EMPRESA APROVADA
-    # ==========================================
 
     ws[
         "O37"
@@ -799,8 +936,6 @@ def preencher_excel(
     aplicar_formatacao_dinamica(
         ws
     )
-
-    # Solicita recálculo ao abrir no Excel.
 
     workbook.calculation.fullCalcOnLoad = (
         True
@@ -820,7 +955,7 @@ def preencher_excel(
 
 
 # =========================================================
-# EXCEL TEMPORÁRIO USADO SOMENTE PARA GERAR O PDF
+# EXCEL TEMPORÁRIO PARA PDF
 # =========================================================
 
 def preparar_excel_para_pdf(
@@ -828,36 +963,25 @@ def preparar_excel_para_pdf(
     caminho_excel_pdf: Path,
     dados: dict[str, Any],
 ) -> None:
-    """
-    O PDF continua sendo gerado exclusivamente pelo Excel.
-
-    O Excel original disponibilizado para download mantém
-    suas fórmulas.
-
-    Para a conversão headless, criamos uma cópia temporária
-    com os totais consolidados numericamente. Isso evita
-    divergências de recálculo do LibreOffice durante a
-    exportação automática para PDF.
-    """
-
     shutil.copy2(
         caminho_excel_origem,
         caminho_excel_pdf,
     )
 
-    workbook = load_workbook(
-        caminho_excel_pdf,
-    )
-
-    ws = workbook[
-        NOME_PLANILHA
-    ]
-
-    quantidade = numero_decimal(
-        dados.get(
-            "quantidade"
+    workbook =
+        load_workbook(
+            caminho_excel_pdf
         )
-    )
+
+    ws =
+        workbook[
+            NOME_PLANILHA
+        ]
+
+    itens =
+        normalizar_itens(
+            dados
+        )
 
     fornecedores = (
         dados.get(
@@ -886,65 +1010,84 @@ def preparar_excel_para_pdf(
         "R28",
     ]
 
-    for indice in range(
+    for indice_fornecedor in range(
         3
     ):
         fornecedor = (
             fornecedores[
-                indice
+                indice_fornecedor
             ]
-            if indice < len(
+            if indice_fornecedor <
+            len(
                 fornecedores
             )
             else {}
         )
 
-        coluna_preco_unitario = (
+        coluna_unitario =
             colunas_preco_unitario[
-                indice
+                indice_fornecedor
             ]
-        )
 
-        coluna_subtotal = (
+        coluna_subtotal =
             colunas_subtotal[
-                indice
+                indice_fornecedor
             ]
-        )
 
-        preco_unitario = obter_preco_unitario(
-            fornecedor,
-            quantidade,
-        )
+        for indice_item in range(
+            MAX_ITENS
+        ):
+            linha =
+                12 + indice_item
 
-        subtotal = calcular_subtotal(
-            fornecedor,
-            quantidade,
-        )
+            if (
+                indice_item <
+                len(
+                    itens
+                )
+            ):
+                item =
+                    itens[
+                        indice_item
+                    ]
 
-        total = calcular_total(
-            fornecedor,
-            quantidade,
-        )
+                unitario =
+                    obter_preco_unitario_item(
+                        fornecedor,
+                        item,
+                        indice_item,
+                    )
 
-        # Preço unitário.
+                subtotal =
+                    calcular_subtotal_item(
+                        fornecedor,
+                        item,
+                        indice_item,
+                    )
 
-        ws[
-            f"{coluna_preco_unitario}12"
-        ] = preco_unitario
+            else:
+                unitario =
+                    0
 
-        # Subtotal da primeira linha.
+                subtotal =
+                    0
 
-        ws[
-            f"{coluna_subtotal}12"
-        ] = subtotal
+            ws[
+                f"{coluna_unitario}{linha}"
+            ] = unitario
 
-        # Total final do fornecedor.
+            ws[
+                f"{coluna_subtotal}{linha}"
+            ] = subtotal
 
         ws[
             celulas_total[
-                indice
+                indice_fornecedor
             ]
-        ] = total
+        ] = calcular_total_fornecedor(
+            fornecedor,
+            itens,
+        )
 
     aplicar_formatacao_dinamica(
         ws
@@ -956,7 +1099,7 @@ def preparar_excel_para_pdf(
 
 
 # =========================================================
-# CONVERSÃO DO EXCEL PREENCHIDO PARA PDF
+# CONVERSÃO EXCEL PARA PDF
 # =========================================================
 
 def converter_excel_para_pdf(
@@ -993,13 +1136,14 @@ def converter_excel_para_pdf(
         ),
     ]
 
-    resultado = subprocess.run(
-        comando,
-        check=False,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    resultado =
+        subprocess.run(
+            comando,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
 
     caminho_pdf = (
         pasta_saida
@@ -1007,8 +1151,8 @@ def converter_excel_para_pdf(
     )
 
     if (
-        resultado.returncode
-        != 0
+        resultado.returncode !=
+        0
         or not caminho_pdf.exists()
     ):
         raise RuntimeError(
@@ -1029,7 +1173,8 @@ def unir_pdfs(
     pdfs_propostas: list[Path],
     caminho_saida: Path,
 ) -> None:
-    writer = PdfWriter()
+    writer =
+        PdfWriter()
 
     caminhos = [
         pdf_mapa,
@@ -1038,11 +1183,12 @@ def unir_pdfs(
 
     for caminho in caminhos:
         try:
-            reader = PdfReader(
-                str(
-                    caminho
+            reader =
+                PdfReader(
+                    str(
+                        caminho
+                    )
                 )
-            )
 
             for pagina in reader.pages:
                 writer.add_page(
@@ -1076,11 +1222,7 @@ async def salvar_upload_pdf(
     ):
         return None
 
-    nome_original = (
-        upload.filename
-    )
-
-    if not nome_original.lower().endswith(
+    if not upload.filename.lower().endswith(
         ".pdf"
     ):
         raise HTTPException(
@@ -1121,13 +1263,13 @@ def inicio():
             "online",
 
         "versao":
-            "3.2.0",
+            "3.3.0",
+
+        "itens_por_mapa":
+            MAX_ITENS,
 
         "geracao_pdf":
             "excel-preenchido-convertido",
-
-        "alinhamentos":
-            "conta-orcamentaria-e-observacoes-a-esquerda",
     }
 
 
@@ -1150,14 +1292,14 @@ def health_check():
         "geracao_pdf":
             "somente-a-partir-do-excel",
 
-        "preserva_dados_fixos_template":
-            True,
+        "itens_por_mapa":
+            MAX_ITENS,
 
-        "totais_pdf":
-            "consolidados-antes-da-conversao",
+        "observacao":
+            "titulo-esquerda-conteudo-centralizado",
 
-        "alinhamentos":
-            "conta-orcamentaria-e-observacoes-a-esquerda",
+        "conta_orcamentaria":
+            "titulo-e-valor-a-esquerda",
     }
 
 
@@ -1171,9 +1313,10 @@ async def gerar_mapa_cotacao(
     proposta3: UploadFile | None = File(None),
 ):
     try:
-        dados = json.loads(
-            dados_json
-        )
+        dados =
+            json.loads(
+                dados_json
+            )
 
     except json.JSONDecodeError as erro:
         raise HTTPException(
@@ -1182,23 +1325,20 @@ async def gerar_mapa_cotacao(
         ) from erro
 
     with tempfile.TemporaryDirectory() as pasta_temporaria:
-        pasta = Path(
-            pasta_temporaria
-        )
+        pasta =
+            Path(
+                pasta_temporaria
+            )
 
-        nome_base = nome_base_mapa(
-            dados
-        )
+        nome_base =
+            nome_base_mapa(
+                dados
+            )
 
         identificacao = (
             nome_seguro(
                 dados.get(
                     "identificacaoMapa"
-                )
-            )
-            or nome_seguro(
-                dados.get(
-                    "descricaoItem"
                 )
             )
             or "Cotacao"
@@ -1214,9 +1354,6 @@ async def gerar_mapa_cotacao(
             caminho_excel,
         )
 
-        # O PDF nasce exclusivamente de uma cópia
-        # do Excel preenchido.
-
         caminho_excel_pdf = (
             pasta
             / (
@@ -1231,12 +1368,11 @@ async def gerar_mapa_cotacao(
             dados,
         )
 
-        caminho_pdf_convertido = converter_excel_para_pdf(
-            caminho_excel_pdf,
-            pasta,
-        )
-
-        # Remove o sufixo técnico do nome entregue ao usuário.
+        caminho_pdf_convertido =
+            converter_excel_para_pdf(
+                caminho_excel_pdf,
+                pasta,
+            )
 
         caminho_pdf_mapa = (
             pasta
@@ -1260,11 +1396,12 @@ async def gerar_mapa_cotacao(
             propostas_upload,
             start=1,
         ):
-            pdf = await salvar_upload_pdf(
-                upload,
-                pasta,
-                indice,
-            )
+            pdf =
+                await salvar_upload_pdf(
+                    upload,
+                    pasta,
+                    indice,
+                )
 
             if pdf:
                 pdfs_propostas.append(
