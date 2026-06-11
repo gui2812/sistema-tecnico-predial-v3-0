@@ -29,7 +29,7 @@ TEMPLATE_EXCEL = (
 
 app = FastAPI(
     title="Sistema Técnico Predial — Backend",
-    version="2.1.0",
+    version="3.0.0",
 )
 
 app.add_middleware(
@@ -45,12 +45,21 @@ app.add_middleware(
 # UTILIDADES
 # =========================================================
 
-def texto(valor: Any) -> str:
-    return str(valor or "").strip()
+def texto(
+    valor: Any,
+) -> str:
+    return str(
+        valor
+        or ""
+    ).strip()
 
 
-def nome_seguro(valor: Any) -> str:
-    valor = texto(valor)
+def nome_seguro(
+    valor: Any,
+) -> str:
+    valor = texto(
+        valor
+    )
 
     valor = unicodedata.normalize(
         "NFD",
@@ -60,7 +69,10 @@ def nome_seguro(valor: Any) -> str:
     valor = "".join(
         caractere
         for caractere in valor
-        if unicodedata.category(caractere) != "Mn"
+        if unicodedata.category(
+            caractere
+        )
+        != "Mn"
     )
 
     valor = re.sub(
@@ -78,7 +90,9 @@ def nome_seguro(valor: Any) -> str:
     return valor.strip()
 
 
-def numero_decimal(valor: Any) -> float:
+def numero_decimal(
+    valor: Any,
+) -> float:
     if isinstance(
         valor,
         (
@@ -118,6 +132,7 @@ def numero_decimal(valor: Any) -> float:
         return float(
             valor
         )
+
     except ValueError:
         return 0.0
 
@@ -194,9 +209,6 @@ def codigo_mapa(
         numero,
     )
 
-    # Evita duplicação:
-    # Ano: 2026
-    # Número digitado: 2026070
     if (
         ano
         and numero.startswith(
@@ -264,18 +276,155 @@ def serializar_arquivo_base64(
     conteudo = caminho.read_bytes()
 
     return {
-        "nome": caminho.name,
+        "nome":
+            caminho.name,
 
-        "base64": base64.b64encode(
-            conteudo
-        ).decode(
-            "ascii"
-        ),
+        "base64":
+            base64.b64encode(
+                conteudo
+            ).decode(
+                "ascii"
+            ),
     }
 
 
 # =========================================================
-# CÁLCULOS
+# FORMATAÇÃO
+# =========================================================
+
+def centralizar_celula(
+    ws,
+    endereco: str,
+    quebrar_texto: bool = False,
+) -> None:
+    alinhamento = copy(
+        ws[
+            endereco
+        ].alignment
+    )
+
+    alinhamento.horizontal = (
+        "center"
+    )
+
+    alinhamento.vertical = (
+        "center"
+    )
+
+    alinhamento.wrap_text = (
+        quebrar_texto
+    )
+
+    ws[
+        endereco
+    ].alignment = alinhamento
+
+
+def preparar_layout_impressao(
+    ws,
+) -> None:
+    # Área exata utilizada no template.
+    ws.print_area = (
+        "B2:S40"
+    )
+
+    ws.page_setup.orientation = (
+        "landscape"
+    )
+
+    ws.page_setup.fitToWidth = (
+        1
+    )
+
+    ws.page_setup.fitToHeight = (
+        1
+    )
+
+    ws.sheet_properties.pageSetUpPr.fitToPage = (
+        True
+    )
+
+    ws.print_options.horizontalCentered = (
+        True
+    )
+
+    # Dados gerais.
+    for endereco in [
+        "E5",
+        "E6",
+        "E7",
+        "E8",
+        "E9",
+    ]:
+        centralizar_celula(
+            ws,
+            endereco,
+        )
+
+    # Item principal.
+    for endereco in [
+        "B12",
+        "I12",
+        "J12",
+    ]:
+        centralizar_celula(
+            ws,
+            endereco,
+            quebrar_texto=(
+                endereco
+                == "B12"
+            ),
+        )
+
+    # Fornecedores.
+    for coluna in [
+        "L",
+        "O",
+        "R",
+    ]:
+        for linha in [
+            5,
+            6,
+            7,
+            8,
+            9,
+            12,
+            22,
+            23,
+            24,
+            25,
+            26,
+            28,
+        ]:
+            centralizar_celula(
+                ws,
+                f"{coluna}{linha}",
+                quebrar_texto=True,
+            )
+
+    # Observações.
+    centralizar_celula(
+        ws,
+        "B30",
+        quebrar_texto=True,
+    )
+
+    centralizar_celula(
+        ws,
+        "B31",
+        quebrar_texto=True,
+    )
+
+    # Empresa aprovada.
+    centralizar_celula(
+        ws,
+        "O37",
+        quebrar_texto=True,
+    )
+
+
+# =========================================================
+# PREENCHIMENTO DO EXCEL
 # =========================================================
 
 def obter_preco_unitario(
@@ -295,9 +444,12 @@ def obter_preco_unitario(
     )
 
     if (
-        preco_unitario == 0
-        and preco_total > 0
-        and quantidade > 0
+        preco_unitario
+        == 0
+        and preco_total
+        > 0
+        and quantidade
+        > 0
     ):
         return (
             preco_total
@@ -306,44 +458,6 @@ def obter_preco_unitario(
 
     return preco_unitario
 
-
-def calcular_total_fornecedor(
-    fornecedor: dict[str, Any],
-    quantidade: float,
-) -> float:
-    preco_total_informado = numero_decimal(
-        fornecedor.get(
-            "precoTotal"
-        )
-    )
-
-    preco_unitario = obter_preco_unitario(
-        fornecedor,
-        quantidade,
-    )
-
-    frete = numero_decimal(
-        fornecedor.get(
-            "frete"
-        )
-    )
-
-    subtotal = (
-        preco_total_informado
-        if preco_total_informado > 0
-        else quantidade
-        * preco_unitario
-    )
-
-    return (
-        subtotal
-        + frete
-    )
-
-
-# =========================================================
-# PREENCHIMENTO DOS FORNECEDORES
-# =========================================================
 
 def preencher_fornecedor(
     ws,
@@ -401,6 +515,10 @@ def preencher_fornecedor(
         )
     )
 
+    # O próprio template calcula:
+    # M12 = I12 * L12
+    # P12 = I12 * O12
+    # S12 = I12 * R12
     ws[
         f"{coluna}12"
     ] = obter_preco_unitario(
@@ -499,128 +617,6 @@ def limpar_fornecedor(
     ] = ""
 
 
-# =========================================================
-# FORMATAÇÃO FINAL
-# =========================================================
-
-def aplicar_formatacao_final(
-    ws,
-    fornecedores: list[dict[str, Any]],
-    quantidade: float,
-) -> None:
-    # ==========================================
-    # TÍTULO OBSERVAÇÕES
-    # Área mesclada B30:S30
-    # ==========================================
-
-    ws[
-        "B30"
-    ].alignment = Alignment(
-        horizontal="center",
-        vertical="center",
-        wrap_text=True,
-    )
-
-    # ==========================================
-    # TEXTO DAS OBSERVAÇÕES
-    # Área mesclada B31:S32
-    # ==========================================
-
-    ws[
-        "B31"
-    ].alignment = Alignment(
-        horizontal="center",
-        vertical="center",
-        wrap_text=True,
-    )
-
-    # ==========================================
-    # TOTAL DOS FORNECEDORES
-    # Faixas mescladas:
-    # L28:M28
-    # O28:P28
-    # R28:S28
-    # ==========================================
-
-    celulas_totais = [
-        "L28",
-        "O28",
-        "R28",
-    ]
-
-    for indice, celula in enumerate(
-        celulas_totais
-    ):
-        fornecedor = (
-            fornecedores[
-                indice
-            ]
-            if indice
-            < len(
-                fornecedores
-            )
-            else {}
-        )
-
-        total = calcular_total_fornecedor(
-            fornecedor,
-            quantidade,
-        )
-
-        ws[
-            celula
-        ] = (
-            total
-            if total > 0
-            else 0
-        )
-
-        ws[
-            celula
-        ].number_format = (
-            'R$ #,##0.00'
-        )
-
-        ws[
-            celula
-        ].alignment = Alignment(
-            horizontal="center",
-            vertical="center",
-        )
-
-        fonte = copy(
-            ws[
-                celula
-            ].font
-        )
-
-        fonte.bold = True
-        fonte.color = (
-            "FFFFFF"
-        )
-
-        ws[
-            celula
-        ].font = fonte
-
-    # ==========================================
-    # EMPRESA APROVADA
-    # Área mesclada O37:S40
-    # ==========================================
-
-    ws[
-        "O37"
-    ].alignment = Alignment(
-        horizontal="center",
-        vertical="center",
-        wrap_text=True,
-    )
-
-
-# =========================================================
-# PREENCHIMENTO DO TEMPLATE EXCEL
-# =========================================================
-
 def preencher_excel(
     dados: dict[str, Any],
     caminho_saida: Path,
@@ -666,6 +662,7 @@ def preencher_excel(
         )
     )
 
+    # Conta Orçamentária.
     ws[
         "E8"
     ] = texto(
@@ -683,7 +680,7 @@ def preencher_excel(
     )
 
     # ==========================================
-    # PRIMEIRO ITEM DA TABELA
+    # ITEM PRINCIPAL
     # ==========================================
 
     quantidade = numero_decimal(
@@ -712,7 +709,8 @@ def preencher_excel(
         )
     )
 
-    # Limpa linhas adicionais para evitar resíduos.
+    # Limpa as linhas adicionais sem alterar
+    # fórmulas e formatação do template.
     for linha in range(
         13,
         21,
@@ -756,6 +754,7 @@ def preencher_excel(
                 indice,
                 quantidade,
             )
+
         else:
             limpar_fornecedor(
                 ws,
@@ -764,7 +763,6 @@ def preencher_excel(
 
     # ==========================================
     # OBSERVAÇÕES
-    # Área mesclada B31:S32
     # ==========================================
 
     ws[
@@ -777,7 +775,6 @@ def preencher_excel(
 
     # ==========================================
     # EMPRESA APROVADA
-    # Área mesclada O37:S40
     # ==========================================
 
     empresa_aprovada = texto(
@@ -791,19 +788,25 @@ def preencher_excel(
     ] = (
         empresa_aprovada
         if empresa_aprovada
-        else None
+        else ""
     )
 
-    aplicar_formatacao_final(
-        ws,
-        fornecedores,
-        quantidade,
+    preparar_layout_impressao(
+        ws
     )
 
-    # Solicita recálculo ao abrir no Excel ou LibreOffice.
-    workbook.calculation.fullCalcOnLoad = True
-    workbook.calculation.forceFullCalc = True
-    workbook.calculation.calcMode = "auto"
+    # Obriga o LibreOffice a recalcular as fórmulas.
+    workbook.calculation.fullCalcOnLoad = (
+        True
+    )
+
+    workbook.calculation.forceFullCalc = (
+        True
+    )
+
+    workbook.calculation.calcMode = (
+        "auto"
+    )
 
     workbook.save(
         caminho_saida
@@ -811,7 +814,7 @@ def preencher_excel(
 
 
 # =========================================================
-# CONVERSÃO EXCEL PARA PDF
+# CONVERSÃO DO EXCEL PREENCHIDO PARA PDF
 # =========================================================
 
 def converter_excel_para_pdf(
@@ -831,12 +834,14 @@ def converter_excel_para_pdf(
     comando = [
         "libreoffice",
         "--headless",
+        "--nologo",
+        "--nofirststartwizard",
         (
             "-env:UserInstallation="
             f"file://{pasta_perfil}"
         ),
         "--convert-to",
-        "pdf",
+        "pdf:calc_pdf_Export",
         "--outdir",
         str(
             pasta_saida
@@ -865,7 +870,7 @@ def converter_excel_para_pdf(
         or not caminho_pdf.exists()
     ):
         raise RuntimeError(
-            "Falha ao converter o Excel em PDF. "
+            "Falha ao converter o Excel preenchido para PDF. "
             f"Saída: {resultado.stdout} "
             f"Erro: {resultado.stderr}"
         )
@@ -874,7 +879,7 @@ def converter_excel_para_pdf(
 
 
 # =========================================================
-# UNIÃO DOS PDFs
+# UNIÃO DOS PDFS
 # =========================================================
 
 def unir_pdfs(
@@ -967,16 +972,27 @@ async def salvar_upload_pdf(
 @app.get("/")
 def inicio():
     return {
-        "servico": "Sistema Técnico Predial — Backend",
-        "status": "online",
-        "versao": "2.1.0",
+        "servico":
+            "Sistema Técnico Predial — Backend",
+
+        "status":
+            "online",
+
+        "versao":
+            "3.0.0",
+
+        "geracao_pdf":
+            "excel-preenchido-convertido",
     }
 
 
-@app.get("/api/health")
+@app.get(
+    "/api/health"
+)
 def health_check():
     return {
-        "status": "ok",
+        "status":
+            "ok",
 
         "template_excel_encontrado":
             TEMPLATE_EXCEL.exists(),
@@ -985,6 +1001,9 @@ def health_check():
             str(
                 TEMPLATE_EXCEL
             ),
+
+        "geracao_pdf":
+            "somente-a-partir-do-excel",
     }
 
 
@@ -1041,6 +1060,7 @@ async def gerar_mapa_cotacao(
             caminho_excel,
         )
 
+        # O PDF nasce exclusivamente do Excel preenchido.
         caminho_pdf_mapa = converter_excel_para_pdf(
             caminho_excel,
             pasta,
