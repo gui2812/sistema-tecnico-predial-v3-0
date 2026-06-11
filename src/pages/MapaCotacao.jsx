@@ -19,6 +19,9 @@ import {
   gerarArquivosMapaCotacao,
 } from "../services/mapaCotacaoService";
 
+const EMPREENDIMENTO_PADRAO =
+  "JK 1455";
+
 // =========================================================
 // VALORES PADRÃO
 // =========================================================
@@ -53,24 +56,12 @@ function dadosIniciais() {
     numeroMapa: "",
     identificacaoMapa: "",
 
-    empreendimento:
-      "JK 1455",
-
-    departamento:
-      "Administração",
-
-    contratante:
-      "Marcos Gonçalves",
-
-    contaOrcamentaria:
-      "",
-
-    gerenciaResponsavel:
-      "Ronaldo Vanni",
+    contaOrcamentaria: "",
 
     descricaoItem: "",
     quantidade: "1",
     unidade: "UND",
+
     observacoes: "",
     empresaAprovada: "",
 
@@ -585,7 +576,7 @@ export default function MapaCotacao() {
                 : fornecedor
           );
 
-        const fornecedorUnicoAtivo =
+        const somenteUmFornecedor =
           atual.fornecedorUnico ||
           Number(
             atual.quantidadeFornecedores
@@ -597,7 +588,7 @@ export default function MapaCotacao() {
             "empresa" &&
           indice ===
             0 &&
-          fornecedorUnicoAtivo &&
+          somenteUmFornecedor &&
           (
             !atual.empresaAprovada ||
             atual.empresaAprovada ===
@@ -734,13 +725,9 @@ export default function MapaCotacao() {
       dados.descricaoItem.trim() ||
       "item informado";
 
-    const empreendimento =
-      dados.empreendimento.trim() ||
-      "empreendimento";
-
     alterarCampo(
       "observacoes",
-      `Aquisição de ${item} para atendimento das necessidades operacionais do ${empreendimento}.`
+      `Aquisição de ${item} para atendimento das necessidades operacionais do ${EMPREENDIMENTO_PADRAO}.`
     );
   }
 
@@ -998,60 +985,15 @@ export default function MapaCotacao() {
       <section className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm">
         <div>
           <h2 className="font-black text-slate-900">
-            Dados gerais
+            Dados variáveis
           </h2>
 
           <p className="mt-1 text-sm text-slate-500">
-            Os dados recorrentes já estão preenchidos. Altere apenas quando necessário.
+            Os dados fixos do empreendimento já existem no modelo oficial.
           </p>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          <Campo
-            label="Empreendimento"
-            value={
-              dados.empreendimento
-            }
-            onChange={(
-              valor
-            ) =>
-              alterarCampo(
-                "empreendimento",
-                valor
-              )
-            }
-          />
-
-          <Campo
-            label="Departamento"
-            value={
-              dados.departamento
-            }
-            onChange={(
-              valor
-            ) =>
-              alterarCampo(
-                "departamento",
-                valor
-              )
-            }
-          />
-
-          <Campo
-            label="Contratante"
-            value={
-              dados.contratante
-            }
-            onChange={(
-              valor
-            ) =>
-              alterarCampo(
-                "contratante",
-                valor
-              )
-            }
-          />
-
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
           <Campo
             label="Conta Orçamentária"
             value={
@@ -1066,21 +1008,6 @@ export default function MapaCotacao() {
               )
             }
             placeholder="Preenchimento obrigatório"
-          />
-
-          <Campo
-            label="Gerência Responsável"
-            value={
-              dados.gerenciaResponsavel
-            }
-            onChange={(
-              valor
-            ) =>
-              alterarCampo(
-                "gerenciaResponsavel",
-                valor
-              )
-            }
           />
 
           <label>
