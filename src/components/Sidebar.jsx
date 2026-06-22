@@ -7,8 +7,8 @@ import {
   CloudSun,
   Droplets,
   Eye,
-  FileSpreadsheet,
   FileText,
+  Files,
   Fuel,
   History,
   LogOut,
@@ -42,7 +42,12 @@ const items = [
   {
     id: "mapaCotacao",
     label: "Mapa de Cotação",
-    icon: FileSpreadsheet,
+    icon: FileText,
+  },
+  {
+    id: "ferramentasPdf",
+    label: "Ferramentas PDF",
+    icon: Files,
   },
   {
     id: "mapa3d",
@@ -129,23 +134,19 @@ export default function Sidebar({
   return (
     <aside
       className="
+        bg-slate-950 text-white
+        w-full md:w-72
+        md:h-screen md:sticky md:top-0 md:left-0
+        p-3 md:p-5
+        flex md:flex-col
+        gap-3 md:gap-6
+        overflow-x-auto md:overflow-hidden
+        no-scrollbar
         z-30
-        flex w-full gap-3
-        overflow-hidden
-        bg-slate-950 p-3 text-white
-
-        md:sticky
-        md:left-0
-        md:top-0
-        md:h-screen
-        md:w-72
-        md:flex-col
-        md:gap-5
-        md:p-5
       "
     >
-      <div className="hidden shrink-0 items-center gap-3 md:flex">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-teal-500/15">
+      <div className="hidden md:flex items-center gap-3 shrink-0">
+        <div className="w-12 h-12 rounded-2xl bg-teal-500/15 flex items-center justify-center">
           <BuildingLogo
             size={38}
           />
@@ -158,7 +159,7 @@ export default function Sidebar({
             Predial
           </h1>
 
-          <p className="mt-1 text-xs text-slate-400">
+          <p className="text-xs text-slate-400 mt-1">
             Edifício JK 1455
           </p>
         </div>
@@ -166,16 +167,15 @@ export default function Sidebar({
 
       <nav
         className="
-          no-scrollbar
-          flex max-w-full shrink-0 gap-2
-          overflow-x-auto
-
-          md:min-h-0
-          md:flex-1
-          md:flex-col
+          flex md:flex-col
+          gap-2
+          shrink-0 md:grow
+          overflow-x-auto md:overflow-y-auto
           md:overflow-x-hidden
-          md:overflow-y-auto
           md:pr-1
+          no-scrollbar
+          max-w-full
+          pb-2
         "
       >
         {visibleItems.map(
@@ -184,29 +184,24 @@ export default function Sidebar({
               item.icon;
 
             const active =
-              page ===
-              item.id;
+              page === item.id;
 
             return (
               <button
-                key={
-                  item.id
-                }
+                key={item.id}
                 type="button"
                 onClick={() =>
                   setPage(
                     item.id
                   )
                 }
-                className={`flex shrink-0 items-center gap-3 whitespace-nowrap rounded-2xl px-4 py-3 text-sm font-medium transition ${
+                className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium whitespace-nowrap transition shrink-0 ${
                   active
                     ? "bg-blue-600 text-white shadow-lg shadow-blue-900/30"
                     : "text-slate-300 hover:bg-white/10"
                 }`}
               >
-                <Icon
-                  size={18}
-                />
+                <Icon size={18} />
 
                 {item.label}
               </button>
@@ -215,15 +210,13 @@ export default function Sidebar({
         )}
       </nav>
 
-      <div className="hidden shrink-0 border-t border-white/10 pt-3 md:block">
+      <div className="hidden md:block shrink-0 pt-3 border-t border-white/10">
         <button
           type="button"
           onClick={sair}
-          className="flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/10"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-slate-300 hover:bg-white/10"
         >
-          <LogOut
-            size={18}
-          />
+          <LogOut size={18} />
 
           Sair
         </button>
