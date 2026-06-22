@@ -9,6 +9,7 @@ import Layout from "./components/Layout";
 import CalculadoraEletrica from "./pages/CalculadoraEletrica";
 import Climas from "./pages/Climas";
 import Dashboard from "./pages/Dashboard";
+import FerramentasPDF from "./pages/FerramentasPDF";
 import Geradores from "./pages/Geradores";
 import Historico from "./pages/Historico";
 import JK1455 from "./pages/JK1455";
@@ -37,8 +38,7 @@ function temAcessoPagina(
   }
 
   if (
-    page ===
-    "pendencias"
+    page === "pendencias"
   ) {
     return (
       hasPermission(
@@ -70,6 +70,7 @@ function primeiraPaginaPermitida(
     "pendencias",
     "solicitacoes",
     "mapaCotacao",
+    "ferramentasPdf",
     "mapa3d",
     "jk1455",
     "climas",
@@ -91,8 +92,7 @@ function primeiraPaginaPermitida(
           user,
           pagina
         )
-    ) ||
-    "solicitacoes"
+    ) || "solicitacoes"
   );
 }
 
@@ -100,20 +100,18 @@ export default function App() {
   const [
     user,
     setUser,
-  ] =
-    useState(
-      getSession()
-    );
+  ] = useState(
+    getSession()
+  );
 
   const [
     page,
     setPage,
-  ] =
-    useState(
-      primeiraPaginaPermitida(
-        user
-      )
-    );
+  ] = useState(
+    primeiraPaginaPermitida(
+      user
+    )
+  );
 
   useEffect(() => {
     testarConexaoSupabase();
@@ -170,9 +168,7 @@ export default function App() {
 
     switch (page) {
       case "dashboard":
-        return (
-          <Dashboard />
-        );
+        return <Dashboard />;
 
       case "pendencias":
         return (
@@ -191,6 +187,13 @@ export default function App() {
       case "mapaCotacao":
         return (
           <MapaCotacao
+            user={user}
+          />
+        );
+
+      case "ferramentasPdf":
+        return (
+          <FerramentasPDF
             user={user}
           />
         );
@@ -223,46 +226,30 @@ export default function App() {
         );
 
       case "tecnicos":
-        return (
-          <Tecnicos />
-        );
+        return <Tecnicos />;
 
       case "geradores":
-        return (
-          <Geradores />
-        );
+        return <Geradores />;
 
       case "locatarios":
-        return (
-          <Locatarios />
-        );
+        return <Locatarios />;
 
       case "malote":
-        return (
-          <Malote />
-        );
+        return <Malote />;
 
       case "rateioAgua":
-        return (
-          <RateioAgua />
-        );
+        return <RateioAgua />;
 
       case "historico":
-        return (
-          <Historico />
-        );
+        return <Historico />;
 
       case "relatorios":
-        return (
-          <RelatoriosPDF />
-        );
+        return <RelatoriosPDF />;
 
       case "usuarios":
         return (
           <Usuarios
-            currentUser={
-              user
-            }
+            currentUser={user}
             onUserUpdated={() =>
               setUser(
                 getSession()
@@ -272,18 +259,14 @@ export default function App() {
         );
 
       default:
-        return (
-          <Dashboard />
-        );
+        return <Dashboard />;
     }
   }
 
   return (
     <Layout
       page={page}
-      setPage={
-        setPage
-      }
+      setPage={setPage}
       user={user}
     >
       {renderPage()}
