@@ -111,19 +111,40 @@ const items = [
   },
 ];
 
+function usuarioAdmin(user) {
+  const perfil =
+    String(user?.perfil || "")
+      .toLowerCase();
+
+  const usuario =
+    String(user?.usuario || "")
+      .toLowerCase();
+
+  return (
+    usuario === "admin" ||
+    perfil === "admin" ||
+    perfil === "administrador"
+  );
+}
+
 export default function Sidebar({
   page,
   setPage,
   user,
 }) {
+  const admin =
+    usuarioAdmin(user);
+
   const visibleItems =
-    items.filter(
-      (item) =>
-        hasPermission(
-          user,
-          item.id
-        )
-    );
+    admin
+      ? items
+      : items.filter(
+          (item) =>
+            hasPermission(
+              user,
+              item.id
+            )
+        );
 
   function sair() {
     logout();
@@ -201,9 +222,14 @@ export default function Sidebar({
                     : "text-slate-300 hover:bg-white/10"
                 }`}
               >
-                <Icon size={18} />
+                <Icon
+                  size={18}
+                  className="shrink-0"
+                />
 
-                {item.label}
+                <span className="truncate">
+                  {item.label}
+                </span>
               </button>
             );
           }
@@ -216,7 +242,9 @@ export default function Sidebar({
           onClick={sair}
           className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium text-slate-300 hover:bg-white/10"
         >
-          <LogOut size={18} />
+          <LogOut
+            size={18}
+          />
 
           Sair
         </button>
