@@ -29,38 +29,34 @@ import {
   hasPermission,
 } from "./services/storageService";
 
-function temAcessoPagina(
-  user,
-  page
-) {
+function usuarioAdmin(user) {
+  const perfil = String(user?.perfil || "").toLowerCase();
+  const usuario = String(user?.usuario || "").toLowerCase();
+
+  return (
+    usuario === "admin" ||
+    perfil === "admin" ||
+    perfil === "administrador"
+  );
+}
+
+function temAcessoPagina(user, page) {
   if (!user) {
     return false;
   }
 
-  if (
-    page === "pendencias"
-  ) {
-    return (
-      hasPermission(
-        user,
-        "dashboard"
-      ) ||
-      user?.perfil ===
-        "admin" ||
-      user?.perfil ===
-        "administrador"
-    );
+  if (usuarioAdmin(user)) {
+    return true;
   }
 
-  return hasPermission(
-    user,
-    page
-  );
+  if (page === "pendencias") {
+    return hasPermission(user, "dashboard");
+  }
+
+  return hasPermission(user, page);
 }
 
-function primeiraPaginaPermitida(
-  user
-) {
+function primeiraPaginaPermitida(user) {
   if (!user) {
     return "dashboard";
   }
@@ -86,31 +82,17 @@ function primeiraPaginaPermitida(
   ];
 
   return (
-    ordem.find(
-      (pagina) =>
-        temAcessoPagina(
-          user,
-          pagina
-        )
+    ordem.find((pagina) =>
+      temAcessoPagina(user, pagina)
     ) || "solicitacoes"
   );
 }
 
 export default function App() {
-  const [
-    user,
-    setUser,
-  ] = useState(
-    getSession()
-  );
+  const [user, setUser] = useState(getSession());
 
-  const [
-    page,
-    setPage,
-  ] = useState(
-    primeiraPaginaPermitida(
-      user
-    )
+  const [page, setPage] = useState(
+    primeiraPaginaPermitida(getSession())
   );
 
   useEffect(() => {
@@ -118,51 +100,24 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (
-      user &&
-      !temAcessoPagina(
-        user,
-        page
-      )
-    ) {
-      setPage(
-        primeiraPaginaPermitida(
-          user
-        )
-      );
+    if (user && !temAcessoPagina(user, page)) {
+      setPage(primeiraPaginaPermitida(user));
     }
-  }, [
-    user,
-    page,
-  ]);
+  }, [user, page]);
 
   if (!user) {
     return (
       <Login
-        onLogin={(
-          session
-        ) => {
-          setUser(
-            session
-          );
-
-          setPage(
-            primeiraPaginaPermitida(
-              session
-            )
-          );
+        onLogin={(session) => {
+          setUser(session);
+          setPage(primeiraPaginaPermitida(session));
         }}
       />
     );
   }
 
   function renderPage() {
-    if (
-      !temAcessoPagina(
-        user,
-        page
-      )
-    ) {
+    if (!temAcessoPagina(user, page)) {
       return null;
     }
 
@@ -171,11 +126,7 @@ export default function App() {
         return <Dashboard />;
 
       case "pendencias":
-        return (
-          <Pendencias
-            user={user}
-          />
-        );
+        return <Pendencias user={user} />;
 
       case "solicitacoes":
         return (
@@ -221,9 +172,7 @@ export default function App() {
         );
 
       case "calculadora":
-        return (
-          <CalculadoraEletrica />
-        );
+        return <CalculadoraEletrica />;
 
       case "tecnicos":
         return <Tecnicos />;
@@ -251,9 +200,7 @@ export default function App() {
           <Usuarios
             currentUser={user}
             onUserUpdated={() =>
-              setUser(
-                getSession()
-              )
+              setUser(getSession())
             }
           />
         );
