@@ -1,15 +1,27 @@
-import Sidebar from './Sidebar';
-import Header from './Header';
-import AssistenteTecnico from './AssistenteTecnico';
-import TourSistema from './TourSistema';
+import Sidebar from "./Sidebar";
+import Header from "./Header";
+import AssistenteTecnico from "./AssistenteTecnico";
+import TourSistema from "./TourSistema";
 
-export default function Layout({ children, page, setPage, user }) {
+export default function Layout({
+  children,
+  page,
+  setPage,
+  user,
+}) {
   return (
     <div className="min-h-screen bg-slate-100 md:flex">
-      <Sidebar page={page} setPage={setPage} user={user}/>
+      <Sidebar
+        page={page}
+        setPage={setPage}
+        user={user}
+      />
 
       <main className="flex-1 min-w-0">
-        <Header page={page} user={user}/>
+        <Header
+          page={page}
+          user={user}
+        />
 
         <div className="p-4 md:p-8">
           {children}
@@ -17,7 +29,10 @@ export default function Layout({ children, page, setPage, user }) {
       </main>
 
       <AssistenteTecnico />
-      <TourSistema user={user} />
+
+      <TourSistema
+        user={user}
+      />
     </div>
   );
 }
