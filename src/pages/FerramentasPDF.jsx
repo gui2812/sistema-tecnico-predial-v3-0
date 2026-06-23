@@ -82,6 +82,17 @@ function baixarBlob(
   URL.revokeObjectURL(url);
 }
 
+function limparNomeArquivo(nome) {
+  const nomeLimpo = String(
+    nome || "PDF unificado"
+  )
+    .replace(/[\\/:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return nomeLimpo || "PDF unificado";
+}
+
 async function lerPaginasPdf(file) {
   const buffer =
     await file.arrayBuffer();
@@ -107,8 +118,7 @@ async function adicionarPdfAoDocumento(
     });
 
   const indices =
-    pdfOrigem
-      .getPageIndices();
+    pdfOrigem.getPageIndices();
 
   const paginas =
     await pdfFinal.copyPages(
@@ -178,10 +188,9 @@ const categorias = [
   },
 ];
 
-export default function FerramentasPDF({
-  user,
-}) {
-  const inputRef = useRef(null);
+export default function FerramentasPDF() {
+  const inputRef =
+    useRef(null);
 
   const [
     arquivos,
@@ -207,6 +216,11 @@ export default function FerramentasPDF({
     erro,
     setErro,
   ] = useState("");
+
+  const [
+    arrastando,
+    setArrastando,
+  ] = useState(false);
 
   const [
     nomeSaida,
@@ -239,17 +253,18 @@ export default function FerramentasPDF({
       );
     }, [arquivos]);
 
-  async function selecionarArquivos(
-    event
-  ) {
-    const files =
-      Array.from(
-        event.target.files || []
+  const arquivosValidos =
+    useMemo(() => {
+      return arquivos.filter(
+        (item) => !item.invalido
       );
+    }, [arquivos]);
 
-    event.target.value = "";
+  async function processarArquivos(files) {
+    const listaFiles =
+      Array.from(files || []);
 
-    if (!files.length) {
+    if (!listaFiles.length) {
       return;
     }
 
@@ -260,10 +275,9 @@ export default function FerramentasPDF({
     try {
       const novos = [];
 
-      for (const file of files) {
+      for (const file of listaFiles) {
         const ehPdf =
-          file.type ===
-            "application/pdf" ||
+          file.type === "application/pdf" ||
           file.name
             .toLowerCase()
             .endsWith(".pdf");
@@ -323,6 +337,27 @@ export default function FerramentasPDF({
     } finally {
       setCarregando(false);
     }
+  }
+
+  async function selecionarArquivos(event) {
+    const files =
+      event.target.files || [];
+
+    event.target.value = "";
+
+    await processarArquivos(files);
+  }
+
+  async function soltarArquivos(event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    setArrastando(false);
+
+    const files =
+      event.dataTransfer?.files || [];
+
+    await processarArquivos(files);
   }
 
   function removerArquivo(id) {
@@ -391,12 +426,7 @@ export default function FerramentasPDF({
     setErro("");
     setMensagem("");
 
-    const validos =
-      arquivos.filter(
-        (item) => !item.invalido
-      );
-
-    if (validos.length < 2) {
+    if (arquivosValidos.length < 2) {
       setErro(
         "Adicione pelo menos 2 PDFs válidos para juntar."
       );
@@ -412,7 +442,7 @@ export default function FerramentasPDF({
 
       let paginasAdicionadas = 0;
 
-      for (const item of validos) {
+      for (const item of arquivosValidos) {
         const paginas =
           await adicionarPdfAoDocumento(
             pdfFinal,
@@ -420,6 +450,12 @@ export default function FerramentasPDF({
           );
 
         paginasAdicionadas += paginas;
+      }
+
+      if (paginasAdicionadas === 0) {
+        throw new Error(
+          "Nenhuma página válida foi encontrada nos PDFs selecionados."
+        );
       }
 
       const bytes =
@@ -430,20 +466,11 @@ export default function FerramentasPDF({
           type: "application/pdf",
         });
 
-      const nomeLimpo =
-        String(
-          nomeSaida ||
-            "PDF unificado"
-        )
-          .replace(
-            /[\\/:*?"<>|]/g,
-            "-"
-          )
-          .trim();
-
       baixarBlob(
         blob,
-        `${nomeLimpo}.pdf`
+        `${limparNomeArquivo(
+          nomeSaida
+        )}.pdf`
       );
 
       setMensagem(
@@ -503,14 +530,11 @@ export default function FerramentasPDF({
               categoria.icone;
 
             const ativo =
-              categoria.status ===
-              "Ativo";
+              categoria.status === "Ativo";
 
             return (
               <div
-                key={
-                  categoria.titulo
-                }
+                key={categoria.titulo}
                 className={`rounded-[1.6rem] border p-5 bg-white shadow-sm ${
                   ativo
                     ? "border-blue-200 ring-2 ring-blue-50"
@@ -616,9 +640,7 @@ export default function FerramentasPDF({
             type="file"
             multiple
             accept="application/pdf,.pdf"
-            onChange={
-              selecionarArquivos
-            }
+            onChange={selecionarArquivos}
             className="hidden"
           />
 
@@ -635,7 +657,19 @@ export default function FerramentasPDF({
               onClick={() =>
                 inputRef.current?.click()
               }
-              className="w-full mt-5 border-2 border-dashed border-slate-200 rounded-[1.5rem] p-10 md:p-14 text-center hover:border-blue-300 hover:bg-blue-50/30 transition"
+              onDragOver={(event) => {
+                event.preventDefault();
+                setArrastando(true);
+              }}
+              onDragLeave={() =>
+                setArrastando(false)
+              }
+              onDrop={soltarArquivos}
+              className={`w-full mt-5 border-2 border-dashed rounded-[1.5rem] p-10 md:p-14 text-center transition ${
+                arrastando
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-slate-200 hover:border-blue-300 hover:bg-blue-50/30"
+              }`}
             >
               <UploadCloud
                 size={42}
@@ -697,9 +731,7 @@ export default function FerramentasPDF({
                             "cima"
                           )
                         }
-                        disabled={
-                          index === 0
-                        }
+                        disabled={index === 0}
                         className="w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center hover:bg-slate-50 disabled:opacity-30"
                         title="Mover para cima"
                       >
@@ -821,9 +853,7 @@ export default function FerramentasPDF({
             onClick={juntarPDFs}
             disabled={
               gerando ||
-              arquivos.filter(
-                (item) => !item.invalido
-              ).length < 2
+              arquivosValidos.length < 2
             }
             className="mt-5 w-full inline-flex items-center justify-center gap-2 px-5 py-4 rounded-2xl bg-blue-600 text-white font-black shadow-lg shadow-blue-200 hover:bg-blue-700 transition disabled:opacity-40"
           >
