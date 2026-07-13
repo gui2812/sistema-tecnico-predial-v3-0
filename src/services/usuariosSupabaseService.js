@@ -1,9 +1,15 @@
 import { supabase } from "./supabaseClient";
 
+// Nunca inclua "senha" aqui: esta lista alimenta a tela de Usuários,
+// e a senha de ninguém deve trafegar para o navegador de quem só está
+// consultando a lista.
+const CAMPOS_LISTAGEM =
+  "id, nome, usuario, setor, perfil, ativo, permissoes, tema, preferencias, criado_em, atualizado_em";
+
 export async function listarUsuariosSupabase() {
   const { data, error } = await supabase
     .from("usuarios_app")
-    .select("*")
+    .select(CAMPOS_LISTAGEM)
     .order("criado_em", { ascending: false });
 
   if (error) {
@@ -30,7 +36,7 @@ export async function criarUsuarioSupabase(usuario) {
   const { data, error } = await supabase
     .from("usuarios_app")
     .insert(payload)
-    .select()
+    .select(CAMPOS_LISTAGEM)
     .single();
 
   if (error) {
@@ -55,6 +61,13 @@ export async function atualizarUsuarioSupabase(id, patch) {
     atualizado_em: new Date().toISOString(),
   };
 
+  // Campo de senha vazio na edição = "manter a senha atual".
+  // Isso evita apagar a senha do usuário sem querer e evita a
+  // necessidade de reexibir a senha atual em texto puro no formulário.
+  if (!payload.senha) {
+    delete payload.senha;
+  }
+
   Object.keys(payload).forEach((key) => {
     if (payload[key] === undefined) delete payload[key];
   });
@@ -63,7 +76,7 @@ export async function atualizarUsuarioSupabase(id, patch) {
     .from("usuarios_app")
     .update(payload)
     .eq("id", id)
-    .select()
+    .select(CAMPOS_LISTAGEM)
     .single();
 
   if (error) {
