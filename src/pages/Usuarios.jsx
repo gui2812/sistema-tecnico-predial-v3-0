@@ -732,6 +732,7 @@ export default function Usuarios({
     }
 
     if (
+      !editandoId &&
       !form.senha.trim()
     ) {
       setErro(
@@ -999,6 +1000,7 @@ export default function Usuarios({
             </label>
 
             <input
+              type="password"
               value={
                 form.senha
               }
@@ -1011,7 +1013,11 @@ export default function Usuarios({
                 )
               }
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-100"
-              placeholder="Ex: 1234"
+              placeholder={
+                editandoId
+                  ? "Deixe em branco para manter a senha atual"
+                  : "Ex: 1234"
+              }
             />
           </div>
 
