@@ -37,15 +37,14 @@ function normalizarPermissoes(permissoes = [], perfil = "") {
 export async function loginComSupabase(usuario, senha) {
   const usuarioLimpo = usuario.trim().toLowerCase();
 
-  const { data, error } = await supabase
-    .from("usuarios_app")
-    .select("*")
-    .eq("usuario", usuarioLimpo)
-    .eq("senha", senha)
-    .eq("ativo", true)
-    .single();
+  const { data, error } = await supabase.rpc("login_usuario", {
+    p_usuario: usuarioLimpo,
+    p_senha: senha,
+  });
 
-  if (error || !data) {
+  const registro = Array.isArray(data) ? data[0] : data;
+
+  if (error || !registro) {
     return {
       sucesso: false,
       erro: "Usuário ou senha incorretos.",
@@ -53,14 +52,13 @@ export async function loginComSupabase(usuario, senha) {
   }
 
   const session = {
-    id: data.id,
-    nome: data.nome,
-    usuario: data.usuario,
-    senha: data.senha,
-    setor: data.setor,
-    perfil: data.perfil,
-    ativo: data.ativo,
-    permissoes: normalizarPermissoes(data.permissoes, data.perfil),
+    id: registro.id,
+    nome: registro.nome,
+    usuario: registro.usuario,
+    setor: registro.setor,
+    perfil: registro.perfil,
+    ativo: registro.ativo,
+    permissoes: normalizarPermissoes(registro.permissoes, registro.perfil),
   };
 
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
