@@ -69,9 +69,22 @@ app = FastAPI(
     version="4.0.0",
 )
 
+import os
+
+# Configure a variável de ambiente ALLOWED_ORIGINS no seu deploy,
+# com o(s) domínio(s) reais separados por vírgula, ex.:
+# ALLOWED_ORIGINS=https://sistema-jk1455.vercel.app,http://localhost:5173
+ALLOWED_ORIGINS = [
+    origem.strip()
+    for origem in os.environ.get(
+        "ALLOWED_ORIGINS", "http://localhost:5173"
+    ).split(",")
+    if origem.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
