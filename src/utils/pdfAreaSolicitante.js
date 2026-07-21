@@ -151,16 +151,22 @@ function desenharCardResumo(doc, x, y, titulo, valor, largura, sigla) {
   doc.text(valorTexto, x + largura - 4, y + 18, { align: "right" });
 }
 
+// Rodapé atualizado para lidar com a paginação adequadamente
 function desenharRodape(doc, pageWidth, pageHeight, margin) {
-  doc.setDrawColor(203, 213, 225);
-  doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
+  const totalPages = doc.internal.getNumberOfPages();
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(7.5);
-  doc.setTextColor(100, 116, 139);
-  doc.text("Relatório gerado pelo Sistema Técnico Predial", margin + 2, pageHeight - 7);
-  doc.text("Edifício JK 1455", pageWidth / 2, pageHeight - 7, { align: "center" });
-  doc.text("Página 1 de 1", pageWidth - margin, pageHeight - 7, { align: "right" });
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(203, 213, 225);
+    doc.line(margin, pageHeight - 14, pageWidth - margin, pageHeight - 14);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7.5);
+    doc.setTextColor(100, 116, 139);
+    doc.text("Relatório gerado pelo Sistema Técnico Predial", margin + 2, pageHeight - 7);
+    doc.text("Edifício JK 1455", pageWidth / 2, pageHeight - 7, { align: "center" });
+    doc.text(`Página ${i} de ${totalPages}`, pageWidth - margin, pageHeight - 7, { align: "right" });
+  }
 }
 
 export async function gerarPDFAreaSolicitante({
@@ -247,9 +253,10 @@ export async function gerarPDFAreaSolicitante({
   doc.setTextColor(...navy);
   doc.text("Resumo executivo", 204, 13);
 
-  desenharCardResumo(doc, 176, 23, "Itens", quantidadeItens, 36, "IT");
-  desenharCardResumo(doc, 215, 23, "Solicitações", quantidadeSolicitacoes, 36, "SL");
-  desenharCardResumo(doc, 254, 23, "Valor total estimado", brl(totalGeral), 33, "R$");
+  // Alinhamento ajustado dos cartões no Resumo executivo
+  desenharCardResumo(doc, 166, 23, "Itens", quantidadeItens, 38, "IT");
+  desenharCardResumo(doc, 207, 23, "Solicitações", quantidadeSolicitacoes, 38, "SL");
+  desenharCardResumo(doc, 248, 23, "Valor total estimado", brl(totalGeral), 39, "R$");
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
@@ -356,15 +363,17 @@ export async function gerarPDFAreaSolicitante({
         });
       }
     },
-    margin: { left: margin, right: margin },
+    // Margem inferior adicionada para evitar que a tabela invada o rodapé
+    margin: { top: 20, right: margin, bottom: 20, left: margin },
   });
 
+  // Cálculo matemático corrigido para evitar sobreposição da tabela
   let y = doc.lastAutoTable.finalY + 5;
+  const espacoNecessarioFinal = 45; 
 
-  const espacoMinimoFinal = 38;
-
-  if (y > pageHeight - espacoMinimoFinal) {
-    y = pageHeight - espacoMinimoFinal;
+  if (y + espacoNecessarioFinal > pageHeight) {
+    doc.addPage();
+    y = 20; 
   }
 
   const totalBoxW = 104;
