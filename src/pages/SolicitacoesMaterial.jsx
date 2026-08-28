@@ -27,7 +27,6 @@ import {
   excluirItemSolicitacaoSupabase,
   excluirSolicitacaoSupabase,
   listarSolicitacoesSupabase,
-  verificarSenhaUsuarioSupabase,
 } from "../services/solicitacoesSupabaseService";
 import { brl, today } from "../utils/formatters";
 import { gerarPDFAreaSolicitante } from "../utils/pdfAreaSolicitante";
@@ -721,22 +720,11 @@ export default function SolicitacoesMaterial({ user }) {
   }, [areasPermitidas, cab.setor]);
 
   async function validarSenhaAdmin() {
+    // A exclusão continua restrita a usuários administradores.
+    // A confirmação por senha foi removida para evitar bloqueio caso a senha
+    // administrativa seja esquecida; o window.confirm das ações permanece ativo.
     if (!isAdmin) {
       alert("Apenas o administrador pode excluir.");
-      return false;
-    }
-
-    const senha = window.prompt("Digite sua senha de administrador para confirmar:");
-
-    if (!senha) {
-      alert("Exclusão cancelada.");
-      return false;
-    }
-
-    const senhaOk = await verificarSenhaUsuarioSupabase(user?.usuario, senha);
-
-    if (!senhaOk) {
-      alert("Senha incorreta. Exclusão não realizada.");
       return false;
     }
 
